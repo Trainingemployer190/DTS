@@ -1,0 +1,26 @@
+{
+    "tasks.json.defaultBuildTask": "Build iOS Simulator",
+    "statusbar.commands": [
+        {
+            "text": "$(play) Run iOS App",
+            "command": "workbench.action.tasks.runTask",
+            "arguments": "Run on Simulator",
+            "tooltip": "Build and run the iOS app on simulator"
+        },
+        {
+            "text": "$(tools) Build iOS",
+            "command": "workbench.action.tasks.runTask", 
+            "arguments": "Build iOS Simulator",
+            "tooltip": "Build iOS app for simulator"
+        }
+    ],
+    "files.associations": {
+        "*.swift": "swift"
+    },
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "swift.autoGenerateProject": false,
+    "swift.actionAfterBuildError": "Focus Terminal"
+}
