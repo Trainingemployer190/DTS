@@ -1377,7 +1377,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
 
         let today = Date()
         let calendar = Calendar.current
-        
+
         // Get the start of this week (Sunday)
         let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
         // Get the end of this week (start of next week)
@@ -1447,20 +1447,20 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                         let startAtString = visit.startAt ?? "No start time"
                         let clientName = visit.job.client.name
                         let title = visit.job.title ?? "No title"
-                        
+
                         // Check if this visit contains "test" to help find user's test entry
                         if clientName.lowercased().contains("test") || title.lowercased().contains("test") {
                             print("*** FOUND TEST ENTRY: \(clientName) - \(title) ***")
                             testEntries.append(visit)
                         }
-                        
+
                         // Look for visits this week
                         if let startAtString = visit.startAt,
                            let startAt = self.parseDate(startAtString),
                            startAt >= startOfWeek && startAt < endOfWeek {
                             weekVisits.append(visit)
                             print("This week visit: \(clientName) - \(title) at \(startAtString)")
-                            
+
                             let job = self.createJobberJobFromVisit(
                                 visit: visit,
                                 scheduledAt: startAt,
@@ -1473,13 +1473,13 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
 
                     self.jobs = fetchedJobs
                     print("Fetched \(fetchedJobs.count) scheduled visits for this week")
-                    
+
                     if testEntries.isEmpty {
                         print("No test entries found in visits. Your test entry might be in requests or quotes.")
                     } else {
                         print("Found \(testEntries.count) test entries in visits!")
                     }
-                    
+
                     if weekVisits.isEmpty {
                         print("No visits found for this week.")
                         if response.data.visits.nodes.isEmpty {
@@ -1588,7 +1588,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
             }
         }
 
-        // Search requests  
+        // Search requests
         let requestsQuery = """
         query GetRequests {
           requests(first: 20) {
@@ -1691,7 +1691,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         } else {
             address = "No address available"
         }
-        
+
         let jobberJob = JobberJob(
             jobId: job.id,
             clientName: clientName,
@@ -1714,7 +1714,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         } else {
             address = "No address available"
         }
-        
+
         let jobberJob = JobberJob(
             jobId: visit.job.id,
             clientName: clientName,
@@ -2644,114 +2644,86 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var jobberAPI: JobberAPI
     @Query private var jobs: [JobberJob]
+    @State private var calendarJobs: [CalendarJob] = []
+    @State private var isLoadingCalendar = false
+    @State private var calendarError: String? = nil
+    // Replace with your Jobber .ics URL
+    private let jobberCalendarURL = URL(string: "https://secure.getjobber.com/calendar/72215818528336050607776452572210621366838541254420/jobber.ics?at[]=651682&ot[]=visits&ot[]=assessments")!
 
-    var todayJobs: [JobberJob] {
-        let today = Calendar.current.startOfDay(for: Date())
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
-
-        // Combine local jobs with Jobber jobs
-        let allJobs = jobs + jobberAPI.jobs
-
-        return allJobs.filter { job in
-            job.scheduledAt >= today && job.scheduledAt < tomorrow
-        }.sorted { $0.scheduledAt < $1.scheduledAt }
+    var allCalendarJobs: [CalendarJob] {
+        calendarJobs.sorted { $0.startDate > $1.startDate }
     }
 
     var body: some View {
         NavigationStack {
             VStack {
-                // Jobber Authentication Section
-                if !jobberAPI.isAuthenticated {
-                    VStack(spacing: 16) {
-                        Text("Connect to Jobber")
-                            .font(.headline)
-
-                        Text("Connect your Jobber account to sync today's jobs automatically.")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-
-                        Button("Connect Jobber Account") {
-                            jobberAPI.authenticate()
-                        }
-                        .buttonStyle(.borderedProminent)
-
-                        if let errorMessage = jobberAPI.errorMessage {
-                            Text(errorMessage)
-                                .foregroundColor(.red)
-                                .font(.caption)
+                if isLoadingCalendar {
+                    ProgressView("Loading calendar jobs...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    if calendarError != nil {
+                        Text("Calendar Sync Error: \(calendarError!)")
+                            .foregroundColor(.red)
+                            .padding(.bottom, 8)
+                    } else {
+                        Text("Calendar Connected")
+                            .foregroundColor(.green)
+                            .padding(.bottom, 8)
+                    }
+                    if allCalendarJobs.isEmpty {
+                        VStack(spacing: 20) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 60))
+                                .foregroundColor(.secondary)
+                            Text("No Jobs Found")
+                                .font(.title2)
+                                .fontWeight(.medium)
+                            Text("No jobs found in your calendar feed. Check back later or create a new quote.")
+                                .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                         }
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
-                    .padding(.horizontal)
-                }
-
-                if jobberAPI.isLoading {
-                    ProgressView("Loading this week's jobs...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if todayJobs.isEmpty {
-                    VStack(spacing: 20) {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 60))
-                            .foregroundColor(.secondary)
-
-                        Text("No Jobs This Week")
-                            .font(.title2)
-                            .fontWeight(.medium)
-
-                        Text("No jobs scheduled for this week. Check back later or create a new quote.")
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-
-                        if !jobberAPI.isAuthenticated {
-                            Button("Add Sample Jobs") {
-                                addSampleJobs()
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
-                    }
-                    .padding()
-                } else {
-                    List(todayJobs, id: \.jobId) { job in
-                        NavigationLink(destination: JobDetailView(job: job)) {
-                            JobRowView(job: job)
-                        }
-                    }
-                }
-
-                if let errorMessage = jobberAPI.errorMessage {
-                    Text(errorMessage)
-                        .foregroundColor(.red)
                         .padding()
+                    } else {
+                        List(allCalendarJobs, id: \ .id) { job in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(job.title)
+                                    .font(.headline)
+                                Text(job.location)
+                                    .font(.subheadline)
+                                Text(job.startDate, style: .date)
+                                Text(job.startDate, style: .time)
+                            }
+                        }
+                    }
                 }
             }
-            .navigationTitle("This Week's Jobs")
+            .navigationTitle("Calendar Jobs")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    if jobberAPI.isAuthenticated {
-                        Button("Refresh") {
-                            Task {
-                                await jobberAPI.fetchWeekScheduledRequests()
-                            }
-                        }
+                    Button("Refresh") {
+                        loadCalendarJobs()
                     }
                 }
             }
-            .refreshable {
-                if jobberAPI.isAuthenticated {
-                    await jobberAPI.fetchWeekScheduledRequests()
-                } else {
-                    await fetchTodayJobs()
-                }
+            .onAppear {
+                loadCalendarJobs()
             }
-            .task {
-                if jobberAPI.isAuthenticated {
-                    await jobberAPI.fetchWeekScheduledRequests()
-                } else {
-                    await fetchTodayJobs()
+            .refreshable {
+                loadCalendarJobs()
+            }
+        }
+    }
+
+    private func loadCalendarJobs() {
+        isLoadingCalendar = true
+        calendarError = nil
+        let manager = ICalendarManager(calendarURL: jobberCalendarURL)
+        manager.fetchJobs { jobs in
+            DispatchQueue.main.async {
+                self.calendarJobs = jobs
+                self.isLoadingCalendar = false
+                if jobs.isEmpty {
+                    self.calendarError = "No jobs found or calendar feed is empty."
                 }
             }
         }
@@ -2760,8 +2732,10 @@ struct HomeView: View {
     private func fetchTodayJobs() async {
         if jobberAPI.isAuthenticated {
             await jobberAPI.fetchWeekScheduledRequests()
+            print("Jobber jobs fetched: \(jobberAPI.jobs.count)")
             // Also search for test entries across all endpoints
             await jobberAPI.searchForTestEntry()
+            print("Jobber jobs after test entry search: \(jobberAPI.jobs.count)")
         } else {
             // For local sample data when not authenticated with Jobber
             if jobs.isEmpty {
@@ -4762,6 +4736,335 @@ struct ContentView: View {
                 }
                 .transition(.opacity)
             }
+        }
+    }
+}
+
+struct SettingsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var jobberAPI: JobberAPI
+    @Query private var settingsArray: [AppSettings]
+
+    private var settings: AppSettings {
+        if let existingSettings = settingsArray.first {
+            return existingSettings
+        } else {
+            let newSettings = AppSettings()
+            modelContext.insert(newSettings)
+            try? modelContext.save()
+            return newSettings
+        }
+    }
+
+    // Helper function to create a binding that clears zero values for Double
+    private func clearableNumberBinding(for value: Binding<Double>) -> Binding<String> {
+        Binding<String>(
+            get: {
+                if value.wrappedValue == 0 {
+                    return ""
+                } else {
+                    // Use NumberFormatter for consistent formatting
+                    let formatter = NumberFormatter()
+                    formatter.numberStyle = .decimal
+                    formatter.minimumFractionDigits = 0
+                    formatter.maximumFractionDigits = 2
+                    formatter.usesGroupingSeparator = false
+                    return formatter.string(from: NSNumber(value: value.wrappedValue)) ?? "\(value.wrappedValue)"
+                }
+            },
+            set: { newValue in
+                if let doubleValue = Double(newValue) {
+                    value.wrappedValue = doubleValue
+                } else if newValue.isEmpty {
+                    value.wrappedValue = 0
+                }
+            }
+        )
+    }
+
+    // Helper function for percentage fields that are stored as decimals
+    private func clearablePercentBinding(for value: Binding<Double>) -> Binding<String> {
+        Binding<String>(
+            get: {
+                if value.wrappedValue == 0 {
+                    return ""
+                } else {
+                    // Use NumberFormatter like measurements to avoid auto-formatting
+                    let formatter = NumberFormatter()
+                    formatter.numberStyle = .decimal
+                    formatter.minimumFractionDigits = 0
+                    formatter.maximumFractionDigits = 1
+                    formatter.usesGroupingSeparator = false
+                    return formatter.string(from: NSNumber(value: value.wrappedValue)) ?? "\(value.wrappedValue)"
+                }
+            },
+            set: { newValue in
+                if let doubleValue = Double(newValue) {
+                    value.wrappedValue = doubleValue
+                } else if newValue.isEmpty {
+                    value.wrappedValue = 0
+                }
+            }
+        )
+    }
+
+    private func saveSettings() {
+        try? modelContext.save()
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Materials Cost per Foot") {
+                    HStack {
+                        Text("Gutter")
+                        Spacer()
+                        TextField("0", text: clearableNumberBinding(for: Binding(
+                            get: { settings.materialCostPerFootGutter },
+                            set: { settings.materialCostPerFootGutter = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                    }
+
+                    HStack {
+                        Text("Downspout")
+                        Spacer()
+                        TextField("0", text: clearableNumberBinding(for: Binding(
+                            get: { settings.materialCostPerFootDownspout },
+                            set: { settings.materialCostPerFootDownspout = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                    }
+
+                    HStack {
+                        Text("Gutter Guard")
+                        Spacer()
+                        TextField("0", text: clearableNumberBinding(for: Binding(
+                            get: { settings.gutterGuardMaterialPerFoot },
+                            set: { settings.gutterGuardMaterialPerFoot = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                    }
+                }
+
+                Section("Component Costs") {
+                    HStack {
+                        Text("Elbow")
+                        Spacer()
+                        TextField("0", text: clearableNumberBinding(for: Binding(
+                            get: { settings.costPerElbow },
+                            set: { settings.costPerElbow = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                    }
+
+                    HStack {
+                        Text("Hanger")
+                        Spacer()
+                        TextField("0", text: clearableNumberBinding(for: Binding(
+                            get: { settings.costPerHanger },
+                            set: { settings.costPerHanger = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                    }
+
+                    HStack {
+                        Text("Hanger Spacing (feet)")
+                        Spacer()
+                        TextField("0", text: clearableNumberBinding(for: Binding(
+                            get: { settings.hangerSpacingFeet },
+                            set: { settings.hangerSpacingFeet = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                    }
+                }
+
+                Section("Labor Cost per Foot") {
+                    HStack {
+                        Text("Gutter Installation")
+                        Spacer()
+                        TextField("0", text: clearableNumberBinding(for: Binding(
+                            get: { settings.laborPerFootGutter },
+                            set: { settings.laborPerFootGutter = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                    }
+
+                    HStack {
+                        Text("Gutter Guard Installation")
+                        Spacer()
+                        TextField("0", text: clearableNumberBinding(for: Binding(
+                            get: { settings.gutterGuardLaborPerFoot },
+                            set: { settings.gutterGuardLaborPerFoot = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                    }
+                }
+
+                Section("Markup, Profit & Commission") {
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text("Default Markup %")
+                                .fontWeight(.medium)
+                            Text("(based on cost)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        TextField("0", text: clearablePercentBinding(for: Binding(
+                            get: { settings.defaultMarkupPercent },
+                            set: { settings.defaultMarkupPercent = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                        Text("%")
+                    }
+
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text("Default Profit Margin %")
+                                .fontWeight(.medium)
+                            Text("(based on price)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        TextField("0", text: clearablePercentBinding(for: Binding(
+                            get: { settings.defaultProfitMarginPercent },
+                            set: { settings.defaultProfitMarginPercent = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                        Text("%")
+                    }
+
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text("Gutter Guard Markup %")
+                                .fontWeight(.medium)
+                            Text("(based on cost)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        TextField("0", text: clearablePercentBinding(for: Binding(
+                            get: { settings.gutterGuardMarkupPercent },
+                            set: { settings.gutterGuardMarkupPercent = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                        Text("%")
+                    }
+
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text("Gutter Guard Profit Margin %")
+                                .fontWeight(.medium)
+                            Text("(based on price)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        TextField("0", text: clearablePercentBinding(for: Binding(
+                            get: { settings.gutterGuardProfitMarginPercent },
+                            set: { settings.gutterGuardProfitMarginPercent = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                        Text("%")
+                    }
+
+                    HStack {
+                        Text("Sales Commission %")
+                        Spacer()
+                        TextField("0", text: clearablePercentBinding(for: Binding(
+                            get: { settings.defaultSalesCommissionPercent },
+                            set: { settings.defaultSalesCommissionPercent = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                        Text("%")
+                    }
+                }
+
+                Section("Calculation Settings") {
+                    HStack {
+                        Text("Elbow Foot Equivalency")
+                        Spacer()
+                        TextField("0", text: clearableNumberBinding(for: Binding(
+                            get: { settings.elbowFootEquivalency },
+                            set: { settings.elbowFootEquivalency = $0 }
+                        )))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .onSubmit { saveSettings() }
+                    }
+                }
+            }
+            .navigationTitle("Settings")
         }
     }
 }

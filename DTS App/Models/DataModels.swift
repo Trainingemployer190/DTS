@@ -13,15 +13,7 @@ import Foundation
 
 @Model
 final class AppSettings {
-    // Material costs
-    var sidingCostPerSqFt: Double = 8.50
-    var paintCostPerSqFt: Double = 3.25
-    var roofingCostPerSqFt: Double = 12.00
-    var gutterCostPerLinearFt: Double = 15.00
-    var windowCostPerUnit: Double = 450.00
-    var doorCostPerUnit: Double = 650.00
-
-    // Gutter-specific costs (legacy)
+    // Gutter-specific material costs
     var materialCostPerFootGutter: Double = 3.50
     var materialCostPerFootDownspout: Double = 4.00
     var costPerElbow: Double = 8.00
@@ -32,17 +24,9 @@ final class AppSettings {
     var elbowFootEquivalency: Double = 0.0
 
     // Labor rates
-    var laborRatePerHour: Double = 65.00
-    var estimatedHoursPerSqFt: Double = 0.25
     var laborPerFootGutter: Double = 5.00
 
     // Markup and profit margins
-    var materialMarkupPercentage: Double = 0.20
-    var laborMarkupPercentage: Double = 0.15
-    var overheadPercentage: Double = 0.10
-    var profitMarginPercentage: Double = 0.15
-
-    // Legacy gutter markup fields
     var defaultMarkupPercent: Double = 0.35
     var defaultProfitMarginPercent: Double = 0.20
     var defaultSalesCommissionPercent: Double = 0.03
