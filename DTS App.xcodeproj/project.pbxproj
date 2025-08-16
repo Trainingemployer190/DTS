@@ -400,7 +400,6 @@
 				DEVELOPMENT_TEAM = WNU63L8T28;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLName = \"com.dts.oauth\";\n    CFBundleURLSchemes =     (\n        dtsapp\n    );\n}";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture photos of job sites and measurements for documentation purposes.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app needs location access to add GPS coordinates to photos for accurate job site documentation.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured photos and access existing images for job documentation.";
@@ -432,7 +431,6 @@
 				DEVELOPMENT_TEAM = WNU63L8T28;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLName = \"com.dts.oauth\";\n    CFBundleURLSchemes =     (\n        dtsapp\n    );\n}";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture photos of job sites and measurements for documentation purposes.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app needs location access to add GPS coordinates to photos for accurate job site documentation.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured photos and access existing images for job documentation.";

@@ -39,11 +39,24 @@ struct DTS_AppApp: App {
     }
 
     private func handleIncomingURL(_ url: URL) {
-        guard url.scheme == "dtsapp" else { return }
+        print("=== INCOMING URL ===")
+        print("Full URL: \(url.absoluteString)")
+        print("Scheme: \(url.scheme ?? "none")")
+        print("Host: \(url.host ?? "none")")
+        print("Path: \(url.path)")
+        print("Query: \(url.query ?? "none")")
+
+        guard url.scheme == "dtsapp" else {
+            print("URL scheme is not 'dtsapp', ignoring")
+            return
+        }
 
         if url.host == "oauth" && url.path == "/callback" {
-            // OAuth callback will be handled by the ASWebAuthenticationSession
-            // No additional action needed here
+            print("✅ Received OAuth callback URL - ASWebAuthenticationSession will handle this")
+            // OAuth callback will be handled by the ASWebAuthenticationSession automatically
+            // The session will detect this URL and call our completion handler
+        } else {
+            print("⚠️ Unknown URL path for dtsapp scheme")
         }
     }
 }

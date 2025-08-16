@@ -8,173 +8,178 @@
 import SwiftUI
 import SwiftData
 import Foundation
-import AuthenticationServices
 import Security
-import CommonCrypto
 import CoreLocation
-import UIKit
 import AVFoundation
 import PDFKit
 import UniformTypeIdentifiers
+import Photos
+import AuthenticationServices
 
-// MARK: - SwiftData Models
+// Custom bridge to work around UIKit import issues
+@_exported import class UIKit.UIImage
+@_exported import class UIKit.UIColor
+@_exported import class UIKit.UIView
+@_exported import class UIKit.UIViewController
+@_exported import class UIKit.UIImagePickerController
+@_exported import class UIKit.UINavigationController
+@_exported import class UIKit.UIActivityViewController
+@_exported import struct UIKit.UIInterfaceOrientationMask
+@_exported import enum UIKit.UIInterfaceOrientation
+@_exported import class UIKit.UIBezierPath
+@_exported import class UIKit.UIButton
+@_exported import class UIKit.UIGraphicsImageRenderer
+@_exported import class UIKit.UIGraphicsImageRendererFormat
+@_exported import class UIKit.UIApplication
 
-@Model
-final class AppSettings {
-    var materialCostPerFootGutter: Double = 3.50
-    var materialCostPerFootDownspout: Double = 4.00
-    var costPerElbow: Double = 8.00
-    var costPerHanger: Double = 2.50
-    var hangerSpacingFeet: Double = 3.0
-    var laborPerFootGutter: Double = 5.00
-    var gutterGuardMaterialPerFoot: Double = 6.00
-    var gutterGuardLaborPerFoot: Double = 3.00
-    var defaultMarginPercent: Double = 0.35
-    var defaultSalesCommissionPercent: Double = 0.03
-    var gutterGuardMarginPercent: Double = 0.40
-    var elbowFootEquivalency: Double = 0.0
+// MARK: - Loading Screen
 
-    init() {}
-}
+struct LoadingScreenView: View {
+    @State private var progress: CGFloat = 0.0
+    @State private var isComplete = false
+    let onComplete: () -> Void
 
-@Model
-final class JobberJob {
-    var jobId: String
-    var clientName: String
-    var address: String
-    var scheduledAt: Date
-    var status: String
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Background with your "Make Me Money" meme image
+                Image("loading_background")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+                    .ignoresSafeArea()
 
-    init(jobId: String, clientName: String, address: String, scheduledAt: Date, status: String) {
-        self.jobId = jobId
-        self.clientName = clientName
-        self.address = address
-        self.scheduledAt = scheduledAt
-        self.status = status
-    }
-}
+                // Overlay gradient for better text readability
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.black.opacity(0.3),
+                        Color.clear,
+                        Color.black.opacity(0.4)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
 
-enum SyncState: String, Codable, CaseIterable {
-    case pending
-    case syncing
-    case synced
-    case failed
-}
+                // Money bag emojis in background
+                VStack {
+                    HStack {
+                        Text("💰")
+                            .font(.system(size: 40))
+                            .opacity(0.3)
+                        Spacer()
+                        Text("💰")
+                            .font(.system(size: 35))
+                            .opacity(0.2)
+                    }
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Text("💰")
+                            .font(.system(size: 30))
+                            .opacity(0.25)
+                        Spacer()
+                        Text("💰")
+                            .font(.system(size: 45))
+                            .opacity(0.15)
+                    }
+                    Spacer()
+                    HStack {
+                        Text("💰")
+                            .font(.system(size: 25))
+                            .opacity(0.2)
+                        Spacer()
+                        Text("💰")
+                            .font(.system(size: 38))
+                            .opacity(0.3)
+                    }
+                }
+                .padding()
 
-@Model
-final class QuoteDraft {
-    var localId: UUID = UUID()
-    var jobId: String?
-    var clientId: String?
-    var gutterFeet: Double = 0
-    var downspoutFeet: Double = 0
-    var elbowsCount: Int = 0
-    var endCapPairs: Int = 0
-    var includeGutterGuard: Bool = false
-    var gutterGuardFeet: Double = 0
-    var marginPercent: Double = 0.35
-    var salesCommissionPercent: Double = 0.03
-    var notes: String = ""
-    var syncStateRaw: String = SyncState.pending.rawValue
-    var createdAt: Date = Date()
+                VStack {
+                    Spacer()
 
-    // Computed totals (stored for audit)
-    var materialsTotal: Double = 0
-    var laborTotal: Double = 0
-    var marginAmount: Double = 0
-    var commissionAmount: Double = 0
-    var finalTotal: Double = 0
+                    // Money theme centered display
+                    VStack(spacing: 20) {
+                        Text("💰💰 Make Me Money! 💰💰")
+                            .font(.system(size: 36, weight: .heavy, design: .rounded))
+                            .foregroundColor(.yellow)
+                            .shadow(color: .black, radius: 3, x: 2, y: 2)
+                            .multilineTextAlignment(.center)
+                    }
 
-    @Relationship(deleteRule: .cascade)
-    var additionalLaborItems: [LineItem] = []
+                    Spacer()
 
-    @Relationship(deleteRule: .cascade)
-    var photos: [PhotoRecord] = []
+                    // Loading bar container
+                    VStack(spacing: 15) {
+                        // Loading bar track
+                        ZStack(alignment: .leading) {
+                            // Track background
+                            RoundedRectangle(cornerRadius: 15)
+                                .fill(Color.black.opacity(0.4))
+                                .frame(height: 30)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 15)
+                                        .stroke(Color.green, lineWidth: 2)
+                                )
 
-    // Computed property to create line items for Jobber API
-    var lineItemsForJobber: [JobberLineItem] {
-        var items: [JobberLineItem] = []
+                            // Progress fill
+                            RoundedRectangle(cornerRadius: 15)
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [.green, .yellow]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: progress * (geometry.size.width - 80), height: 30)
+                                .animation(.easeOut(duration: 0.1), value: progress)
 
-        // Add gutter line item
-        if gutterFeet > 0 {
-            items.append(JobberLineItem(
-                name: "Gutter Installation",
-                description: "\(gutterFeet) feet of gutter",
-                quantity: gutterFeet,
-                unitPrice: materialsTotal > 0 ? (materialsTotal + laborTotal) / gutterFeet : 0
-            ))
+                            // Moving dollar bill
+                            HStack {
+                                Text("💵")
+                                    .font(.system(size: 24))
+                                    .offset(x: progress * (geometry.size.width - 120))
+                                    .animation(.easeOut(duration: 0.1), value: progress)
+
+                                Spacer()
+                            }
+                        }
+                        .frame(height: 30)
+                        .padding(.horizontal, 40)
+
+                        Text("Loading... \(Int(progress * 100))%")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .shadow(color: .black, radius: 1, x: 1, y: 1)
+                    }
+                    .padding(.bottom, 80)
+                }
+            }
         }
-
-        // Add additional labor items
-        for item in additionalLaborItems {
-            items.append(JobberLineItem(
-                name: item.title,
-                description: item.title,
-                quantity: 1,
-                unitPrice: item.amount
-            ))
+        .onAppear {
+            startLoading()
         }
-
-        return items
     }
 
-    var syncState: SyncState {
-        get { SyncState(rawValue: syncStateRaw) ?? .pending }
-        set { syncStateRaw = newValue.rawValue }
-    }
+    private func startLoading() {
+        // Simulate loading process with realistic timing
+        Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { timer in
+            progress += 0.015
 
-    var hangersCount: Int {
-        return Int(ceil(gutterFeet / 3.0)) // Default spacing of 3 feet
-    }
-
-    init() {}
-}
-
-@Model
-final class LineItem {
-    var title: String
-    var amount: Double
-    var quoteDraft: QuoteDraft?
-
-    init(title: String, amount: Double) {
-        self.title = title
-        self.amount = amount
+            if progress >= 1.0 {
+                timer.invalidate()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    isComplete = true
+                    onComplete()
+                }
+            }
+        }
     }
 }
 
-@Model
-final class PhotoRecord {
-    var localId: UUID = UUID()
-    var jobId: String?
-    var quoteDraftId: UUID?
-    var fileURL: String
-    var createdAt: Date = Date()
-    var latitude: Double?
-    var longitude: Double?
-    var uploaded: Bool = false
-
-    init(fileURL: String, jobId: String? = nil, quoteDraftId: UUID? = nil) {
-        self.fileURL = fileURL
-        self.jobId = jobId
-        self.quoteDraftId = quoteDraftId
-    }
-}
-
-@Model
-final class OutboxOperation {
-    var id: UUID = UUID()
-    var operationType: String // "createQuote", "uploadPhoto", etc.
-    var payload: Data // JSON encoded operation data
-    var retryCount: Int = 0
-    var createdAt: Date = Date()
-    var lastAttemptAt: Date?
-    var errorMessage: String?
-
-    init(operationType: String, payload: Data) {
-        self.operationType = operationType
-        self.payload = payload
-    }
-}
+// MARK: - Models imported from DataModels.swift
 
 // MARK: - Jobber API
 
@@ -187,15 +192,51 @@ class PhotoCaptureManager: NSObject, ObservableObject {
     @Published var showingCamera = false
     @Published var showingPhotoLibrary = false
     @Published var isLocationAuthorized = false
+    @Published var isPhotosAuthorized = false
     @Published var locationError: String?
+    @Published var captureCount = 0
 
     private let locationManager = CLLocationManager()
     private var currentLocation: CLLocation?
+    private var currentAddress: String?
+    private let maxCachedImages = 20 // Limit cached images to prevent memory issues
+    private let geocoder = CLGeocoder()
 
     override init() {
         super.init()
         setupLocationManager()
         checkLocationPermission()
+        checkPhotosPermission()
+
+        // Listen for memory warnings
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleMemoryWarning()
+            }
+        }
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    private func handleMemoryWarning() {
+        // Clear image caches when memory warning is received
+        print("Memory warning received - clearing image caches")
+
+        // Reduce the number of cached images more aggressively
+        if capturedImages.count > 10 {
+            capturedImages.removeFirst(capturedImages.count - 10)
+        }
+
+        // Force garbage collection
+        autoreleasepool {
+            // This forces any autorelease objects to be released immediately
+        }
     }
 
     private func setupLocationManager() {
@@ -223,6 +264,23 @@ class PhotoCaptureManager: NSObject, ObservableObject {
         locationManager.startUpdatingLocation()
     }
 
+    private func checkPhotosPermission() {
+        switch PHPhotoLibrary.authorizationStatus(for: .addOnly) {
+        case .authorized, .limited:
+            isPhotosAuthorized = true
+        case .notDetermined:
+            PHPhotoLibrary.requestAuthorization(for: .addOnly) { [weak self] status in
+                DispatchQueue.main.async {
+                    self?.isPhotosAuthorized = (status == .authorized || status == .limited)
+                }
+            }
+        case .denied, .restricted:
+            isPhotosAuthorized = false
+        @unknown default:
+            isPhotosAuthorized = false
+        }
+    }
+
     func capturePhoto(for jobId: String? = nil, quoteDraftId: UUID? = nil) {
         // Clear any previous errors
         locationError = nil
@@ -237,11 +295,13 @@ class PhotoCaptureManager: NSObject, ObservableObject {
         // Check camera permission
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
+            captureCount = 0 // Reset counter for new session
             showingCamera = true
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
                 DispatchQueue.main.async {
                     if granted {
+                        self?.captureCount = 0 // Reset counter for new session
                         self?.showingCamera = true
                     } else {
                         self?.locationError = "Camera access denied. Please enable in Settings."
@@ -258,99 +318,164 @@ class PhotoCaptureManager: NSObject, ObservableObject {
     }
 
     func processImage(_ image: UIImage, jobId: String? = nil, quoteDraftId: UUID? = nil) {
-        let watermarkedImage = addWatermark(to: image)
+        // First compress the image to reduce memory usage
+        let compressedImage = compressImage(image)
 
-        // Save to Documents directory
-        guard let imageData = watermarkedImage.jpegData(compressionQuality: 0.8),
-              let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            return
+        autoreleasepool {
+            let watermarkedImage = addWatermark(to: compressedImage)
+
+            // Save to Photos app if permission is granted
+            if isPhotosAuthorized {
+                saveToPhotosApp(watermarkedImage)
+            }
+
+            // Save to Documents directory
+            guard let imageData = watermarkedImage.jpegData(compressionQuality: 0.7),
+                  let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                return
+            }
+
+            let fileName = "photo_\(Date().timeIntervalSince1970).jpg"
+            let fileURL = documentsPath.appendingPathComponent(fileName)
+
+            do {
+                try imageData.write(to: fileURL)
+
+                let capturedPhoto = CapturedPhoto(
+                    id: UUID(),
+                    fileURL: fileURL.path,
+                    jobId: jobId,
+                    quoteDraftId: quoteDraftId,
+                    location: currentLocation,
+                    capturedAt: Date()
+                )
+
+                capturedImages.append(capturedPhoto)
+
+                // Limit the number of cached images to prevent memory issues
+                if capturedImages.count > maxCachedImages {
+                    capturedImages.removeFirst(capturedImages.count - maxCachedImages)
+                }
+
+            } catch {
+                print("Error saving image: \(error)")
+            }
+        }
+    }
+
+    private func compressImage(_ image: UIImage) -> UIImage {
+        let maxDimension: CGFloat = 1920 // Max width or height
+        let originalSize = image.size
+
+        // If image is already small enough, return as is
+        if originalSize.width <= maxDimension && originalSize.height <= maxDimension {
+            return image
         }
 
-        let fileName = "photo_\(Date().timeIntervalSince1970).jpg"
-        let fileURL = documentsPath.appendingPathComponent(fileName)
+        // Calculate new size maintaining aspect ratio
+        let ratio = min(maxDimension / originalSize.width, maxDimension / originalSize.height)
+        let newSize = CGSize(width: originalSize.width * ratio, height: originalSize.height * ratio)
 
-        do {
-            try imageData.write(to: fileURL)
+        // Use autoreleasepool for memory management
+        return autoreleasepool {
+            let renderer = UIGraphicsImageRenderer(size: newSize, format: UIGraphicsImageRendererFormat())
+            return renderer.image { _ in
+                image.draw(in: CGRect(origin: .zero, size: newSize))
+            }
+        }
+    }
 
-            let capturedPhoto = CapturedPhoto(
-                id: UUID(),
-                fileURL: fileURL.path,
-                jobId: jobId,
-                quoteDraftId: quoteDraftId,
-                location: currentLocation,
-                capturedAt: Date()
-            )
-
-            capturedImages.append(capturedPhoto)
-
-        } catch {
-            print("Error saving image: \(error)")
+    private func saveToPhotosApp(_ image: UIImage) {
+        PHPhotoLibrary.shared().performChanges({
+            let creationRequest = PHAssetCreationRequest.creationRequestForAsset(from: image)
+            // Add metadata if needed
+            creationRequest.location = self.currentLocation
+            creationRequest.creationDate = Date()
+        }) { [weak self] success, error in
+            DispatchQueue.main.async {
+                if success {
+                    print("Photo saved to Photos app successfully")
+                } else if let error = error {
+                    print("Error saving photo to Photos app: \(error)")
+                    self?.locationError = "Could not save to Photos app: \(error.localizedDescription)"
+                }
+            }
         }
     }
 
     private func addWatermark(to image: UIImage) -> UIImage {
-        let renderer = UIGraphicsImageRenderer(size: image.size)
+        // Use autoreleasepool to manage memory during rendering
+        return autoreleasepool {
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1.0 // Use 1x scale to reduce memory usage
+            let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
 
-        return renderer.image { context in
-            // Draw original image
-            image.draw(in: CGRect(origin: .zero, size: image.size))
+            return renderer.image { context in
+                // Draw original image
+                image.draw(in: CGRect(origin: .zero, size: image.size))
 
-            // Prepare watermark text
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateStyle = .medium
-            dateFormatter.timeStyle = .short
+                // Prepare watermark text
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "MMM dd, yyyy 'at' h:mm a"
 
-            let timestamp = dateFormatter.string(from: Date())
-            let locationText = formatLocationText()
+                let timestamp = dateFormatter.string(from: Date())
+                let locationText = formatLocationText()
 
-            let watermarkText = "\(timestamp)\n\(locationText)"
+                // Simple watermark with just timestamp and location
+                let watermarkText = "\(timestamp)\n\(locationText)"
 
-            // Configure text attributes
-            let textColor = UIColor.white
-            let shadowColor = UIColor.black
-            let font = UIFont.boldSystemFont(ofSize: max(image.size.width / 30, 16))
+                // Configure text attributes with smaller font to reduce memory
+                let textColor = UIColor.white
+                let shadowColor = UIColor.black
+                let font = UIFont.boldSystemFont(ofSize: max(image.size.width / 30, 16)) // Reduced font size
 
-            let textAttributes: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: textColor,
-                .strokeColor: shadowColor,
-                .strokeWidth: -2.0
-            ]
+                let textAttributes: [NSAttributedString.Key: Any] = [
+                    .font: font,
+                    .foregroundColor: textColor,
+                    .strokeColor: shadowColor,
+                    .strokeWidth: -2.0 // Reduced stroke width
+                ]
 
-            // Calculate text size and position
-            let attributedString = NSAttributedString(string: watermarkText, attributes: textAttributes)
-            let textSize = attributedString.boundingRect(
-                with: CGSize(width: image.size.width - 40, height: image.size.height),
-                options: [.usesLineFragmentOrigin, .usesFontLeading],
-                context: nil
-            ).size
+                // Calculate text size and position
+                let attributedString = NSAttributedString(string: watermarkText, attributes: textAttributes)
+                let textSize = attributedString.boundingRect(
+                    with: CGSize(width: image.size.width - 40, height: image.size.height),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    context: nil
+                ).size
 
-            // Position watermark in bottom-left corner with padding
-            let textRect = CGRect(
-                x: 20,
-                y: image.size.height - textSize.height - 20,
-                width: textSize.width,
-                height: textSize.height
-            )
+                // Position watermark in bottom-left corner with padding
+                let textRect = CGRect(
+                    x: 20,
+                    y: image.size.height - textSize.height - 20,
+                    width: textSize.width,
+                    height: textSize.height
+                )
 
-            // Draw semi-transparent background
-            let backgroundRect = textRect.insetBy(dx: -10, dy: -5)
-            context.cgContext.setFillColor(UIColor.black.withAlphaComponent(0.6).cgColor)
-            context.cgContext.fillEllipse(in: backgroundRect)
+                // Draw semi-transparent background with rounded corners
+                let backgroundRect = textRect.insetBy(dx: -10, dy: -8) // Reduced background padding
+                context.cgContext.setFillColor(UIColor.black.withAlphaComponent(0.6).cgColor)
+                let roundedPath = UIBezierPath(roundedRect: backgroundRect, cornerRadius: 6)
+                context.cgContext.addPath(roundedPath.cgPath)
+                context.cgContext.fillPath()
 
-            // Draw text
-            attributedString.draw(in: textRect)
+                // Draw text
+                attributedString.draw(in: textRect)
+            }
         }
     }
 
     private func formatLocationText() -> String {
-        guard let location = currentLocation else {
-            return "Location unavailable"
+        // Use address if available, otherwise fall back to coordinates
+        if let address = currentAddress, !address.isEmpty {
+            return "📍 \(address)"
+        } else if let location = currentLocation {
+            let latitude = String(format: "%.6f", location.coordinate.latitude)
+            let longitude = String(format: "%.6f", location.coordinate.longitude)
+            return "📍 \(latitude), \(longitude)"
+        } else {
+            return "📍 Location unavailable"
         }
-
-        let latitude = String(format: "%.6f", location.coordinate.latitude)
-        let longitude = String(format: "%.6f", location.coordinate.longitude)
-        return "📍 \(latitude), \(longitude)"
     }
 }
 
@@ -358,6 +483,32 @@ extension PhotoCaptureManager: CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         Task { @MainActor in
             currentLocation = locations.last
+
+            // Get address from coordinates
+            if let location = locations.last {
+                geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, error in
+                    Task { @MainActor in
+                        if let placemark = placemarks?.first {
+                            var addressComponents: [String] = []
+
+                            if let streetNumber = placemark.subThoroughfare {
+                                addressComponents.append(streetNumber)
+                            }
+                            if let streetName = placemark.thoroughfare {
+                                addressComponents.append(streetName)
+                            }
+                            if let city = placemark.locality {
+                                addressComponents.append(city)
+                            }
+                            if let state = placemark.administrativeArea {
+                                addressComponents.append(state)
+                            }
+
+                            self?.currentAddress = addressComponents.joined(separator: " ")
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -384,8 +535,30 @@ struct CapturedPhoto: Identifiable {
     let location: CLLocation?
     let capturedAt: Date
 
+    private var _cachedImage: UIImage?
+
     var image: UIImage? {
-        return UIImage(contentsOfFile: fileURL)
+        // Use lazy loading and cache management to reduce memory usage
+        if let cached = _cachedImage {
+            return cached
+        }
+
+        let loadedImage = UIImage(contentsOfFile: fileURL)
+        return loadedImage
+    }
+
+    mutating func clearImageCache() {
+        _cachedImage = nil
+    }
+
+    init(id: UUID, fileURL: String, jobId: String? = nil, quoteDraftId: UUID? = nil, location: CLLocation? = nil, capturedAt: Date) {
+        self.id = id
+        self.fileURL = fileURL
+        self.jobId = jobId
+        self.quoteDraftId = quoteDraftId
+        self.location = location
+        self.capturedAt = capturedAt
+        self._cachedImage = nil
     }
 }
 
@@ -393,31 +566,24 @@ struct CapturedPhoto: Identifiable {
 
 struct CameraView: UIViewControllerRepresentable {
     @Binding var isPresented: Bool
+    @Binding var captureCount: Int
     let onImageCaptured: (UIImage) -> Void
 
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.delegate = context.coordinator
-
-        // Check if camera is available
-        if UIImagePickerController.isSourceTypeAvailable(.camera) {
-            picker.sourceType = .camera
-            picker.cameraCaptureMode = .photo
-            picker.cameraDevice = .rear
-
-            // Important: Set these for proper camera functionality
-            picker.showsCameraControls = true
-            picker.allowsEditing = false
-            picker.modalPresentationStyle = .fullScreen
-        } else {
-            // Fallback to photo library if camera not available (simulator)
-            picker.sourceType = .photoLibrary
+    func makeUIViewController(context: Context) -> CameraViewController {
+        let cameraVC = CameraViewController()
+        cameraVC.coordinator = context.coordinator
+        cameraVC.onClose = {
+            // Update the SwiftUI state when camera is closed
+            DispatchQueue.main.async {
+                self.isPresented = false
+            }
         }
-
-        return picker
+        return cameraVC
     }
 
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    func updateUIViewController(_ uiViewController: CameraViewController, context: Context) {
+        // Camera view controller doesn't need updates
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -433,13 +599,169 @@ struct CameraView: UIViewControllerRepresentable {
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             if let image = info[.originalImage] as? UIImage {
                 parent.onImageCaptured(image)
+                // Increment capture count for continuous shooting
+                DispatchQueue.main.async {
+                    self.parent.captureCount += 1
+                }
             }
-            parent.isPresented = false
+            // Don't close camera after taking a photo - keep it open for continuous shooting
+            // parent.isPresented = false // Commented out to allow continuous photo taking
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.isPresented = false
         }
+
+        // Enable all orientations for the camera
+        func navigationControllerSupportedInterfaceOrientations(_ navigationController: UINavigationController) -> UIInterfaceOrientationMask {
+            return .all
+        }
+
+        func navigationControllerPreferredInterfaceOrientationForPresentation(_ navigationController: UINavigationController) -> UIInterfaceOrientation {
+            return .portrait
+        }
+    }
+}
+
+// Custom UIViewController that properly handles orientation for camera
+class CameraViewController: UIViewController {
+    var coordinator: CameraView.Coordinator?
+    var onClose: (() -> Void)?
+    private var imagePicker: UIImagePickerController?
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        setupCamera()
+    }
+
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        return .all
+    }
+
+    override var shouldAutorotate: Bool {
+        return true
+    }
+
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
+        return .portrait
+    }
+
+    private func setupCamera() {
+        let picker = UIImagePickerController()
+        picker.delegate = coordinator
+        picker.modalPresentationStyle = .fullScreen
+
+        // Check if camera is available
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            picker.sourceType = .camera
+            picker.cameraCaptureMode = .photo
+            picker.cameraDevice = .rear
+            // IMPORTANT: Set showsCameraControls to false to prevent photo review screen
+            picker.showsCameraControls = false
+            picker.allowsEditing = false
+            picker.cameraFlashMode = .auto
+
+            // Create custom overlay for continuous photo capture
+            let overlayView = createCameraOverlay(for: picker)
+            picker.cameraOverlayView = overlayView
+        } else {
+            // Fallback to photo library if camera not available (simulator)
+            picker.sourceType = .photoLibrary
+        }
+
+        self.imagePicker = picker
+
+        // Present the camera
+        DispatchQueue.main.async {
+            self.present(picker, animated: false)
+        }
+    }
+
+    private func createCameraOverlay(for picker: UIImagePickerController) -> UIView {
+        let overlayView = UIView(frame: picker.view.bounds)
+        overlayView.backgroundColor = UIColor.clear
+
+        // Add capture button
+        let captureButton = UIButton(type: .system)
+        captureButton.setImage(UIImage(systemName: "camera.circle.fill"), for: .normal)
+        captureButton.tintColor = .white
+        captureButton.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        captureButton.layer.cornerRadius = 35
+        captureButton.translatesAutoresizingMaskIntoConstraints = false
+
+        // Add close button
+        let closeButton = UIButton(type: .system)
+        closeButton.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
+        closeButton.tintColor = .white
+        closeButton.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        closeButton.layer.cornerRadius = 20
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+
+        overlayView.addSubview(captureButton)
+        overlayView.addSubview(closeButton)
+
+        // Set up constraints
+        NSLayoutConstraint.activate([
+            captureButton.centerXAnchor.constraint(equalTo: overlayView.centerXAnchor),
+            captureButton.bottomAnchor.constraint(equalTo: overlayView.safeAreaLayoutGuide.bottomAnchor, constant: -30),
+            captureButton.widthAnchor.constraint(equalToConstant: 70),
+            captureButton.heightAnchor.constraint(equalToConstant: 70),
+
+            closeButton.topAnchor.constraint(equalTo: overlayView.safeAreaLayoutGuide.topAnchor, constant: 20),
+            closeButton.leadingAnchor.constraint(equalTo: overlayView.leadingAnchor, constant: 20),
+            closeButton.widthAnchor.constraint(equalToConstant: 40),
+            closeButton.heightAnchor.constraint(equalToConstant: 40)
+        ])
+
+        // Add actions
+        captureButton.addTarget(self, action: #selector(capturePhoto), for: .touchUpInside)
+        closeButton.addTarget(self, action: #selector(closeCamera), for: .touchUpInside)
+
+        return overlayView
+    }
+
+    @objc private func capturePhoto() {
+        imagePicker?.takePicture()
+    }
+
+    @objc private func closeCamera() {
+        // Notify SwiftUI that camera should close
+        onClose?()
+
+        // First dismiss the image picker
+        imagePicker?.dismiss(animated: true) {
+            // Then dismiss the entire camera view controller to properly close the fullScreenCover
+            DispatchQueue.main.async {
+                self.dismiss(animated: true)
+            }
+        }
+    }
+}
+
+// Custom view that forces orientation support when presenting camera
+struct OrientationSupportingView<Content: View>: UIViewControllerRepresentable {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    func makeUIViewController(context: Context) -> OrientationSupportingHostingController<Content> {
+        return OrientationSupportingHostingController(rootView: content)
+    }
+
+    func updateUIViewController(_ uiViewController: OrientationSupportingHostingController<Content>, context: Context) {
+        uiViewController.rootView = content
+    }
+}
+
+class OrientationSupportingHostingController<Content: View>: UIHostingController<Content> {
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        return .all
+    }
+
+    override var shouldAutorotate: Bool {
+        return true
     }
 }
 
@@ -575,15 +897,23 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     @Published var jobs: [JobberJob] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-    @Published var showingManualAuth = false
+    @Published var connectedEmail: String?
 
+    // OAuth Configuration
     private let clientId = "bc74e0a3-3f65-4373-b758-a512536ded90"
-    private let redirectURI = "dtsapp://oauth/callback" // Using custom URL scheme for native app
-    private let baseURL = "https://api.getjobber.com/api/graphql"
+    private let clientSecret = "c4cc587785949060e4dd052e598a702d0ed8e91410302ceed2702d30413a6c03"
+    private let redirectURI = "https://trainingemployer190.github.io/dtsapp-oauth-redirect/"
+    private let scopes = "read_clients write_clients read_requests write_requests read_quotes write_quotes read_jobs write_jobs read_scheduled_items write_scheduled_items read_invoices write_invoices read_jobber_payments read_users write_users write_tax_rates read_expenses write_expenses read_custom_field_configurations write_custom_field_configurations read_time_sheets"
+
+    // API Endpoints
+    private let authURL = "https://api.getjobber.com/api/oauth/authorize"
+    private let tokenURL = "https://api.getjobber.com/api/oauth/token"
+    private let apiURL = "https://api.getjobber.com/api/graphql"
 
     private var authSession: ASWebAuthenticationSession?
-    private var codeVerifier: String?
+    private var storedState: String?
 
+    // Token storage with automatic expiry tracking
     private var accessToken: String? {
         get {
             guard let data = Keychain.load(key: "jobber_access_token") else { return nil }
@@ -598,30 +928,78 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         }
     }
 
+    private var refreshToken: String? {
+        get {
+            guard let data = Keychain.load(key: "jobber_refresh_token") else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
+        set {
+            if let token = newValue {
+                _ = Keychain.save(key: "jobber_refresh_token", data: Data(token.utf8))
+            } else {
+                Keychain.delete(key: "jobber_refresh_token")
+            }
+        }
+    }
+
+    private var tokenExpiry: Date? {
+        get {
+            let timestamp = UserDefaults.standard.double(forKey: "jobber_token_expiry")
+            return timestamp > 0 ? Date(timeIntervalSince1970: timestamp) : nil
+        }
+        set {
+            if let date = newValue {
+                UserDefaults.standard.set(date.timeIntervalSince1970, forKey: "jobber_token_expiry")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "jobber_token_expiry")
+            }
+        }
+    }
+
     override init() {
         super.init()
-        isAuthenticated = accessToken != nil
+        checkAuthenticationStatus()
+    }
+
+    private func checkAuthenticationStatus() {
+        // Check if we have stored tokens
+        if let _ = accessToken, let _ = refreshToken {
+            // We have tokens, check if they're still valid
+            if let expiry = tokenExpiry, Date() < expiry {
+                // Access token is still valid
+                isAuthenticated = true
+                Task {
+                    await fetchAccountInfo()
+                }
+            } else {
+                // Access token expired, try to refresh
+                Task {
+                    await refreshAccessTokens()
+                }
+            }
+        } else {
+            // No tokens stored
+            isAuthenticated = false
+        }
     }
 
     func authenticate() {
-        // Temporarily disabled - uncomment when Jobber API details are clarified
-        /*
-        guard let (codeVerifier, codeChallenge) = generatePkceChallenge() else {
-            self.errorMessage = "Could not generate PKCE challenge."
-            return
-        }
+        // Start fresh OAuth flow
+        clearStoredTokens()
+        startOAuthFlow()
+    }
 
-        self.codeVerifier = codeVerifier
+    private func startOAuthFlow() {
+        // Generate random state for security
+        storedState = UUID().uuidString
 
-        var urlComponents = URLComponents(string: "https://api.getjobber.com/oauth/authorize")!
+        var urlComponents = URLComponents(string: authURL)!
         urlComponents.queryItems = [
             URLQueryItem(name: "client_id", value: clientId),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
-            URLQueryItem(name: "state", value: UUID().uuidString),
             URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "scope", value: "read_jobs read_clients write_quotes"),
-            URLQueryItem(name: "code_challenge", value: codeChallenge),
-            URLQueryItem(name: "code_challenge_method", value: "S256")
+            URLQueryItem(name: "scope", value: scopes),
+            URLQueryItem(name: "state", value: storedState)
         ]
 
         guard let authURL = urlComponents.url else {
@@ -631,166 +1009,412 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
 
         let authSession = ASWebAuthenticationSession(
             url: authURL,
-            callbackURLScheme: "dtsapp" // Just the scheme part
+            callbackURLScheme: "dtsapp" // Use custom scheme to match GitHub Pages redirect
         ) { [weak self] callbackURL, error in
             guard let self = self else { return }
 
+            print("ASWebAuthenticationSession callback received")
+            print("Callback URL: \(String(describing: callbackURL))")
+            print("Error: \(String(describing: error))")
+
             if let error = error {
-                self.errorMessage = "Authentication failed: \(error.localizedDescription)"
+                if case ASWebAuthenticationSessionError.canceledLogin = error {
+                    print("User cancelled authentication")
+                    return
+                }
+                Task { @MainActor in
+                    self.errorMessage = "Authentication failed: \(error.localizedDescription)"
+                }
                 return
             }
 
             guard let callbackURL = callbackURL else {
-                self.errorMessage = "Authentication failed: No callback URL received."
+                Task { @MainActor in
+                    self.errorMessage = "Authentication completed but no callback URL was received. Please try again."
+                }
                 return
             }
 
-            // Extract the authorization code from the callbackURL
-            guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: true),
-                  let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
-                self.errorMessage = "Could not extract authorization code from callback."
-                return
+            print("Processing callback URL: \(callbackURL.absoluteString)")
+            Task {
+                await self.handleOAuthCallback(url: callbackURL)
             }
-
-            self.exchangeCodeForToken(code: code)
         }
 
         authSession.presentationContextProvider = self
-        authSession.prefersEphemeralWebBrowserSession = true
-
+        authSession.prefersEphemeralWebBrowserSession = false // Keep session for debugging
         self.authSession = authSession
-        authSession.start()
-        */
 
-        // Temporary message while API integration is being clarified
-        self.errorMessage = "Jobber integration temporarily disabled. Contact support for API configuration details."
+        print("Starting authentication session with:")
+        print("- Auth URL: \(authURL.absoluteString)")
+        print("- Redirect URI: \(redirectURI)")
+        print("- Expected callback pattern: starts with \(redirectURI)")
+
+        let started = authSession.start()
+        print("Authentication session start result: \(started)")
+
+        if !started {
+            Task { @MainActor in
+                self.errorMessage = "Failed to start authentication session"
+            }
+        }
     }
 
-    private func exchangeCodeForToken(code: String) {
-        guard let codeVerifier = self.codeVerifier else {
-            self.errorMessage = "Code verifier not found."
+    private func handleOAuthCallback(url: URL) async {
+        print("=== handleOAuthCallback ===")
+        print("Full callback URL: \(url.absoluteString)")
+        print("URL scheme: \(url.scheme ?? "none")")
+        print("URL host: \(url.host ?? "none")")
+        print("URL path: \(url.path)")
+        print("URL query: \(url.query ?? "none")")
+
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: true) else {
+            print("Failed to parse URL components")
+            await MainActor.run {
+                self.errorMessage = "Invalid callback URL format"
+            }
             return
         }
 
-        guard let url = URL(string: "https://api.getjobber.com/oauth/token") else { return }
+        print("Query items:")
+        components.queryItems?.forEach { item in
+            print("  \(item.name): \(item.value ?? "nil")")
+        }
+
+        // Validate state
+        let receivedState = components.queryItems?.first(where: { $0.name == "state" })?.value
+        print("Received state: \(receivedState ?? "none")")
+        print("Expected state: \(storedState ?? "none")")
+
+        guard receivedState == storedState else {
+            print("State validation failed!")
+            await MainActor.run {
+                self.errorMessage = "Invalid state parameter - possible security issue"
+            }
+            return
+        }
+
+        // Check for error
+        if let error = components.queryItems?.first(where: { $0.name == "error" })?.value {
+            await MainActor.run {
+                self.errorMessage = "Authorization failed: \(error)"
+            }
+            return
+        }
+
+        // Extract authorization code
+        guard let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
+            await MainActor.run {
+                self.errorMessage = "No authorization code received"
+            }
+            return
+        }
+
+        // Exchange code for tokens
+        await exchangeCodeForTokens(code: code)
+    }
+
+    private func exchangeCodeForTokens(code: String) async {
+        await MainActor.run {
+            self.isLoading = true
+            self.errorMessage = nil
+        }
+
+        guard let url = URL(string: tokenURL) else {
+            await MainActor.run {
+                self.errorMessage = "Invalid token URL"
+                self.isLoading = false
+            }
+            return
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
+        request.setValue("https://api.getjobber.com", forHTTPHeaderField: "Origin")
+        request.setValue("https://api.getjobber.com", forHTTPHeaderField: "Referer")
 
         var components = URLComponents()
         components.queryItems = [
             URLQueryItem(name: "grant_type", value: "authorization_code"),
-            URLQueryItem(name: "code", value: code),
-            URLQueryItem(name: "redirect_uri", value: redirectURI),
             URLQueryItem(name: "client_id", value: clientId),
-            URLQueryItem(name: "code_verifier", value: codeVerifier) // The secret proof!
+            URLQueryItem(name: "client_secret", value: clientSecret),
+            URLQueryItem(name: "redirect_uri", value: redirectURI),
+            URLQueryItem(name: "code", value: code)
         ]
 
         request.httpBody = components.query?.data(using: .utf8)
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            DispatchQueue.main.async {
-                if let error = error {
-                    self?.errorMessage = "Token exchange failed: \(error.localizedDescription)"
-                    return
-                }
+        do {
+            print("=== Token Exchange Request ===")
+            print("URL: \(url)")
+            print("Method: \(request.httpMethod ?? "none")")
+            print("Headers: \(request.allHTTPHeaderFields ?? [:])")
+            if let bodyData = request.httpBody, let bodyString = String(data: bodyData, encoding: .utf8) {
+                print("Body: \(bodyString)")
+            }
 
-                guard let data = data else {
-                    self?.errorMessage = "No data received from token exchange"
-                    return
-                }
+            let (data, response) = try await URLSession.shared.data(for: request)
 
-                do {
-                    let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
-                    self?.accessToken = tokenResponse.access_token
-                    self?.isAuthenticated = true
-                    self?.errorMessage = nil
-                    self?.codeVerifier = nil // Clear the verifier
-                } catch {
-                    self?.errorMessage = "Failed to decode token response: \(error.localizedDescription)"
-                    print("Token response data: \(String(data: data, encoding: .utf8) ?? "nil")")
+            print("=== Token Exchange Response ===")
+            if let httpResponse = response as? HTTPURLResponse {
+                print("Status Code: \(httpResponse.statusCode)")
+                print("Response Headers: \(httpResponse.allHeaderFields)")
+
+                if httpResponse.statusCode != 200 {
+                    let errorText = String(data: data, encoding: .utf8) ?? "Unknown error"
+                    print("Non-200 status code. Response body: \(errorText)")
+                    await MainActor.run {
+                        self.errorMessage = "Token exchange failed (Status \(httpResponse.statusCode)): \(errorText)"
+                        self.isLoading = false
+                    }
+                    return
                 }
             }
-        }.resume()
-    }
 
-    // MARK: - PKCE Helper Methods
+            let responseString = String(data: data, encoding: .utf8) ?? "Unable to decode response"
+            print("Response Body: \(responseString)")
 
-    private func generatePkceChallenge() -> (verifier: String, challenge: String)? {
-        let verifier = generateCodeVerifier()
+            // Check if we got an HTML response (Cloudflare protection)
+            if responseString.lowercased().contains("<html") || responseString.lowercased().contains("<!doctype") {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.errorMessage = "Cloudflare protection detected. Please try again."
+                    print("Cloudflare protection blocking token exchange")
+                }
+                return
+            }
 
-        guard let challenge = generateCodeChallenge(from: verifier) else {
-            return nil
+            // Check if data is empty
+            if data.isEmpty {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.errorMessage = "Empty response from server"
+                    print("Empty response data received")
+                }
+                return
+            }
+
+            // Try to detect if this is a JSON error response from Jobber
+            if let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if let error = jsonObject["error"] as? String {
+                    await MainActor.run {
+                        self.isLoading = false
+                        self.errorMessage = "OAuth Error: \(error)"
+                        if let description = jsonObject["error_description"] as? String {
+                            self.errorMessage = "OAuth Error: \(error) - \(description)"
+                        }
+                        print("OAuth error response: \(jsonObject)")
+                    }
+                    return
+                }
+                print("Valid JSON received: \(jsonObject)")
+            } else {
+                print("Response is not valid JSON")
+            }
+
+            let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
+
+            await MainActor.run {
+                self.storeTokens(tokenResponse)
+                self.isAuthenticated = true
+                self.errorMessage = nil
+                self.isLoading = false
+                self.storedState = nil
+
+                // Fetch account info to verify connection
+                Task {
+                    await self.fetchAccountInfo()
+                }
+            }
+        } catch let decodingError as DecodingError {
+            print("JSON Decoding Error Details:")
+            print("Error: \(decodingError)")
+            if let data = try? JSONSerialization.jsonObject(with: request.httpBody ?? Data()) {
+                print("Request was: \(data)")
+            }
+            await MainActor.run {
+                self.errorMessage = "Invalid response format from server"
+                self.isLoading = false
+            }
+        } catch {
+            print("General Error: \(error)")
+            await MainActor.run {
+                self.errorMessage = "Failed to exchange code for tokens: \(error.localizedDescription)"
+                self.isLoading = false
+            }
         }
-        return (verifier, challenge)
     }
 
-    private func generateCodeVerifier() -> String {
-        var buffer = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, buffer.count, &buffer)
-        return Data(buffer).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-            .trimmingCharacters(in: .whitespaces)
+    private func storeTokens(_ tokenResponse: TokenResponse) {
+        self.accessToken = tokenResponse.access_token
+        self.refreshToken = tokenResponse.refresh_token
+
+        // Set expiry with 60 second buffer - default to 1 hour if not provided
+        let expiresIn = tokenResponse.expires_in ?? 3600 // Default to 1 hour
+        let expiryDate = Date().addingTimeInterval(TimeInterval(expiresIn - 60))
+        self.tokenExpiry = expiryDate
+
+        print("Tokens stored successfully. Access token expires at: \(expiryDate)")
     }
 
-    private func generateCodeChallenge(from verifier: String) -> String? {
-        guard let data = verifier.data(using: .utf8) else { return nil }
-        var buffer = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
-        _ = data.withUnsafeBytes {
-            CC_SHA256($0.baseAddress, CC_LONG(data.count), &buffer)
-        }
-        let hash = Data(buffer)
-
-        return hash.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
-
-    // MARK: - ASWebAuthenticationPresentationContextProviding
-
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        return ASPresentationAnchor()
-    }
-
-    func fetchTodayJobs() async {
-        // Temporarily disabled
-        /*
-        guard accessToken != nil else {
-            errorMessage = "Not authenticated"
+    private func refreshAccessTokens() async {
+        guard let refreshToken = self.refreshToken else {
+            await MainActor.run {
+                self.signOut()
+            }
             return
         }
 
-        isLoading = true
-        errorMessage = nil
+        guard let url = URL(string: tokenURL) else { return }
 
-        let today = Date()
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let todayString = dateFormatter.string(from: today)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
+        request.setValue("https://api.getjobber.com", forHTTPHeaderField: "Origin")
+        request.setValue("https://api.getjobber.com", forHTTPHeaderField: "Referer")
+
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "grant_type", value: "refresh_token"),
+            URLQueryItem(name: "client_id", value: clientId),
+            URLQueryItem(name: "client_secret", value: clientSecret),
+            URLQueryItem(name: "refresh_token", value: refreshToken)
+        ]
+
+        request.httpBody = components.query?.data(using: .utf8)
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 401 || httpResponse.statusCode == 400 {
+                    // Refresh token is invalid/expired - need to re-authenticate
+                    await MainActor.run {
+                        self.errorMessage = "Session expired. Please reconnect your Jobber account."
+                        self.signOut()
+                    }
+                    return
+                } else if httpResponse.statusCode != 200 {
+                    let errorText = String(data: data, encoding: .utf8) ?? "Unknown error"
+                    await MainActor.run {
+                        self.errorMessage = "Token refresh failed: \(errorText)"
+                        self.signOut()
+                    }
+                    return
+                }
+            }
+
+            let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
+
+            await MainActor.run {
+                self.storeTokens(tokenResponse)
+                self.isAuthenticated = true
+                self.errorMessage = nil
+
+                print("Tokens refreshed successfully")
+            }
+
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "Failed to refresh tokens. Please reconnect your account."
+                self.signOut()
+            }
+        }
+    }
+
+    private func ensureValidAccessToken() async -> Bool {
+        // Check if access token is expired
+        if let expiry = tokenExpiry, Date() >= expiry {
+            // Token is expired, try to refresh
+            await refreshAccessTokens()
+        }
+
+        return isAuthenticated && accessToken != nil
+    }
+
+    private func fetchAccountInfo() async {
+        guard await ensureValidAccessToken(), let token = accessToken else { return }
 
         let query = """
-        query GetTodayJobs {
-          jobs(
-            filter: {
-              scheduledStart: { greaterThanOrEqualTo: "\(todayString)T00:00:00Z" }
-              scheduledStart: { lessThan: "\(todayString)T23:59:59Z" }
+        query GetAccountInfo {
+          account {
+            name
+          }
+        }
+        """
+
+        await performGraphQLRequest(query: query, variables: [:]) { [weak self] (result: Result<AccountResponse, Error>) in
+            Task { @MainActor in
+                switch result {
+                case .success(let response):
+                    self?.connectedEmail = response.data.account.name
+                    print("Successfully connected as: \(response.data.account.name)")
+                case .failure(let error):
+                    print("Failed to fetch account info: \(error)")
+                    // Don't show error for account info - not critical
+                }
             }
-          ) {
+        }
+    }
+
+    func fetchWeekScheduledRequests() async {
+        guard await ensureValidAccessToken() else {
+            await MainActor.run {
+                self.errorMessage = "Please connect your Jobber account first"
+            }
+            return
+        }
+
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+
+        let today = Date()
+        let calendar = Calendar.current
+        
+        // Get the start of this week (Sunday)
+        let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
+        // Get the end of this week (start of next week)
+        let endOfWeek = calendar.date(byAdding: .weekOfYear, value: 1, to: startOfWeek) ?? today
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let weekStartString = dateFormatter.string(from: startOfWeek)
+        let weekEndString = dateFormatter.string(from: endOfWeek)
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        let weekStart = isoFormatter.string(from: startOfWeek)
+        let weekEnd = isoFormatter.string(from: endOfWeek)
+
+        print("Fetching scheduled items for this week (\(weekStartString) to \(weekEndString))")
+        print("Date range: \(weekStart) to \(weekEnd)")
+
+        // Search with week range - let's remove the filter for now and filter in the app
+        let query = """
+        query GetScheduledItems {
+          visits(first: 50) {
             nodes {
               id
-              title
-              scheduledStart
-              client {
-                name
-                billingAddress {
-                  street1
-                  city
-                  province
-                  postalCode
+              startAt
+              endAt
+              job {
+                id
+                title
+                client {
+                  name
+                }
+                property {
+                  address {
+                    street1
+                    city
+                  }
                 }
               }
             }
@@ -798,64 +1422,344 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         }
         """
 
-        await performGraphQLRequest(query: query) { [weak self] (result: Result<JobsResponse, Error>) in
-            DispatchQueue.main.async {
-                self?.isLoading = false
+        let variables: [String: Any] = [:]
+
+        await performGraphQLRequest(query: query, variables: variables) { [weak self] (result: Result<VisitsResponse, Error>) in
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.isLoading = false
+
                 switch result {
                 case .success(let response):
-                    self?.jobs = response.data.jobs.nodes.map { jobNode in
-                        JobberJob(
-                            jobId: jobNode.id,
-                            clientName: jobNode.client.name,
-                            address: jobNode.client.billingAddress != nil ? self?.formatAddress(jobNode.client.billingAddress!) ?? "" : "",
-                            scheduledAt: self?.parseDate(jobNode.scheduledStart) ?? Date(),
-                            status: "active"
-                        )
+                    var fetchedJobs: [JobberJob] = []
+                    let today = Calendar.current.startOfDay(for: Date())
+                    let calendar = Calendar.current
+                    let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
+                    let endOfWeek = calendar.date(byAdding: .weekOfYear, value: 1, to: startOfWeek) ?? today
+
+                    print("Found \(response.data.visits.nodes.count) total visits")
+
+                    // Look for test entries and week visits
+                    var testEntries: [VisitWithJobNode] = []
+                    var weekVisits: [VisitWithJobNode] = []
+
+                    for visit in response.data.visits.nodes {
+                        let startAtString = visit.startAt ?? "No start time"
+                        let clientName = visit.job.client.name
+                        let title = visit.job.title ?? "No title"
+                        
+                        // Check if this visit contains "test" to help find user's test entry
+                        if clientName.lowercased().contains("test") || title.lowercased().contains("test") {
+                            print("*** FOUND TEST ENTRY: \(clientName) - \(title) ***")
+                            testEntries.append(visit)
+                        }
+                        
+                        // Look for visits this week
+                        if let startAtString = visit.startAt,
+                           let startAt = self.parseDate(startAtString),
+                           startAt >= startOfWeek && startAt < endOfWeek {
+                            weekVisits.append(visit)
+                            print("This week visit: \(clientName) - \(title) at \(startAtString)")
+                            
+                            let job = self.createJobberJobFromVisit(
+                                visit: visit,
+                                scheduledAt: startAt,
+                                status: "Visit"
+                            )
+                            fetchedJobs.append(job)
+                            print("Added week visit: \(job.clientName) at \(job.scheduledAt)")
+                        }
                     }
+
+                    self.jobs = fetchedJobs
+                    print("Fetched \(fetchedJobs.count) scheduled visits for this week")
+                    
+                    if testEntries.isEmpty {
+                        print("No test entries found in visits. Your test entry might be in requests or quotes.")
+                    } else {
+                        print("Found \(testEntries.count) test entries in visits!")
+                    }
+                    
+                    if weekVisits.isEmpty {
+                        print("No visits found for this week.")
+                        if response.data.visits.nodes.isEmpty {
+                            print("No visits returned with week filter.")
+                        } else {
+                            print("All \(response.data.visits.nodes.count) visits found are outside this week.")
+                        }
+                    } else {
+                        print("Found \(weekVisits.count) visits this week")
+                    }
+
+                    if fetchedJobs.isEmpty {
+                        print("No visits scheduled for this week.")
+                    }
+
                 case .failure(let error):
-                    self?.errorMessage = "Failed to fetch jobs: \(error.localizedDescription)"
+                    print("Failed to fetch visits: \(error)")
+                    self.errorMessage = error.localizedDescription
                 }
             }
         }
-        */
-
-        // Temporary message
-        await MainActor.run {
-            self.errorMessage = "Jobber sync temporarily disabled. Using local data only."
-        }
     }
 
-    func createQuoteDraft(quoteDraft: QuoteDraft) async {
-        // Temporarily disabled
-        /*
-        guard accessToken != nil else {
-            errorMessage = "Not authenticated"
+    func searchForTestEntry() async {
+        guard await ensureValidAccessToken() else {
+            await MainActor.run {
+                self.errorMessage = "Please connect your Jobber account first"
+            }
             return
         }
 
-        isLoading = true
-        errorMessage = nil
+        print("=== Searching for test entry across different endpoints ===")
+
+        // Search clients first - this is most likely where a "test" entry would be
+        let clientsQuery = """
+        query GetClients {
+          clients(first: 50) {
+            nodes {
+              id
+              name
+              companyName
+            }
+          }
+        }
+        """
+
+        await performGraphQLRequest(query: clientsQuery, variables: [:]) { [weak self] (result: Result<ClientsResponse, Error>) in
+            Task { @MainActor in
+                switch result {
+                case .success(let response):
+                    print("Found \(response.data.clients.nodes.count) clients")
+                    var foundTest = false
+                    for client in response.data.clients.nodes {
+                        let name = client.name
+                        let companyName = client.companyName ?? ""
+                        if name.lowercased().contains("test") || companyName.lowercased().contains("test") {
+                            print("*** FOUND TEST ENTRY IN CLIENTS: \(name) - \(companyName) ***")
+                            foundTest = true
+                        }
+                    }
+                    if !foundTest {
+                        print("No test entries found in clients")
+                    }
+                case .failure(let error):
+                    print("Failed to fetch clients: \(error)")
+                }
+            }
+        }
+
+        // Search jobs
+        let jobsQuery = """
+        query GetJobs {
+          jobs(first: 50) {
+            nodes {
+              id
+              title
+              client {
+                name
+              }
+              createdAt
+            }
+          }
+        }
+        """
+
+        await performGraphQLRequest(query: jobsQuery, variables: [:]) { [weak self] (result: Result<JobsResponse, Error>) in
+            Task { @MainActor in
+                switch result {
+                case .success(let response):
+                    print("Found \(response.data.jobs.nodes.count) jobs")
+                    var foundTest = false
+                    for job in response.data.jobs.nodes {
+                        let clientName = job.client.name
+                        let title = job.title
+                        if clientName.lowercased().contains("test") || title.lowercased().contains("test") {
+                            print("*** FOUND TEST ENTRY IN JOBS: \(clientName) - \(title) ***")
+                            foundTest = true
+                        }
+                    }
+                    if !foundTest {
+                        print("No test entries found in jobs")
+                    }
+                case .failure(let error):
+                    print("Failed to fetch jobs: \(error)")
+                }
+            }
+        }
+
+        // Search requests  
+        let requestsQuery = """
+        query GetRequests {
+          requests(first: 20) {
+            nodes {
+              id
+              createdAt
+              jobs {
+                nodes {
+                  id
+                  title
+                  client {
+                    name
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+
+        await performGraphQLRequest(query: requestsQuery, variables: [:]) { [weak self] (result: Result<RequestsResponse, Error>) in
+            Task { @MainActor in
+                switch result {
+                case .success(let response):
+                    print("Found \(response.data.requests.nodes.count) requests")
+                    var foundTest = false
+                    for request in response.data.requests.nodes {
+                        for job in request.jobs.nodes {
+                            let clientName = job.client.name
+                            let title = job.title
+                            if clientName.lowercased().contains("test") || title.lowercased().contains("test") {
+                                print("*** FOUND TEST ENTRY IN REQUESTS: \(clientName) - \(title) ***")
+                                foundTest = true
+                            }
+                        }
+                    }
+                    if !foundTest {
+                        print("No test entries found in requests")
+                    }
+                case .failure(let error):
+                    print("Failed to fetch requests: \(error)")
+                }
+            }
+        }
+
+        // Search quotes
+        let quotesQuery = """
+        query GetQuotes {
+          quotes(first: 20) {
+            nodes {
+              id
+              createdAt
+              jobs {
+                nodes {
+                  id
+                  title
+                  client {
+                    name
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+
+        await performGraphQLRequest(query: quotesQuery, variables: [:]) { [weak self] (result: Result<QuotesResponse, Error>) in
+            Task { @MainActor in
+                switch result {
+                case .success(let response):
+                    print("Found \(response.data.quotes.nodes.count) quotes")
+                    var foundTest = false
+                    for quote in response.data.quotes.nodes {
+                        for job in quote.jobs.nodes {
+                            let clientName = job.client.name
+                            let title = job.title
+                            if clientName.lowercased().contains("test") || title.lowercased().contains("test") {
+                                print("*** FOUND TEST ENTRY IN QUOTES: \(clientName) - \(title) ***")
+                                foundTest = true
+                            }
+                        }
+                    }
+                    if !foundTest {
+                        print("No test entries found in quotes")
+                    }
+                case .failure(let error):
+                    print("Failed to fetch quotes: \(error)")
+                }
+            }
+        }
+    }
+
+    private func createJobberJob(from job: JobNode, scheduledAt: Date, status: String) -> JobberJob {
+        let clientName = job.client.name
+        let address: String
+        if let propertyAddress = job.property?.address {
+            address = formatPropertyAddress(propertyAddress)
+        } else if let billingAddress = job.client.billingAddress {
+            address = formatAddress(billingAddress)
+        } else {
+            address = "No address available"
+        }
+        
+        let jobberJob = JobberJob(
+            jobId: job.id,
+            clientName: clientName,
+            address: address,
+            scheduledAt: scheduledAt,
+            status: status
+        )
+
+        print("Created job: \(clientName) at \(scheduledAt) - \(status)")
+        return jobberJob
+    }
+
+    private func createJobberJobFromVisit(visit: VisitWithJobNode, scheduledAt: Date, status: String) -> JobberJob {
+        let clientName = visit.job.client.name
+        let address: String
+        if let propertyAddress = visit.job.property?.address {
+            address = formatPropertyAddress(propertyAddress)
+        } else if let billingAddress = visit.job.client.billingAddress {
+            address = formatAddress(billingAddress)
+        } else {
+            address = "No address available"
+        }
+        
+        let jobberJob = JobberJob(
+            jobId: visit.job.id,
+            clientName: clientName,
+            address: address,
+            scheduledAt: scheduledAt,
+            status: status
+        )
+
+        print("Created job: \(clientName) at \(scheduledAt) - \(status)")
+        return jobberJob
+    }
+
+    func createQuoteDraft(quoteDraft: QuoteDraft) async {
+        guard await ensureValidAccessToken() else {
+            await MainActor.run {
+                self.errorMessage = "Please connect your Jobber account first"
+            }
+            return
+        }
+
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
 
         let lineItems = quoteDraft.lineItemsForJobber.map { item in
-            """
-            {
-              name: "\(item.name)"
-              description: "\(item.description)"
-              quantity: \(item.quantity)
-              unitCost: \(item.unitPrice)
-            }
-            """
-        }.joined(separator: ", ")
+            [
+                "name": item.name,
+                "description": item.description,
+                "quantity": item.quantity,
+                "unitCost": item.unitPrice
+            ]
+        }
+
+        let variables: [String: Any] = [
+            "input": [
+                "clientId": quoteDraft.clientId ?? "",
+                "title": "Gutter Installation Quote",
+                "lineItems": lineItems
+            ]
+        ]
 
         let mutation = """
-        mutation CreateQuote {
-          quoteCreate(
-            input: {
-              clientId: "\(quoteDraft.clientId ?? "")"
-              title: "Gutter Installation Quote"
-              lineItems: [\(lineItems)]
-            }
-          ) {
+        mutation CreateQuote($input: QuoteCreateInput!) {
+          quoteCreate(input: $input) {
             quote {
               id
               title
@@ -868,34 +1772,38 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         }
         """
 
-        await performGraphQLRequest(query: mutation) { [weak self] (result: Result<QuoteCreateResponse, Error>) in
-            DispatchQueue.main.async {
-                self?.isLoading = false
+        await performGraphQLRequest(query: mutation, variables: variables) { [weak self] (result: Result<QuoteCreateResponse, Error>) in
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.isLoading = false
+
                 switch result {
                 case .success(let response):
                     if response.data.quoteCreate.userErrors.isEmpty {
-                        // Success - quote created
-                        self?.errorMessage = nil
+                        self.errorMessage = nil
+                        print("Quote created successfully")
                     } else {
                         let errors = response.data.quoteCreate.userErrors.map { $0.message }.joined(separator: ", ")
-                        self?.errorMessage = "Quote creation failed: \(errors)"
+                        self.errorMessage = "Quote creation failed: \(errors)"
                     }
                 case .failure(let error):
-                    self?.errorMessage = "Failed to create quote: \(error.localizedDescription)"
+                    self.errorMessage = "Failed to create quote: \(error.localizedDescription)"
                 }
             }
         }
-        */
-
-        // Temporary message
-        await MainActor.run {
-            self.errorMessage = "Jobber quote creation temporarily disabled. Saving locally only."
-        }
     }
 
-    private func performGraphQLRequest<T: Codable>(query: String, completion: @escaping (Result<T, Error>) -> Void) async {
-        guard let url = URL(string: baseURL),
-              let token = accessToken else {
+    private func performGraphQLRequest<T: Codable>(
+        query: String,
+        variables: [String: Any],
+        completion: @escaping (Result<T, Error>) -> Void
+    ) async {
+        guard let token = accessToken else {
+            completion(.failure(APIError.noToken))
+            return
+        }
+
+        guard let url = URL(string: apiURL) else {
             completion(.failure(APIError.invalidURL))
             return
         }
@@ -904,37 +1812,87 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
+        request.setValue("https://api.getjobber.com", forHTTPHeaderField: "Origin")
+        request.setValue("https://api.getjobber.com", forHTTPHeaderField: "Referer")
+        request.setValue("2025-01-20", forHTTPHeaderField: "X-JOBBER-GRAPHQL-VERSION")
 
-        let body = ["query": query]
+        let body: [String: Any] = [
+            "query": query,
+            "variables": variables
+        ]
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+            print("=== GraphQL Request Debug ===")
+            print("Query: \(query)")
+            print("Variables: \(variables)")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            print("=== GraphQL Response Debug ===")
+            if let httpResponse = response as? HTTPURLResponse {
+                print("Status Code: \(httpResponse.statusCode)")
+            }
+
+            // Log raw response for debugging
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("Raw Response: \(responseString)")
+            }
+
+            // Check for GraphQL errors in response
+            if let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if let errors = jsonObject["errors"] as? [[String: Any]] {
+                    let errorMessages = errors.compactMap { $0["message"] as? String }
+                    print("GraphQL Errors: \(errorMessages)")
+                    completion(.failure(APIError.graphQLError(errorMessages.joined(separator: ", "))))
+                    return
+                }
+
+                // Check if data field exists
+                if jsonObject["data"] == nil {
+                    print("No 'data' field in response: \(jsonObject)")
+                    completion(.failure(APIError.invalidResponse))
+                    return
+                }
+            }
+
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 401 {
+                // Token expired, try to refresh and retry once
+                await refreshAccessTokens()
+
+                if isAuthenticated, let newToken = accessToken {
+                    // Retry with new token
+                    request.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                    let (retryData, _) = try await URLSession.shared.data(for: request)
+                    let result = try JSONDecoder().decode(T.self, from: retryData)
+                    completion(.success(result))
+                } else {
+                    completion(.failure(APIError.unauthorized))
+                }
+                return
+            }
+
+            let result = try JSONDecoder().decode(T.self, from: data)
+            completion(.success(result))
+        } catch let decodingError as DecodingError {
+            print("=== GraphQL Decoding Error ===")
+            print("Error: \(decodingError)")
+            completion(.failure(decodingError))
         } catch {
+            print("=== GraphQL General Error ===")
+            print("Error: \(error)")
             completion(.failure(error))
-            return
         }
-
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(error))
-                return
-            }
-
-            guard let data = data else {
-                completion(.failure(APIError.noData))
-                return
-            }
-
-            do {
-                let result = try JSONDecoder().decode(T.self, from: data)
-                completion(.success(result))
-            } catch {
-                completion(.failure(error))
-            }
-        }.resume()
     }
 
     private func formatAddress(_ address: BillingAddress) -> String {
+        let components = [address.street1, address.city, address.province, address.postalCode].compactMap { $0?.isEmpty == false ? $0 : nil }
+        return components.joined(separator: ", ")
+    }
+
+    private func formatPropertyAddress(_ address: PropertyAddress) -> String {
         let components = [address.street1, address.city, address.province, address.postalCode].compactMap { $0?.isEmpty == false ? $0 : nil }
         return components.joined(separator: ", ")
     }
@@ -944,33 +1902,170 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         return formatter.date(from: dateString)
     }
 
-    func signOut() {
+    private func clearStoredTokens() {
         accessToken = nil
+        refreshToken = nil
+        tokenExpiry = nil
+        connectedEmail = nil
+    }
+
+    func signOut() {
+        clearStoredTokens()
         isAuthenticated = false
         jobs = []
         errorMessage = nil
     }
+
+    // Test function to manually debug token exchange
+    func testTokenExchange(with code: String) async {
+        await MainActor.run {
+            self.isLoading = true
+            self.errorMessage = nil
+        }
+
+        guard let url = URL(string: tokenURL) else {
+            await MainActor.run {
+                self.errorMessage = "Invalid token URL"
+                self.isLoading = false
+            }
+            return
+        }
+
+        // Test with minimal headers first
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let bodyString = "grant_type=authorization_code&client_id=\(clientId)&client_secret=\(clientSecret)&redirect_uri=\(redirectURI)&code=\(code)"
+        request.httpBody = bodyString.data(using: .utf8)
+
+        do {
+            print("=== MANUAL TOKEN TEST ===")
+            print("URL: \(url)")
+            print("Body: \(bodyString)")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            if let httpResponse = response as? HTTPURLResponse {
+                print("Status Code: \(httpResponse.statusCode)")
+                print("Response Headers: \(httpResponse.allHeaderFields)")
+            }
+
+            let responseString = String(data: data, encoding: .utf8) ?? "Unable to decode response"
+            print("Response Body: \(responseString)")
+
+            await MainActor.run {
+                self.errorMessage = "Test complete. Check console for details."
+                self.isLoading = false
+            }
+
+        } catch {
+            print("Test Error: \(error)")
+            await MainActor.run {
+                self.errorMessage = "Test failed: \(error.localizedDescription)"
+                self.isLoading = false
+            }
+        }
+    }
+
+    // MARK: - ASWebAuthenticationPresentationContextProviding
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        // Return the key window for presenting the authentication session
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first else {
+            return ASPresentationAnchor()
+        }
+        return window
+    }
 }
 
-// MARK: - Jobber API Models
-
-struct CommonLaborItem: Identifiable {
-    let id = UUID()
-    let title: String
-    let amount: Double
-}
-
-struct JobberLineItem {
-    let name: String
-    let description: String
-    let quantity: Double
-    let unitPrice: Double
-}
+// MARK: - Jobber API Response Models
 
 struct TokenResponse: Codable {
     let access_token: String
-    let token_type: String
-    let expires_in: Int
+    let token_type: String?
+    let expires_in: Int?
+    let refresh_token: String? // Optional in case some responses don't include it
+}
+
+struct AccountResponse: Codable {
+    let data: AccountData
+}
+
+struct AccountData: Codable {
+    let account: Account
+}
+
+struct Account: Codable {
+    let name: String
+}
+
+struct CurrentUserResponse: Codable {
+    let data: CurrentUserData
+}
+
+struct CurrentUserData: Codable {
+    let currentUser: CurrentUser
+}
+
+struct CurrentUser: Codable {
+    let email: String
+    let name: String
+}
+
+struct ClientsResponse: Codable {
+    let data: ClientsData
+}
+
+struct ClientsData: Codable {
+    let clients: ClientsConnection
+}
+
+struct ClientsConnection: Codable {
+    let nodes: [ClientOnly]
+}
+
+struct ClientOnly: Codable {
+    let id: String
+    let name: String
+    let companyName: String?
+}
+
+struct RequestsResponse: Codable {
+    let data: RequestsData
+}
+
+struct RequestsData: Codable {
+    let requests: RequestsConnection
+}
+
+struct RequestsConnection: Codable {
+    let nodes: [RequestOnly]
+}
+
+struct RequestOnly: Codable {
+    let id: String
+    let createdAt: String?
+    let jobs: JobsConnection
+}
+
+struct QuotesResponse: Codable {
+    let data: QuotesData
+}
+
+struct QuotesData: Codable {
+    let quotes: QuotesConnection
+}
+
+struct QuotesConnection: Codable {
+    let nodes: [QuoteOnly]
+}
+
+struct QuoteOnly: Codable {
+    let id: String
+    let createdAt: String?
+    let jobs: JobsConnection
 }
 
 struct JobsResponse: Codable {
@@ -987,9 +2082,11 @@ struct JobsConnection: Codable {
 
 struct JobNode: Codable {
     let id: String
+    let jobNumber: Int?
     let title: String
-    let scheduledStart: String
     let client: ClientNode
+    let property: PropertyNode?
+    let visits: VisitsConnection
 }
 
 struct ClientNode: Codable {
@@ -997,11 +2094,90 @@ struct ClientNode: Codable {
     let billingAddress: BillingAddress?
 }
 
+struct PropertyNode: Codable {
+    let address: PropertyAddress?
+}
+
+struct PropertyAddress: Codable {
+    let street1: String?
+    let city: String?
+    let province: String?
+    let postalCode: String?
+}
+
 struct BillingAddress: Codable {
     let street1: String?
     let city: String?
     let province: String?
     let postalCode: String?
+}
+
+struct VisitsConnection: Codable {
+    let nodes: [VisitNode]
+}
+
+struct VisitNode: Codable {
+    let id: String
+    let startAt: String?
+    let endAt: String?
+}
+
+struct VisitWithJobNode: Codable {
+    let id: String
+    let startAt: String?
+    let endAt: String?
+    let job: SimpleJobNode
+}
+
+struct SimpleJobNode: Codable {
+    let id: String
+    let jobNumber: Int?
+    let title: String?
+    let client: ClientNode
+    let property: PropertyNode?
+}
+
+struct VisitsResponse: Codable {
+    let data: VisitsData
+}
+
+struct VisitsData: Codable {
+    let visits: VisitsWithJobConnection
+}
+
+struct VisitsWithJobConnection: Codable {
+    let nodes: [VisitWithJobNode]
+}
+
+struct CombinedScheduleResponse: Codable {
+    let data: CombinedScheduleData
+}
+
+struct CombinedScheduleData: Codable {
+    let visits: VisitsWithJobConnection
+    let requests: RequestsWithJobConnection
+    let quotes: QuotesWithJobConnection
+}
+
+struct RequestsWithJobConnection: Codable {
+    let nodes: [RequestWithJobNode]
+}
+
+struct RequestWithJobNode: Codable {
+    let id: String
+    let createdAt: String?
+    let isScheduled: Bool?
+    let jobs: JobsConnection
+}
+
+struct QuotesWithJobConnection: Codable {
+    let nodes: [QuoteWithJobNode]
+}
+
+struct QuoteWithJobNode: Codable {
+    let id: String
+    let createdAt: String?
+    let jobs: JobsConnection
 }
 
 struct QuoteCreateResponse: Codable {
@@ -1027,9 +2203,36 @@ struct UserError: Codable {
     let message: String
 }
 
-enum APIError: Error {
+enum APIError: Error, LocalizedError {
     case invalidURL
     case noData
+    case noAccessToken
+    case invalidResponse
+    case authenticationFailed
+    case graphQLError(String)
+    case noToken
+    case unauthorized
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "Invalid URL"
+        case .noData:
+            return "No data received"
+        case .noAccessToken:
+            return "No access token available"
+        case .invalidResponse:
+            return "Invalid response from server"
+        case .authenticationFailed:
+            return "Authentication failed"
+        case .graphQLError(let message):
+            return "GraphQL Error: \(message)"
+        case .noToken:
+            return "No authentication token available"
+        case .unauthorized:
+            return "Unauthorized - token expired"
+        }
+    }
 }
 
 // MARK: - Keychain Helper
@@ -1075,11 +2278,15 @@ struct Keychain {
 struct PriceBreakdown {
     let materialsTotal: Double
     let laborTotal: Double
-    let subtotal: Double
-    let marginAmount: Double
-    let priceBeforeCommission: Double
-    let commissionAmount: Double
-    let finalTotal: Double
+    let cost: Double  // C = materials + labor
+    let markupPercent: Double  // k
+    let markupAmount: Double  // k × C
+    let price: Double  // P (before commission)
+    let commissionPercent: Double  // s
+    let commissionAmount: Double  // s × P
+    let profitAmount: Double  // Profit after commission: P - C - Commission
+    let profitMarginPercent: Double  // m = Profit ÷ P
+    let finalTotal: Double  // P (since commission comes out of price)
     let compositeFeet: Double
     let pricePerFoot: Double
 }
@@ -1113,30 +2320,47 @@ struct PricingEngine {
 
         let laborTotal = gutterLaborCost + gutterGuardLaborCost + additionalLaborCost
 
-        // Subtotal before margin
-        let subtotal = materialsTotal + laborTotal
+        // Cost (C) = materials + labor
+        let cost = materialsTotal + laborTotal
 
-        // Apply margin (use gutter guard margin if gutter guard is included, otherwise default)
-        let marginPercent = quote.includeGutterGuard ? settings.gutterGuardMarginPercent : quote.marginPercent
-        let marginAmount = subtotal * marginPercent
-        let priceBeforeCommission = subtotal + marginAmount
+        // Get current percentages
+        let commissionPercent = quote.salesCommissionPercent  // s
+        let markupPercent = quote.markupPercent  // k
 
-        // Sales commission
-        let commissionAmount = priceBeforeCommission * quote.salesCommissionPercent
-        let finalTotal = priceBeforeCommission + commissionAmount
+        // Calculate based on markup percent (primary method)
+        // Price P = C × (1 + k)
+        let price = cost * (1 + markupPercent)
 
-        // Composite footage for price per foot calculation - includes all installation footage
-        let compositeFeet = quote.gutterFeet + quote.downspoutFeet + Double(quote.elbowsCount) // Each elbow = 1ft
+        // Commission $ = s × P
+        let commissionAmount = commissionPercent * price
 
+        // Profit $ = P - C - Commission (this is the actual profit from the sale)
+        let profitAmount = price - cost - commissionAmount
+
+        // Markup Amount = same as profit amount (both represent the same profit dollars)
+        let markupAmount = profitAmount
+
+        // Verify margin calculation: m = Profit ÷ P = k ÷ (1 + k) - s
+        let calculatedMarginPercent = (markupPercent / (1 + markupPercent) - commissionPercent).rounded(toPlaces: 1)
+
+        // Round price at the end
+        let finalTotal = price.rounded(.toNearestOrAwayFromZero)
+
+        // Composite footage for price per foot calculation
+        let compositeFeet = quote.gutterFeet + quote.downspoutFeet + Double(quote.elbowsCount)
         let pricePerFoot = compositeFeet > 0 ? finalTotal / compositeFeet : 0
 
         return PriceBreakdown(
             materialsTotal: materialsTotal,
             laborTotal: laborTotal,
-            subtotal: subtotal,
-            marginAmount: marginAmount,
-            priceBeforeCommission: priceBeforeCommission,
+            cost: cost,
+            markupPercent: markupPercent,
+            markupAmount: markupAmount,
+            price: finalTotal,
+            commissionPercent: commissionPercent,
             commissionAmount: commissionAmount,
+            profitAmount: profitAmount,
+            profitMarginPercent: calculatedMarginPercent,
             finalTotal: finalTotal,
             compositeFeet: compositeFeet,
             pricePerFoot: pricePerFoot
@@ -1146,9 +2370,13 @@ struct PricingEngine {
     static func updateQuoteWithCalculatedTotals(quote: QuoteDraft, breakdown: PriceBreakdown) {
         quote.materialsTotal = breakdown.materialsTotal
         quote.laborTotal = breakdown.laborTotal
-        quote.marginAmount = breakdown.marginAmount
+        quote.markupAmount = breakdown.markupAmount
+        quote.profitAmount = breakdown.profitAmount
         quote.commissionAmount = breakdown.commissionAmount
         quote.finalTotal = breakdown.finalTotal
+
+        // Update the calculated profit margin to keep it in sync
+        quote.profitMarginPercent = breakdown.profitMarginPercent
     }
 }
 
@@ -1262,9 +2490,10 @@ class PDFGenerator: ObservableObject {
                 let pricingItems = [
                     ("Materials Total:", breakdown.materialsTotal.currencyFormatted),
                     ("Labor Total:", breakdown.laborTotal.currencyFormatted),
-                    ("Subtotal:", breakdown.subtotal.currencyFormatted),
-                    ("Margin (\(Int(quote.marginPercent * 100))%):", breakdown.marginAmount.currencyFormatted),
-                    ("Commission (\(Int(quote.salesCommissionPercent * 100))%):", breakdown.commissionAmount.currencyFormatted)
+                    ("Subtotal:", (breakdown.materialsTotal + breakdown.laborTotal).currencyFormatted),
+                    ("Markup (\(String(format: "%.1f", quote.markupPercent * 100))%):", breakdown.markupAmount.currencyFormatted),
+                    ("Profit Margin (\(String(format: "%.1f", quote.profitMarginPercent * 100))%):", breakdown.profitAmount.currencyFormatted),
+                    ("Commission (\(String(format: "%.1f", quote.salesCommissionPercent * 100))%):", breakdown.commissionAmount.currencyFormatted)
                 ]
 
                 for (label, value) in pricingItems {
@@ -1391,6 +2620,11 @@ extension Double {
     var twoDecimalFormatted: String {
         return String(format: "%.2f", self)
     }
+
+    func rounded(toPlaces places: Int) -> Double {
+        let divisor = pow(10.0, Double(places))
+        return (self * divisor).rounded() / divisor
+    }
 }
 
 // MARK: - Share Sheet
@@ -1453,15 +2687,10 @@ struct HomeView: View {
                     .background(Color(.systemGray6))
                     .cornerRadius(12)
                     .padding(.horizontal)
-                    .sheet(isPresented: $jobberAPI.showingManualAuth) {
-                        // This view is no longer used with ASWebAuthenticationSession
-                        // ManualAuthView()
-                        //     .environmentObject(jobberAPI)
-                    }
                 }
 
                 if jobberAPI.isLoading {
-                    ProgressView("Loading today's jobs...")
+                    ProgressView("Loading this week's jobs...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if todayJobs.isEmpty {
                     VStack(spacing: 20) {
@@ -1469,11 +2698,11 @@ struct HomeView: View {
                             .font(.system(size: 60))
                             .foregroundColor(.secondary)
 
-                        Text("No Jobs Today")
+                        Text("No Jobs This Week")
                             .font(.title2)
                             .fontWeight(.medium)
 
-                        Text("No jobs scheduled for today. Check back later or create a new quote.")
+                        Text("No jobs scheduled for this week. Check back later or create a new quote.")
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
 
@@ -1499,13 +2728,13 @@ struct HomeView: View {
                         .padding()
                 }
             }
-            .navigationTitle("Today's Jobs")
+            .navigationTitle("This Week's Jobs")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if jobberAPI.isAuthenticated {
                         Button("Refresh") {
                             Task {
-                                await jobberAPI.fetchTodayJobs()
+                                await jobberAPI.fetchWeekScheduledRequests()
                             }
                         }
                     }
@@ -1513,14 +2742,14 @@ struct HomeView: View {
             }
             .refreshable {
                 if jobberAPI.isAuthenticated {
-                    await jobberAPI.fetchTodayJobs()
+                    await jobberAPI.fetchWeekScheduledRequests()
                 } else {
                     await fetchTodayJobs()
                 }
             }
             .task {
                 if jobberAPI.isAuthenticated {
-                    await jobberAPI.fetchTodayJobs()
+                    await jobberAPI.fetchWeekScheduledRequests()
                 } else {
                     await fetchTodayJobs()
                 }
@@ -1529,9 +2758,15 @@ struct HomeView: View {
     }
 
     private func fetchTodayJobs() async {
-        // For local sample data when not authenticated with Jobber
-        if jobs.isEmpty {
-            addSampleJobs()
+        if jobberAPI.isAuthenticated {
+            await jobberAPI.fetchWeekScheduledRequests()
+            // Also search for test entries across all endpoints
+            await jobberAPI.searchForTestEntry()
+        } else {
+            // For local sample data when not authenticated with Jobber
+            if jobs.isEmpty {
+                addSampleJobs()
+            }
         }
     }
 
@@ -1597,6 +2832,326 @@ struct JobRowView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Calculator Component
+
+// MARK: - Calculator Component
+
+struct CalculatorView: View {
+    @Binding var isPresented: Bool
+    let onComplete: (Double) -> Void
+
+    @State private var display: String = "0"
+    @State private var expression: String = ""
+    @State private var currentNumber: String = "0"
+    @State private var shouldResetDisplay = false
+
+    private let buttons: [[String]] = [
+        ["C", "±", "%", "÷"],
+        ["7", "8", "9", "×"],
+        ["4", "5", "6", "-"],
+        ["1", "2", "3", "+"]
+    ]
+
+    var body: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                // Calculator Display
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Text(display)
+                            .font(.system(size: min(geometry.size.width * 0.2, 80), weight: .thin, design: .default))
+                            .foregroundColor(.white)
+                            .minimumScaleFactor(0.3)
+                            .lineLimit(1)
+                            .multilineTextAlignment(.center)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 24)
+                }
+                .frame(height: geometry.size.height * 0.35)
+                .background(Color.black)
+
+                // Button Grid
+                VStack(spacing: 1) {
+                    // All 5 rows with equal button widths
+                    ForEach(0..<4, id: \.self) { row in
+                        HStack(spacing: 1) {
+                            ForEach(0..<buttons[row].count, id: \.self) { col in
+                                let button = buttons[row][col]
+                                CalculatorButton(
+                                    title: button,
+                                    action: { buttonPressed(button) },
+                                    isSelected: false,
+                                    size: CGSize(
+                                        width: (geometry.size.width - 3) / 4,
+                                        height: (geometry.size.height * 0.65 - 4) / 5
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    // Bottom row: Done, 0, ., = (all same size)
+                    HStack(spacing: 1) {
+                        // "Done" button (bottom left)
+                        CalculatorButton(
+                            title: "Done",
+                            action: { buttonPressed("Done") },
+                            isSelected: false,
+                            size: CGSize(
+                                width: (geometry.size.width - 3) / 4,
+                                height: (geometry.size.height * 0.65 - 4) / 5
+                            )
+                        )
+
+                        // "0" button (same size as others)
+                        CalculatorButton(
+                            title: "0",
+                            action: { buttonPressed("0") },
+                            isSelected: false,
+                            size: CGSize(
+                                width: (geometry.size.width - 3) / 4,
+                                height: (geometry.size.height * 0.65 - 4) / 5
+                            )
+                        )
+
+                        // "." button
+                        CalculatorButton(
+                            title: ".",
+                            action: { buttonPressed(".") },
+                            isSelected: false,
+                            size: CGSize(
+                                width: (geometry.size.width - 3) / 4,
+                                height: (geometry.size.height * 0.65 - 4) / 5
+                            )
+                        )
+
+                        // "=" button
+                        CalculatorButton(
+                            title: "=",
+                            action: { buttonPressed("=") },
+                            isSelected: false,
+                            size: CGSize(
+                                width: (geometry.size.width - 3) / 4,
+                                height: (geometry.size.height * 0.65 - 4) / 5
+                            )
+                        )
+                    }
+                }
+                .background(Color.black)
+            }
+            .background(Color.black)
+            .onAppear {
+                // Reset calculator when it appears
+                clear()
+            }
+        }
+        .navigationBarHidden(true)
+        .ignoresSafeArea()
+        .overlay(
+            // Cancel button overlay
+            VStack {
+                HStack {
+                    Button("Cancel") {
+                        isPresented = false
+                    }
+                    .foregroundColor(.white)
+                    .padding()
+                    Spacer()
+                }
+                Spacer()
+            }
+        )
+    }
+
+    private func buttonPressed(_ button: String) {
+        switch button {
+        case "C":
+            clear()
+        case "±":
+            toggleSign()
+        case "%":
+            percentage()
+        case "=":
+            equals()
+        case "Done":
+            let result = evaluateExpression(expression.isEmpty ? currentNumber : expression + currentNumber)
+            onComplete(result)
+            isPresented = false
+        case "+", "-", "×", "÷":
+            performOperation(button)
+        case ".":
+            addDecimal()
+        default:
+            if let digit = Int(button) {
+                inputDigit(digit)
+            }
+        }
+    }
+
+    private func clear() {
+        display = "0"
+        expression = ""
+        currentNumber = "0"
+        shouldResetDisplay = false
+    }
+
+    private func toggleSign() {
+        if currentNumber != "0" {
+            if currentNumber.hasPrefix("-") {
+                currentNumber = String(currentNumber.dropFirst())
+            } else {
+                currentNumber = "-" + currentNumber
+            }
+            updateDisplay()
+        }
+    }
+
+    private func percentage() {
+        if let value = Double(currentNumber) {
+            currentNumber = formatNumber(value / 100)
+            updateDisplay()
+        }
+    }
+
+    private func inputDigit(_ digit: Int) {
+        if shouldResetDisplay || currentNumber == "0" {
+            currentNumber = String(digit)
+            shouldResetDisplay = false
+        } else {
+            currentNumber += String(digit)
+        }
+        updateDisplay()
+    }
+
+    private func addDecimal() {
+        if shouldResetDisplay {
+            currentNumber = "0."
+            shouldResetDisplay = false
+        } else if !currentNumber.contains(".") {
+            currentNumber += "."
+        }
+        updateDisplay()
+    }
+
+    private func performOperation(_ op: String) {
+        if !shouldResetDisplay {
+            expression += currentNumber + op
+            shouldResetDisplay = true
+            updateDisplay()
+        } else if !expression.isEmpty {
+            // Replace the last operator if user presses multiple operators
+            expression = String(expression.dropLast()) + op
+            updateDisplay()
+        }
+    }
+
+    private func equals() {
+        let fullExpression = expression + currentNumber
+        let result = evaluateExpression(fullExpression)
+
+        currentNumber = formatNumber(result)
+        expression = ""
+        shouldResetDisplay = true
+        display = currentNumber
+    }
+
+    private func updateDisplay() {
+        if expression.isEmpty {
+            display = currentNumber
+        } else {
+            display = expression + (shouldResetDisplay ? "" : currentNumber)
+        }
+    }
+
+    private func evaluateExpression(_ expr: String) -> Double {
+        // Replace our display operators with standard operators for evaluation
+        let standardExpr = expr.replacingOccurrences(of: "×", with: "*")
+                              .replacingOccurrences(of: "÷", with: "/")
+
+        // Use NSExpression for safe mathematical evaluation
+        let expression = NSExpression(format: standardExpr)
+
+        // Use try? to handle potential errors silently
+        if let result = try? expression.expressionValue(with: nil, context: nil) as? Double {
+            return result
+        }
+
+        return 0
+    }
+
+    private func formatNumber(_ value: Double) -> String {
+        // Handle very large numbers
+        if abs(value) >= 1_000_000_000 {
+            return String(format: "%.2e", value)
+        }
+
+        // For normal numbers, show up to 6 decimal places but remove trailing zeros
+        if value.truncatingRemainder(dividingBy: 1) == 0 && abs(value) < 1_000_000 {
+            return String(format: "%.0f", value)
+        } else {
+            let formatted = String(format: "%.6f", value)
+            // Remove trailing zeros and decimal point if not needed
+            let trimmed = formatted.trimmingCharacters(in: CharacterSet(charactersIn: "0"))
+            return trimmed.hasSuffix(".") ? String(trimmed.dropLast()) : trimmed
+        }
+    }
+}
+
+struct CalculatorButton: View {
+    let title: String
+    let action: () -> Void
+    let isSelected: Bool
+    let size: CGSize
+
+    init(title: String, action: @escaping () -> Void, isSelected: Bool = false, size: CGSize = CGSize(width: 80, height: 80)) {
+        self.title = title
+        self.action = action
+        self.isSelected = isSelected
+        self.size = size
+    }
+
+    private var backgroundColor: Color {
+        switch title {
+        case "C", "±", "%":
+            return Color(.systemGray)
+        case "÷", "×", "-", "+", "=":
+            return isSelected ? .white : .orange
+        case "Done":
+            return .green
+        default:
+            return Color(.darkGray)
+        }
+    }
+
+    private var foregroundColor: Color {
+        switch title {
+        case "÷", "×", "-", "+", "=":
+            return isSelected ? .orange : .white
+        case "Done":
+            return .white
+        case "C", "±", "%":
+            return .black
+        default:
+            return .white
+        }
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 32, weight: .regular))
+                .foregroundColor(foregroundColor)
+                .frame(width: size.width, height: size.height)
+                .background(backgroundColor)
+                .clipShape(title == "0" ? RoundedRectangle(cornerRadius: size.height/2) : RoundedRectangle(cornerRadius: size.height/2))
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
@@ -1717,8 +3272,8 @@ struct JobDetailView: View {
             .padding()
         }
         .navigationTitle("Job Details")
-        .sheet(isPresented: $photoCaptureManager.showingCamera) {
-            CameraView(isPresented: $photoCaptureManager.showingCamera) { image in
+        .fullScreenCover(isPresented: $photoCaptureManager.showingCamera) {
+            CameraView(isPresented: $photoCaptureManager.showingCamera, captureCount: $photoCaptureManager.captureCount) { image in
                 photoCaptureManager.processImage(image, jobId: job.jobId)
             }
         }
@@ -1729,6 +3284,251 @@ struct JobDetailView: View {
         }
         .sheet(isPresented: $showingPhotoGallery) {
             PhotoGalleryView(photos: photoCaptureManager.capturedImages.filter { $0.jobId == job.jobId })
+        }
+    }
+}
+
+// Custom button view that's more responsive
+struct ResponsiveButton: View {
+    let title: String
+    let action: () -> Void
+    let backgroundColor: Color
+    let foregroundColor: Color
+    let isDisabled: Bool
+
+    init(title: String, action: @escaping () -> Void, backgroundColor: Color = .blue, foregroundColor: Color = .white, isDisabled: Bool = false) {
+        self.title = title
+        self.action = action
+        self.backgroundColor = backgroundColor
+        self.foregroundColor = foregroundColor
+        self.isDisabled = isDisabled
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.headline)
+            .foregroundColor(isDisabled ? .secondary : foregroundColor)
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(isDisabled ? Color.gray.opacity(0.3) : backgroundColor.opacity(0.8))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .onTapGesture {
+                if !isDisabled {
+                    // Add haptic feedback
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                    impactFeedback.impactOccurred()
+                    action()
+                }
+            }
+            .scaleEffect(isDisabled ? 0.95 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: isDisabled)
+    }
+}
+
+struct NewLaborItemView: View {
+    @Binding var title: String
+    @Binding var amount: Double
+    let commonLaborItems: [CommonLaborItem]
+    let onSave: () -> Void
+    let onCancel: () -> Void
+    let onSelectItem: (CommonLaborItem) -> Void
+
+    // Helper to bind the amount text field
+    private func amountBinding() -> Binding<String> {
+        Binding<String>(
+            get: {
+                if amount == 0 {
+                    return ""
+                } else {
+                    // Format to 2 decimal places, but remove them if they are .00
+                    return String(format: "%.2f", amount).replacingOccurrences(of: ".00", with: "")
+                }
+            },
+            set: {
+                if let value = Double($0) {
+                    amount = value
+                } else if $0.isEmpty {
+                    amount = 0
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        // Using a GroupBox to give it a distinct, contained look
+        GroupBox("New Labor Item") {
+            VStack(spacing: 16) {
+                TextField("Item Description (e.g., Fascia Repair)", text: $title)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack {
+                    Text("Amount")
+                    Spacer()
+                    TextField("$0.00", text: amountBinding())
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 120)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                }
+
+                // Quick-add common items with more responsive buttons
+                if !commonLaborItems.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Common Items")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 10)], spacing: 10) {
+                            ForEach(commonLaborItems) { item in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(item.title)
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .multilineTextAlignment(.leading)
+                                    Text(item.amount.currencyFormatted)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                                .background(Color.blue.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .onTapGesture {
+                                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                                    impactFeedback.impactOccurred()
+                                    onSelectItem(item)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HStack(spacing: 20) {
+                    Button(action: onCancel) {
+                        Text("Cancel")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(.red)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .simultaneousGesture(
+                        TapGesture()
+                            .onEnded { _ in
+                                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                                impactFeedback.impactOccurred()
+                            }
+                    )
+
+                    Button(action: onSave) {
+                        Text("Add Item")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(title.isEmpty || amount <= 0 ? Color.gray.opacity(0.3) : Color.blue)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .disabled(title.isEmpty || amount <= 0)
+                    .simultaneousGesture(
+                        TapGesture()
+                            .onEnded { _ in
+                                if !(title.isEmpty || amount <= 0) {
+                                    let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                                    impactFeedback.impactOccurred()
+                                }
+                            }
+                    )
+                }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        // This ensures the new view appears over the form, avoiding gesture conflicts
+        .background(Color(.systemBackground))
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+}
+
+struct PreviewSection: View {
+    let quoteDraft: QuoteDraft
+    let settings: AppSettings
+
+    var body: some View {
+        let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
+
+        VStack(spacing: 8) {
+            HStack {
+                Text("Materials Total")
+                Spacer()
+                Text(breakdown.materialsTotal.currencyFormatted)
+            }
+
+            HStack {
+                Text("Labor Total")
+                Spacer()
+                Text(breakdown.laborTotal.currencyFormatted)
+            }
+
+            // Show additional labor breakdown if any exist
+            if !quoteDraft.additionalLaborItems.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Additional Labor:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+
+                    ForEach(quoteDraft.additionalLaborItems, id: \.title) { item in
+                        HStack {
+                            Text("• \(item.title)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text(item.amount.currencyFormatted)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+
+            HStack {
+                Text("Markup")
+                Spacer()
+                Text(breakdown.markupAmount.currencyFormatted)
+            }
+
+            HStack {
+                Text("Commission")
+                Spacer()
+                Text(breakdown.commissionAmount.currencyFormatted)
+            }
+
+            Divider()
+
+            HStack {
+                Text("Final Total")
+                    .fontWeight(.bold)
+                Spacer()
+                Text(breakdown.finalTotal.currencyFormatted)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+            }
+
+            if breakdown.compositeFeet > 0 {
+                HStack {
+                    Text("Price per Foot")
+                    Spacer()
+                    Text(breakdown.pricePerFoot.currencyFormatted)
+                        .foregroundColor(.secondary)
+                }
+            }
         }
     }
 }
@@ -1751,6 +3551,17 @@ struct QuoteFormView: View {
     @State private var showingShareSheet = false
     @State private var showingPDFAlert = false
 
+    // Calculator state
+    @State private var showingCalculator = false
+    @State private var calculatorField: CalculatorField?
+
+    enum CalculatorField {
+        case gutterFeet
+        case downspoutFeet
+        case elbowsCount
+        case endCapPairs
+    }
+
     // Common labor items for quick selection
     private let commonLaborItems = [
         CommonLaborItem(title: "TV Dish Removal", amount: 75.0),
@@ -1766,17 +3577,13 @@ struct QuoteFormView: View {
     }
 
     // Computed properties to simplify complex bindings
-    private var marginPercentBinding: Binding<Double> {
+    private var markupPercentBinding: Binding<Double> {
         Binding(
-            get: { quoteDraft.marginPercent * 100 },
-            set: { quoteDraft.marginPercent = $0 / 100 }
-        )
-    }
-
-    private var commissionPercentBinding: Binding<Double> {
-        Binding(
-            get: { quoteDraft.salesCommissionPercent * 100 },
-            set: { quoteDraft.salesCommissionPercent = $0 / 100 }
+            get: { quoteDraft.markupPercent * 100 },
+            set: { _ in
+                // Markup is now read-only on quotes page - calculated from profit margin
+                // No action needed as this will be updated automatically
+            }
         )
     }
 
@@ -1791,7 +3598,13 @@ struct QuoteFormView: View {
                 if value.wrappedValue == 0 {
                     return ""
                 } else {
-                    return String(value.wrappedValue)
+                    // Use NumberFormatter for consistent formatting
+                    let formatter = NumberFormatter()
+                    formatter.numberStyle = .decimal
+                    formatter.minimumFractionDigits = 0
+                    formatter.maximumFractionDigits = 2
+                    formatter.usesGroupingSeparator = false
+                    return formatter.string(from: NSNumber(value: value.wrappedValue)) ?? "\(value.wrappedValue)"
                 }
             },
             set: { newValue in
@@ -1824,6 +3637,214 @@ struct QuoteFormView: View {
         )
     }
 
+    // New binding for percentage fields that handles the *100 conversion without auto-formatting
+    private func clearablePercentFieldBinding(get: @escaping () -> Double, set: @escaping (Double) -> Void) -> Binding<String> {
+        Binding<String>(
+            get: {
+                let percentValue = get() * 100
+                if percentValue == 0 {
+                    return ""
+                } else {
+                    // Use NumberFormatter like measurements to avoid auto-formatting
+                    let formatter = NumberFormatter()
+                    formatter.numberStyle = .decimal
+                    formatter.minimumFractionDigits = 0
+                    formatter.maximumFractionDigits = 1
+                    formatter.usesGroupingSeparator = false
+                    return formatter.string(from: NSNumber(value: percentValue)) ?? "\(percentValue)"
+                }
+            },
+            set: { newValue in
+                // Don't format during typing - just parse the value and convert
+                if newValue.isEmpty {
+                    set(0)
+                } else if let doubleValue = Double(newValue) {
+                    set(doubleValue / 100)
+                }
+                // If parsing fails, don't update - let user continue typing
+            }
+        )
+    }
+
+    // Simple percentage binding for settings (no *100 conversion)
+    private func clearablePercentBinding(get: @escaping () -> Double, set: @escaping (Double) -> Void) -> Binding<String> {
+        Binding<String>(
+            get: {
+                let percentValue = get()
+                if percentValue == 0 {
+                    return ""
+                } else {
+                    return String(format: "%.1f", percentValue)
+                }
+            },
+            set: { newValue in
+                // Don't format during typing - just parse the value
+                if newValue.isEmpty {
+                    set(0)
+                } else if let doubleValue = Double(newValue) {
+                    set(doubleValue)
+                }
+                // If parsing fails, don't update - let user continue typing
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var measurementsSectionContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Measurements")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top)
+
+            VStack(spacing: 16) {
+                HStack {
+                    Text("Gutter Feet")
+                    Spacer()
+                    HStack(spacing: 8) {
+                        Button(action: {
+                            calculatorField = .gutterFeet
+                            showingCalculator = true
+                        }) {
+                            Image(systemName: "plus.square.fill")
+                                .foregroundColor(.blue)
+                                .font(.title2)
+                        }
+                        TextField("0", text: clearableNumberBinding(for: $quoteDraft.gutterFeet))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                            .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                            .autocorrectionDisabled()
+                            .textContentType(.none)
+                    }
+                }
+
+                HStack {
+                    Text("Downspout Feet")
+                    Spacer()
+                    HStack(spacing: 8) {
+                        Button(action: {
+                            calculatorField = .downspoutFeet
+                            showingCalculator = true
+                        }) {
+                            Image(systemName: "plus.square.fill")
+                                .foregroundColor(.blue)
+                                .font(.title2)
+                        }
+                        TextField("0", text: clearableNumberBinding(for: $quoteDraft.downspoutFeet))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                            .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                            .autocorrectionDisabled()
+                            .textContentType(.none)
+                    }
+                }
+
+                HStack {
+                    Text("Elbows Count")
+                    Spacer()
+                    HStack(spacing: 8) {
+                        Button(action: {
+                            calculatorField = .elbowsCount
+                            showingCalculator = true
+                        }) {
+                            Image(systemName: "plus.square.fill")
+                                .foregroundColor(.blue)
+                                .font(.title2)
+                        }
+                        TextField("0", text: clearableIntBinding(for: $quoteDraft.elbowsCount))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                            .keyboardType(.numberPad)
+                            .autocorrectionDisabled()
+                            .textContentType(.none)
+                    }
+                }
+
+                HStack {
+                    Text("End Cap Pairs")
+                    Spacer()
+                    HStack(spacing: 8) {
+                        Button(action: {
+                            calculatorField = .endCapPairs
+                            showingCalculator = true
+                        }) {
+                            Image(systemName: "plus.square.fill")
+                                .foregroundColor(.blue)
+                                .font(.title2)
+                        }
+                        TextField("0", text: clearableIntBinding(for: $quoteDraft.endCapPairs))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                            .keyboardType(.numberPad)
+                            .autocorrectionDisabled()
+                            .textContentType(.none)
+                    }
+                }
+
+                HStack {
+                    Text("Hangers (auto-calculated)")
+                    Spacer()
+                    Text("\(quoteDraft.hangersCount)")
+                        .foregroundColor(.secondary)
+                }
+
+                HStack {
+                    Text("Total Footage")
+                    Spacer()
+                    Text(String(format: "%.1f ft", quoteDraft.gutterFeet + quoteDraft.downspoutFeet + Double(quoteDraft.elbowsCount)))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding()
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal)
+        }
+    }
+
+    @ViewBuilder
+    private var gutterGuardSectionContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Gutter Guard")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top)
+
+            VStack(spacing: 16) {
+                Toggle("Include Gutter Guard", isOn: $quoteDraft.includeGutterGuard)
+
+                if quoteDraft.includeGutterGuard {
+                    HStack {
+                        Text("Gutter Guard Feet")
+                        Spacer()
+                        TextField("0", text: clearableNumberBinding(for: $quoteDraft.gutterGuardFeet))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                            .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                            .autocorrectionDisabled()
+                            .textContentType(.none)
+                    }
+                }
+            }
+            .padding()
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal)
+        }
+        .onChange(of: quoteDraft.includeGutterGuard) { _, newValue in
+            if newValue && quoteDraft.gutterGuardFeet == 0 {
+                quoteDraft.gutterGuardFeet = quoteDraft.gutterFeet
+            }
+        }
+    }
+
     @ViewBuilder
     private var measurementsSection: some View {
         Section("Measurements") {
@@ -1834,6 +3855,10 @@ struct QuoteFormView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 100)
                     .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                    .autocorrectionDisabled()
+                    .textContentType(.none)
             }
 
             HStack {
@@ -1843,6 +3868,10 @@ struct QuoteFormView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 100)
                     .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                    .autocorrectionDisabled()
+                    .textContentType(.none)
             }
 
             HStack {
@@ -1852,6 +3881,8 @@ struct QuoteFormView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 100)
                     .keyboardType(.numberPad)
+                    .autocorrectionDisabled()
+                    .textContentType(.none)
             }
 
             HStack {
@@ -1861,12 +3892,21 @@ struct QuoteFormView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 100)
                     .keyboardType(.numberPad)
+                    .autocorrectionDisabled()
+                    .textContentType(.none)
             }
 
             HStack {
                 Text("Hangers (auto-calculated)")
                 Spacer()
                 Text("\(quoteDraft.hangersCount)")
+                    .foregroundColor(.secondary)
+            }
+
+            HStack {
+                Text("Total Footage")
+                Spacer()
+                Text(String(format: "%.1f ft", quoteDraft.gutterFeet + quoteDraft.downspoutFeet + Double(quoteDraft.elbowsCount)))
                     .foregroundColor(.secondary)
             }
         }
@@ -1885,6 +3925,10 @@ struct QuoteFormView: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 100)
                         .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
                 }
             }
         }
@@ -1897,339 +3941,20 @@ struct QuoteFormView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .topLeading) {
-                Form {
-                    measurementsSection
-                    gutterGuardSection
-
-                    Section("Additional Labor") {
-                        ForEach(quoteDraft.additionalLaborItems, id: \.title) { item in
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(item.title)
-                                        .font(.subheadline)
-                                    Text(item.amount.currencyFormatted)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-
-                                Spacer()
-
-                                Button(action: {
-                                    removeLineItem(item)
-                                }) {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundColor(.red)
-                                }
-                            }
-                            .padding(.vertical, 4)
-                        }
-
-                        // Add Labor Item Button with improved tap handling
-                        Button(action: addNewLineItem) {
-                            HStack {
-                                Image(systemName: "plus.circle.fill")
-                                    .foregroundColor(.white)
-                                Text("Add Labor Item")
-                                    .foregroundColor(.white)
-                                    .fontWeight(.medium)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(.blue)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                        .buttonStyle(.borderless)
-                        .padding(.horizontal)
-                        .padding(.vertical, 8)
-                    }
-
-                    if showingLineItemEditor {
-                        Section("New Labor Item") {
-                            HStack {
-                                Text("Description")
-                                Spacer()
-                                TextField("e.g., TV Dish Removal", text: $newLineItemTitle)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 180)
-                            }
-
-                            // Quick preset buttons for common labor items
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Common Items:")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-
-                                LazyVGrid(columns: [
-                                    GridItem(.flexible()),
-                                    GridItem(.flexible())
-                                ], spacing: 8) {
-                                    ForEach(commonLaborItems) { preset in
-                                        VStack(spacing: 2) {
-                                            Text(preset.title)
-                                                .font(.caption)
-                                                .multilineTextAlignment(.center)
-                                            Text(preset.amount.currencyFormatted)
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 6)
-                                        .frame(minHeight: 40)
-                                        .frame(maxWidth: .infinity)
-                                        .background(.blue.opacity(0.1))
-                                        .foregroundColor(.blue)
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            newLineItemTitle = preset.title
-                                            newLineItemAmount = preset.amount
-                                        }
-                                    }
-                                }
-                            }
-
-                            HStack {
-                                Text("Amount")
-                                Spacer()
-                                TextField("0", value: $newLineItemAmount, format: .currency(code: "USD"))
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 100)
-                                    .keyboardType(.decimalPad)
-                            }
-
-                            HStack(spacing: 20) {
-                                Text("Cancel")
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(.red)
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        cancelLineItemEdit()
-                                    }
-
-                                Spacer()
-
-                                Text("Add Item")
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(newLineItemTitle.isEmpty || newLineItemAmount <= 0 ? .gray : .blue)
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        if !newLineItemTitle.isEmpty && newLineItemAmount > 0 {
-                                            saveNewLineItem()
-                                        }
-                                    }
-                                    .disabled(newLineItemTitle.isEmpty || newLineItemAmount <= 0)
-                            }
-                        }
-                    }
-
-                    Section("Pricing") {
-                        HStack {
-                            Text("Margin %")
-                            Spacer()
-                            TextField("35", value: marginPercentBinding, format: .number)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 80)
-                            .keyboardType(.decimalPad)
-                            Text("%")
-                        }
-
-                        HStack {
-                            Text("Sales Commission %")
-                            Spacer()
-                            TextField("3", value: commissionPercentBinding, format: .number)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 80)
-                            .keyboardType(.decimalPad)
-                            Text("%")
-                        }
-                    }
-
-                    Section("Preview") {
-                        let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
-
-                        VStack(spacing: 8) {
-                            HStack {
-                                Text("Materials Total")
-                                Spacer()
-                                Text(breakdown.materialsTotal.currencyFormatted)
-                            }
-
-                            HStack {
-                                Text("Labor Total")
-                                Spacer()
-                                Text(breakdown.laborTotal.currencyFormatted)
-                            }
-
-                            // Show additional labor breakdown if any exist
-                            if !quoteDraft.additionalLaborItems.isEmpty {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack {
-                                        Text("Additional Labor:")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                        Spacer()
-                                    }
-
-                                    ForEach(quoteDraft.additionalLaborItems, id: \.title) { item in
-                                        HStack {
-                                            Text("• \(item.title)")
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                            Spacer()
-                                            Text(item.amount.currencyFormatted)
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                        }
-                                    }
-                                }
-                            }
-
-                            HStack {
-                                Text("Margin")
-                                Spacer()
-                                Text(breakdown.marginAmount.currencyFormatted)
-                            }
-
-                            HStack {
-                                Text("Commission")
-                                Spacer()
-                                Text(breakdown.commissionAmount.currencyFormatted)
-                            }
-
-                            Divider()
-
-                            HStack {
-                                Text("Final Total")
-                                    .fontWeight(.bold)
-                                Spacer()
-                                Text(breakdown.finalTotal.currencyFormatted)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.primary)
-                            }
-
-                            if breakdown.compositeFeet > 0 {
-                                HStack {
-                                    Text("Price per Foot")
-                                    Spacer()
-                                    Text(breakdown.pricePerFoot.currencyFormatted)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                    }
-
-                    Section("Photos") {
-                        HStack {
-                            Button(action: {
-                                photoCaptureManager.capturePhoto(quoteDraftId: quoteDraft.localId)
-                            }) {
-                                HStack {
-                                    Image(systemName: "camera.fill")
-                                    Text("Capture Photo")
-                                }
-                                .foregroundColor(.blue)
-                            }
-
-                            Spacer()
-
-                            if !photoCaptureManager.capturedImages.filter({ $0.quoteDraftId == quoteDraft.localId }).isEmpty {
-                                Button("View Photos (\(photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId }.count))") {
-                                    showingPhotoGallery = true
-                                }
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                            }
-                        }
-
-                        if !photoCaptureManager.capturedImages.filter({ $0.quoteDraftId == quoteDraft.localId }).isEmpty {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId }.prefix(3)) { photo in
-                                        AsyncImage(url: URL(string: "file://" + photo.fileURL)) { image in
-                                            image
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                        } placeholder: {
-                                            Rectangle()
-                                                .fill(Color.gray.opacity(0.3))
-                                        }
-                                        .frame(width: 60, height: 60)
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                                    }
-                                }
-                                .padding(.horizontal, 4)
-                            }
-                        }
-
-                        if let locationError = photoCaptureManager.locationError {
-                            Text(locationError)
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                        }
-                    }
-                }
-                .onTapGesture {
-                    // Dismiss keyboard when tapping anywhere on the form
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                }
-                .gesture(
-                    DragGesture()
-                        .onEnded { value in
-                            // Dismiss keyboard when swiping down
-                            if value.translation.height > 50 {
-                                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                            }
-                        }
-                )
-                
-                Text("V3")
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                    .padding(4)
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                    .padding()
-            }
+            formContent
             .navigationTitle(jobId != nil ? "Create Quote" : "Standalone Quote")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack {
-                        if jobberAPI.isAuthenticated && jobId != nil {
-                            Button("Save to Jobber") {
-                                showingSaveToJobberAlert = true
-                            }
-                            .disabled(quoteDraft.gutterFeet == 0 || isSavingToJobber)
-                        }
-
-                        Button("Save Quote") {
-                            saveQuote()
-                        }
-                        .disabled(false)
-                    }
+                    toolbarContent
                 }
             }
             .alert("Save to Jobber", isPresented: $showingSaveToJobberAlert) {
-                Button("Save Local Only") {
-                    saveQuote()
-                }
-
-                Button("Save to Jobber") {
-                    saveQuoteToJobber()
-                }
-
-                Button("Cancel", role: .cancel) { }
+                alertButtons
             } message: {
                 Text("Would you like to save this quote locally only or create a quote draft in Jobber?")
             }
-            .sheet(isPresented: $photoCaptureManager.showingCamera) {
-                CameraView(isPresented: $photoCaptureManager.showingCamera) { image in
+            .fullScreenCover(isPresented: $photoCaptureManager.showingCamera) {
+                CameraView(isPresented: $photoCaptureManager.showingCamera, captureCount: $photoCaptureManager.captureCount) { image in
                     photoCaptureManager.processImage(image, quoteDraftId: quoteDraft.localId)
                 }
             }
@@ -2256,13 +3981,499 @@ struct QuoteFormView: View {
                     ShareSheet(items: [pdfURL])
                 }
             }
+            .sheet(isPresented: $showingCalculator) {
+                CalculatorView(isPresented: $showingCalculator) { result in
+                    handleCalculatorResult(result)
+                }
+            }
         }
         .onAppear {
             // Initialize with default values from settings
-            quoteDraft.marginPercent = settings.defaultMarginPercent
-            quoteDraft.salesCommissionPercent = settings.defaultSalesCommissionPercent
+            // Convert percentage values from settings (raw %) to quote format (decimal)
+            quoteDraft.markupPercent = settings.defaultMarkupPercent / 100
+            quoteDraft.profitMarginPercent = settings.defaultProfitMarginPercent / 100
+            quoteDraft.salesCommissionPercent = settings.defaultSalesCommissionPercent / 100
             quoteDraft.jobId = jobId
         }
+    }
+
+    @ViewBuilder
+    private var formContent: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                measurementsSectionContent
+                gutterGuardSectionContent
+                additionalLaborSectionContent
+
+                if showingLineItemEditor {
+                    NewLaborItemView(
+                        title: $newLineItemTitle,
+                        amount: $newLineItemAmount,
+                        commonLaborItems: commonLaborItems,
+                        onSave: saveNewLineItem,
+                        onCancel: cancelLineItemEdit,
+                        onSelectItem: selectCommonLineItem
+                    )
+                }
+
+                pricingSectionContent
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Preview")
+                        .font(.headline)
+                        .padding(.horizontal)
+                        .padding(.top)
+
+                    VStack {
+                        PreviewSection(quoteDraft: quoteDraft, settings: settings)
+                    }
+                    .padding()
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal)
+                }
+
+                photosSectionContent
+            }
+            .padding(.bottom, 50)
+        }
+        .onTapGesture {
+            // Dismiss keyboard when tapping anywhere
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
+    }
+
+    @ViewBuilder
+    private var additionalLaborSectionContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Additional Labor")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top)
+
+            VStack(spacing: 16) {
+                ForEach(quoteDraft.additionalLaborItems, id: \.title) { item in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.title)
+                                .font(.subheadline)
+                            Text(item.amount.currencyFormatted)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Button(action: {
+                            removeLineItem(item)
+                        }) {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundColor(.red)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                // Direct Button implementation without Form wrapper
+                Button(action: addNewLineItem) {
+                    Text("Add Labor Item")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(.blue)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .simultaneousGesture(
+                    TapGesture()
+                        .onEnded { _ in
+                            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                            impactFeedback.impactOccurred()
+                        }
+                )
+            }
+            .padding()
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal)
+        }
+    }
+
+    @ViewBuilder
+    private var pricingSectionContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Pricing")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top)
+
+            VStack(spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("Markup %")
+                            .fontWeight(.medium)
+                        Text("(calculated from margin)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Text(String(format: "%.1f", quoteDraft.markupPercent * 100))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(6)
+                        .foregroundColor(.secondary)
+                    Text("%")
+                }
+
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("Profit Margin %")
+                            .fontWeight(.medium)
+                        Text("(based on price)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    TextField("20", text: clearablePercentFieldBinding(
+                        get: { quoteDraft.profitMarginPercent },
+                        set: { newProfitMarginPercent in
+                            let m = newProfitMarginPercent  // profit margin as decimal
+                            let s = quoteDraft.salesCommissionPercent  // commission as decimal
+
+                            // Validate that m + s < 1 (mathematically required)
+                            guard m >= 0 && (m + s) < 1 else {
+                                return  // Don't update if invalid
+                            }
+
+                            quoteDraft.profitMarginPercent = m
+
+                            // Auto-calculate markup from profit margin using commission-aware formula
+                            // Formula: k = (m + s) / (1 - m - s)
+                            let calculatedMarkup = (m + s) / (1 - m - s)
+                            quoteDraft.markupPercent = calculatedMarkup
+                        }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .keyboardType(.decimalPad)
+                    .autocorrectionDisabled()
+                    .textContentType(.none)
+                    Text("%")
+                }
+
+                HStack {
+                    Text("Sales Commission %")
+                    Spacer()
+                    TextField("3", text: clearablePercentFieldBinding(
+                        get: { quoteDraft.salesCommissionPercent },
+                        set: { newCommissionPercent in
+                            quoteDraft.salesCommissionPercent = newCommissionPercent
+
+                            // When commission changes, recalculate markup from current profit margin
+                            // to maintain the mathematical relationship
+                            let m = quoteDraft.profitMarginPercent  // current profit margin
+                            let s = newCommissionPercent  // new commission as decimal
+
+                            // Ensure the calculated relationship is valid
+                            if m >= 0 && (m + s) < 1 {
+                                // Recalculate markup: k = (m + s) / (1 - m - s)
+                                let calculatedMarkup = (m + s) / (1 - m - s)
+                                quoteDraft.markupPercent = calculatedMarkup
+                            }
+                        }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                    .autocorrectionDisabled()
+                    .textContentType(.none)
+                    Text("%")
+                }
+            }
+            .padding()
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal)
+        }
+    }
+
+    @ViewBuilder
+    private var photosSectionContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Photos")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top)
+
+            VStack(spacing: 16) {
+                HStack {
+                    Button(action: {
+                        photoCaptureManager.capturePhoto(quoteDraftId: quoteDraft.localId)
+                    }) {
+                        HStack {
+                            Image(systemName: "camera.fill")
+                            Text("Capture Photo")
+                        }
+                        .foregroundColor(.blue)
+                    }
+
+                    Spacer()
+
+                    if !photoCaptureManager.capturedImages.filter({ $0.quoteDraftId == quoteDraft.localId }).isEmpty {
+                        Button("View Photos (\(photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId }.count))") {
+                            showingPhotoGallery = true
+                        }
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    }
+                }
+
+                if !photoCaptureManager.capturedImages.filter({ $0.quoteDraftId == quoteDraft.localId }).isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId }.prefix(3)) { photo in
+                                AsyncImage(url: URL(string: "file://" + photo.fileURL)) { image in
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.3))
+                                }
+                                .frame(width: 60, height: 60)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                        }
+                        .padding(.horizontal, 4)
+                    }
+                }
+
+                if let locationError = photoCaptureManager.locationError {
+                    Text(locationError)
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+            }
+            .padding()
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal)
+        }
+    }
+
+    @ViewBuilder
+    private var additionalLaborSection: some View {
+        Section("Additional Labor") {
+            ForEach(quoteDraft.additionalLaborItems, id: \.title) { item in
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.title)
+                            .font(.subheadline)
+                        Text(item.amount.currencyFormatted)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button(action: {
+                        removeLineItem(item)
+                    }) {
+                        Image(systemName: "minus.circle.fill")
+                            .foregroundColor(.red)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            // Add Labor Item Button - using custom responsive approach
+            ResponsiveButton(
+                title: "Add Labor Item",
+                action: addNewLineItem,
+                backgroundColor: .blue,
+                foregroundColor: .white
+            )
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+        }
+    }
+
+    @ViewBuilder
+    private var pricingSection: some View {
+        Section("Pricing") {
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("Markup %")
+                        .fontWeight(.medium)
+                    Text("(calculated from margin)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                Text(String(format: "%.1f", quoteDraft.markupPercent * 100))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(6)
+                    .foregroundColor(.secondary)
+                Text("%")
+            }
+
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("Profit Margin %")
+                        .fontWeight(.medium)
+                    Text("(based on price)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                TextField("20", text: clearablePercentBinding(
+                    get: { quoteDraft.profitMarginPercent * 100 },
+                    set: { newProfitMarginPercent in
+                        let m = newProfitMarginPercent / 100  // profit margin as decimal
+                        let s = quoteDraft.salesCommissionPercent  // commission as decimal
+
+                        // Validate that m + s < 1 (mathematically required)
+                        guard m >= 0 && (m + s) < 1 else {
+                            return  // Don't update if invalid
+                        }
+
+                        quoteDraft.profitMarginPercent = m
+
+                        // Auto-calculate markup from profit margin using commission-aware formula
+                        // Formula: k = (m + s) / (1 - m - s)
+                        let calculatedMarkup = (m + s) / (1 - m - s)
+                        quoteDraft.markupPercent = calculatedMarkup
+                    }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 80)
+                .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                .autocorrectionDisabled()
+                .textContentType(.none)
+                Text("%")
+            }
+
+            HStack {
+                Text("Sales Commission %")
+                Spacer()
+                TextField("3", text: clearablePercentBinding(
+                    get: { quoteDraft.salesCommissionPercent * 100 },
+                    set: { newCommissionPercent in
+                        quoteDraft.salesCommissionPercent = newCommissionPercent / 100
+
+                        // When commission changes, recalculate markup from current profit margin
+                        // to maintain the mathematical relationship
+                        let m = quoteDraft.profitMarginPercent  // current profit margin
+                        let s = newCommissionPercent / 100  // new commission as decimal
+
+                        // Ensure the calculated relationship is valid
+                        if m >= 0 && (m + s) < 1 {
+                            // Recalculate markup: k = (m + s) / (1 - m - s)
+                            let calculatedMarkup = (m + s) / (1 - m - s)
+                            quoteDraft.markupPercent = calculatedMarkup
+                        }
+                    }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 80)
+                .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                .autocorrectionDisabled()
+                .textContentType(.none)
+                Text("%")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var photosSection: some View {
+        Section("Photos") {
+            HStack {
+                Button(action: {
+                    photoCaptureManager.capturePhoto(quoteDraftId: quoteDraft.localId)
+                }) {
+                    HStack {
+                        Image(systemName: "camera.fill")
+                        Text("Capture Photo")
+                    }
+                    .foregroundColor(.blue)
+                }
+
+                Spacer()
+
+                if !photoCaptureManager.capturedImages.filter({ $0.quoteDraftId == quoteDraft.localId }).isEmpty {
+                    Button("View Photos (\(photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId }.count))") {
+                        showingPhotoGallery = true
+                    }
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                }
+            }
+
+            if !photoCaptureManager.capturedImages.filter({ $0.quoteDraftId == quoteDraft.localId }).isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId }.prefix(3)) { photo in
+                            AsyncImage(url: URL(string: "file://" + photo.fileURL)) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.3))
+                            }
+                            .frame(width: 60, height: 60)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                }
+            }
+
+            if let locationError = photoCaptureManager.locationError {
+                Text(locationError)
+                    .font(.caption)
+                    .foregroundColor(.orange)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var toolbarContent: some View {
+        HStack {
+            if jobberAPI.isAuthenticated && jobId != nil {
+                Button("Save to Jobber") {
+                    showingSaveToJobberAlert = true
+                }
+                .disabled(quoteDraft.gutterFeet == 0 || isSavingToJobber)
+            }
+
+            Button("Save Quote") {
+                saveQuote()
+            }
+            .disabled(false)
+        }
+    }
+
+    @ViewBuilder
+    private var alertButtons: some View {
+        Button("Save Local Only") {
+            saveQuote()
+        }
+
+        Button("Save to Jobber") {
+            saveQuoteToJobber()
+        }
+
+        Button("Cancel", role: .cancel) { }
     }
 
     private func saveQuote() {
@@ -2321,9 +4532,13 @@ struct QuoteFormView: View {
         newLineItemAmount = 0
     }
 
+    private func selectCommonLineItem(_ item: CommonLaborItem) {
+        newLineItemTitle = item.title
+        newLineItemAmount = item.amount
+    }
+
     private func saveNewLineItem() {
         let newItem = LineItem(title: newLineItemTitle, amount: newLineItemAmount)
-        newItem.quoteDraft = quoteDraft
         quoteDraft.additionalLaborItems.append(newItem)
 
         cancelLineItemEdit()
@@ -2333,6 +4548,23 @@ struct QuoteFormView: View {
         if let index = quoteDraft.additionalLaborItems.firstIndex(where: { $0.title == item.title && $0.amount == item.amount }) {
             quoteDraft.additionalLaborItems.remove(at: index)
         }
+    }
+
+    private func handleCalculatorResult(_ result: Double) {
+        guard let field = calculatorField else { return }
+
+        switch field {
+        case .gutterFeet:
+            quoteDraft.gutterFeet = result
+        case .downspoutFeet:
+            quoteDraft.downspoutFeet = result
+        case .elbowsCount:
+            quoteDraft.elbowsCount = Int(result)
+        case .endCapPairs:
+            quoteDraft.endCapPairs = Int(result)
+        }
+
+        calculatorField = nil
     }
 
     private func cancelLineItemEdit() {
@@ -2381,309 +4613,8 @@ struct CreateQuoteView: View {
     }
 }
 
-struct SettingsView: View {
-    @Environment(\.modelContext) private var modelContext
-    @EnvironmentObject private var jobberAPI: JobberAPI
-    @Query private var settingsArray: [AppSettings]
 
-    private var settings: AppSettings {
-        if let existingSettings = settingsArray.first {
-            return existingSettings
-        } else {
-            let newSettings = AppSettings()
-            modelContext.insert(newSettings)
-            try? modelContext.save()
-            return newSettings
-        }
-    }
-
-    // Helper function to create a binding that clears zero values for Double
-    private func clearableNumberBinding(for value: Binding<Double>) -> Binding<String> {
-        Binding<String>(
-            get: {
-                if value.wrappedValue == 0 {
-                    return ""
-                } else {
-                    return String(value.wrappedValue)
-                }
-            },
-            set: { newValue in
-                if let doubleValue = Double(newValue) {
-                    value.wrappedValue = doubleValue
-                } else if newValue.isEmpty {
-                    value.wrappedValue = 0
-                }
-            }
-        )
-    }
-
-    // Helper function for percentage fields that are stored as decimals
-    private func clearablePercentBinding(get: @escaping () -> Double, set: @escaping (Double) -> Void) -> Binding<String> {
-        Binding<String>(
-            get: {
-                let percentValue = get() * 100
-                if percentValue == 0 {
-                    return ""
-                } else {
-                    return String(percentValue)
-                }
-            },
-            set: { newValue in
-                if let doubleValue = Double(newValue) {
-                    set(doubleValue / 100)
-                } else if newValue.isEmpty {
-                    set(0)
-                }
-            }
-        )
-    }
-
-    private func saveSettings() {
-        try? modelContext.save()
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Materials Cost per Foot") {
-                    HStack {
-                        Text("Gutter")
-                        Spacer()
-                        TextField("0", text: clearableNumberBinding(for: Binding(
-                            get: { settings.materialCostPerFootGutter },
-                            set: { settings.materialCostPerFootGutter = $0 }
-                        )))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 100)
-                        .keyboardType(.decimalPad)
-                        .onSubmit { saveSettings() }
-                    }
-
-                    HStack {
-                        Text("Downspout")
-                        Spacer()
-                        TextField("0", text: clearableNumberBinding(for: Binding(
-                            get: { settings.materialCostPerFootDownspout },
-                            set: { settings.materialCostPerFootDownspout = $0 }
-                        )))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 100)
-                        .keyboardType(.decimalPad)
-                        .onSubmit { saveSettings() }
-                    }
-
-                    HStack {
-                        Text("Gutter Guard")
-                        Spacer()
-                        TextField("0", text: clearableNumberBinding(for: Binding(
-                            get: { settings.gutterGuardMaterialPerFoot },
-                            set: { settings.gutterGuardMaterialPerFoot = $0 }
-                        )))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 100)
-                        .keyboardType(.decimalPad)
-                        .onSubmit { saveSettings() }
-                    }
-                }
-
-                Section("Component Costs") {
-                    HStack {
-                        Text("Elbow")
-                        Spacer()
-                        TextField("0", text: clearableNumberBinding(for: Binding(
-                            get: { settings.costPerElbow },
-                            set: { settings.costPerElbow = $0 }
-                        )))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 100)
-                        .keyboardType(.decimalPad)
-                        .onSubmit { saveSettings() }
-                    }
-
-                    HStack {
-                        Text("Hanger")
-                        Spacer()
-                        TextField("0", text: clearableNumberBinding(for: Binding(
-                            get: { settings.costPerHanger },
-                            set: { settings.costPerHanger = $0 }
-                        )))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 100)
-                        .keyboardType(.decimalPad)
-                        .onSubmit { saveSettings() }
-                    }
-
-                    HStack {
-                        Text("Hanger Spacing (feet)")
-                        Spacer()
-                        TextField("0", text: clearableNumberBinding(for: Binding(
-                            get: { settings.hangerSpacingFeet },
-                            set: { settings.hangerSpacingFeet = $0 }
-                        )))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 80)
-                        .keyboardType(.decimalPad)
-                        .onSubmit { saveSettings() }
-                    }
-                }
-
-                Section("Labor Cost per Foot") {
-                    HStack {
-                        Text("Gutter Installation")
-                        Spacer()
-                        TextField("0", text: clearableNumberBinding(for: Binding(
-                            get: { settings.laborPerFootGutter },
-                            set: { settings.laborPerFootGutter = $0 }
-                        )))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 100)
-                        .keyboardType(.decimalPad)
-                        .onSubmit { saveSettings() }
-                    }
-
-                    HStack {
-                        Text("Gutter Guard Installation")
-                        Spacer()
-                        TextField("0", text: clearableNumberBinding(for: Binding(
-                            get: { settings.gutterGuardLaborPerFoot },
-                            set: { settings.gutterGuardLaborPerFoot = $0 }
-                        )))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 100)
-                        .keyboardType(.decimalPad)
-                        .onSubmit { saveSettings() }
-                    }
-                }
-
-                Section("Margins & Commission") {
-                    HStack {
-                        Text("Default Margin %")
-                        Spacer()
-                        TextField("0", text: clearablePercentBinding(
-                            get: { settings.defaultMarginPercent },
-                            set: { settings.defaultMarginPercent = $0 }
-                        ))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 80)
-                        .keyboardType(.decimalPad)
-                        .onSubmit { saveSettings() }
-                        Text("%")
-                    }
-
-                    HStack {
-                        Text("Gutter Guard Margin %")
-                        Spacer()
-                        TextField("0", text: clearablePercentBinding(
-                            get: { settings.gutterGuardMarginPercent },
-                            set: { settings.gutterGuardMarginPercent = $0 }
-                        ))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 80)
-                        .keyboardType(.decimalPad)
-                        .onSubmit { saveSettings() }
-                        Text("%")
-                    }
-
-                    HStack {
-                        Text("Sales Commission %")
-                        Spacer()
-                        TextField("0", text: clearablePercentBinding(
-                            get: { settings.defaultSalesCommissionPercent },
-                            set: { settings.defaultSalesCommissionPercent = $0 }
-                        ))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 80)
-                        .keyboardType(.decimalPad)
-                        .onSubmit { saveSettings() }
-                        Text("%")
-                    }
-                }
-
-                Section("Calculation Settings") {
-                    HStack {
-                        Text("Elbow Foot Equivalency")
-                        Spacer()
-                        TextField("0", text: clearableNumberBinding(for: Binding(
-                            get: { settings.elbowFootEquivalency },
-                            set: { settings.elbowFootEquivalency = $0 }
-                        )))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 80)
-                        .keyboardType(.decimalPad)
-                        .onSubmit { saveSettings() }
-                    }
-                }
-
-                Section("Jobber Integration") {
-                    if jobberAPI.isAuthenticated {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text("Connected to Jobber")
-                                    .foregroundColor(.green)
-                                Text("Your jobs will sync automatically")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-
-                            Spacer()
-
-                            Button("Disconnect") {
-                                jobberAPI.signOut()
-                            }
-                            .foregroundColor(.red)
-                        }
-
-                        Button("Sync Jobs Now") {
-                            Task {
-                                await jobberAPI.fetchTodayJobs()
-                            }
-                        }
-                        .disabled(jobberAPI.isLoading)
-                    } else {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Connect to Jobber")
-                                .font(.headline)
-
-                            Text("Connect your Jobber account to automatically sync jobs and create quotes.")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-
-                            Button("Connect Jobber Account") {
-                                jobberAPI.authenticate()
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
-                    }
-
-                    if let errorMessage = jobberAPI.errorMessage {
-                        Text(errorMessage)
-                            .foregroundColor(.red)
-                            .font(.caption)
-                    }
-                }
-            }
-            .onTapGesture {
-                // Dismiss keyboard when tapping anywhere on the form
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            }
-            .gesture(
-                DragGesture()
-                    .onEnded { value in
-                        // Dismiss keyboard when swiping down
-                        if value.translation.height > 50 {
-                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        }
-                    }
-            )
-            .onDisappear {
-                // Save settings when leaving the view
-                saveSettings()
-            }
-            .navigationTitle("Settings")
-        }
-    }
-}
-
+// This view is no longer used with ASWebAuthenticationSession
 // This view is no longer used with ASWebAuthenticationSession
 // struct ManualAuthView: View {
 //     @EnvironmentObject private var jobberAPI: JobberAPI
@@ -2794,41 +4725,43 @@ struct SettingsView: View {
 
 struct ContentView: View {
     @StateObject private var jobberAPI = JobberAPI()
+    @State private var showLoadingScreen = true
+    @State private var captureCount = 0
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            TabView {
-                HomeView()
-                    .tabItem {
-                        Image(systemName: "house.fill")
-                        Text("Home")
+        ZStack {
+            if showLoadingScreen {
+                LoadingScreenView {
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        showLoadingScreen = false
                     }
-                    .environmentObject(jobberAPI)
-
-            CreateQuoteView()
-                .tabItem {
-                    Image(systemName: "plus.circle")
-                    Text("Create Quote")
                 }
-                .environmentObject(jobberAPI)
+                .transition(.opacity)
+            } else {
+                TabView {
+                    HomeView()
+                        .tabItem {
+                            Image(systemName: "house.fill")
+                            Text("Jobs")
+                        }
+                        .environmentObject(jobberAPI)
 
-            SettingsView()
-                .tabItem {
-                    Image(systemName: "gear")
-                    Text("Settings")
+                    CreateQuoteView()
+                        .tabItem {
+                            Image(systemName: "doc.text.fill")
+                            Text("Quotes")
+                        }
+                        .environmentObject(jobberAPI)
+
+                    SettingsView()
+                        .tabItem {
+                            Image(systemName: "gear")
+                            Text("Settings")
+                        }
+                        .environmentObject(jobberAPI)
                 }
-                .environmentObject(jobberAPI)
-        }
-
-            // Version label in the corner
-            Text("v2")
-                .font(.system(size: 16, weight: .bold))
-                .padding(8)
-                .background(Color.black.opacity(0.85))
-                .foregroundColor(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .padding([.top, .trailing], 10)
-                .shadow(color: .black, radius: 3, x: 1, y: 1)
+                .transition(.opacity)
+            }
         }
     }
 }
