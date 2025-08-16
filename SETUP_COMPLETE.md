@@ -6,7 +6,7 @@ Your iOS development environment with VS Code as the primary editor is now fully
 
 ### 🔧 VS Code Tasks (`.vscode/tasks.json`)
 - **Build iOS Simulator**: Compiles your app for simulator (Cmd+Shift+B)
-- **Run on Simulator**: Builds and launches app on iOS Simulator  
+- **Run on Simulator**: Builds and launches app on iOS Simulator
 - **Discover Project Info**: Lists available schemes and simulators
 - **Clean Build Folder**: Removes build artifacts
 - **Open in Xcode**: Quick access when needed
@@ -51,7 +51,7 @@ Your iOS development environment with VS Code as the primary editor is now fully
 DTS APP/
 ├── .vscode/
 │   ├── tasks.json              # Build & run tasks
-│   ├── settings.json           # VS Code settings  
+│   ├── settings.json           # VS Code settings
 │   └── launch.json             # Debug configuration
 ├── DTS-App.code-workspace      # Workspace configuration
 ├── discover-ios-config.sh      # Discovery script (executable)

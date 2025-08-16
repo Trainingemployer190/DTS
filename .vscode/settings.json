@@ -9,7 +9,7 @@
         },
         {
             "text": "$(tools) Build iOS",
-            "command": "workbench.action.tasks.runTask", 
+            "command": "workbench.action.tasks.runTask",
             "arguments": "Build iOS Simulator",
             "tooltip": "Build iOS app for simulator"
         }

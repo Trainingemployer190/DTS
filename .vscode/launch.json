@@ -3,13 +3,15 @@
     "configurations": [
         {
             "name": "Launch iOS Simulator",
-            "type": "node",
+            "type": "lldb",
             "request": "launch",
             "program": "${workspaceFolder}/build/Build/Products/Debug-iphonesimulator/DTS App.app/DTS App",
             "preLaunchTask": "Run on Simulator",
             "stopOnEntry": false,
             "cwd": "${workspaceFolder}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "args": [],
+            "env": {}
         }
     ]
 }
