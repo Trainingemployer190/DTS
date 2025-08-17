@@ -895,6 +895,7 @@ struct PhotoDetailView: View {
 class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationContextProviding {
     @Published var isAuthenticated = false
     @Published var jobs: [JobberJob] = []
+    @Published var calendarJobs: [CalendarJob] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var connectedEmail: String?
@@ -1681,6 +1682,184 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         }
     }
 
+    func fetchScheduledAssessments() async {
+        guard await ensureValidAccessToken() else {
+            await MainActor.run {
+                self.errorMessage = "Please connect your Jobber account first"
+            }
+            return
+        }
+
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+
+        let today = Date()
+        let calendar = Calendar.current
+
+        // Get current date at start of day
+        let startOfDay = calendar.startOfDay(for: today)
+        // Get date one week from now at end of day
+        let endDate = calendar.date(byAdding: .weekOfYear, value: 1, to: startOfDay) ?? today
+        let endOfWeek = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) ?? endDate
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        let weekStart = isoFormatter.string(from: startOfDay)
+        let weekEnd = isoFormatter.string(from: endOfWeek)
+
+        print("Fetching scheduled assessments for this week")
+        print("Date range: \(weekStart) to \(weekEnd)")
+
+        let query = """
+        query getScheduledAssessments($start: ISO8601DateTime!, $end: ISO8601DateTime!, $first: Int!) {
+          scheduledItems(
+            filter: {
+              scheduleItemType: ASSESSMENT
+              occursWithin: { startAt: $start, endAt: $end }
+            }
+            first: $first
+          ) {
+            nodes {
+              ... on Assessment {
+                id
+                title
+                startAt
+                endAt
+                completedAt
+                client {
+                  name
+                }
+                property {
+                  address {
+                    street1
+                    city
+                    province
+                  }
+                }
+                assignedUsers {
+                  nodes {
+                    name {
+                      full
+                    }
+                  }
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            totalCount
+          }
+        }
+        """
+
+        let variables: [String: Any] = [
+            "start": weekStart,
+            "end": weekEnd,
+            "first": 10
+        ]
+
+        await performGraphQLRequest(query: query, variables: variables) { [weak self] (result: Result<ScheduledAssessmentsResponse, Error>) in
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.isLoading = false
+
+                switch result {
+                case .success(let response):
+                    var fetchedJobs: [JobberJob] = []
+                    var fetchedCalendarJobs: [CalendarJob] = []
+                    
+                    print("Found \(response.data.scheduledItems.nodes.count) scheduled assessments")
+
+                    for assessment in response.data.scheduledItems.nodes {
+                        guard let startAt = self.parseDate(assessment.startAt) else {
+                            print("Could not parse start date: \(assessment.startAt)")
+                            continue
+                        }
+
+                        let clientName = assessment.client.name
+                        let title = assessment.title ?? "Assessment"
+                        let assignedUsers = assessment.assignedUsers.nodes.map { $0.name.full }.joined(separator: ", ")
+                        
+                        // Build address from property
+                        let address: String
+                        if let property = assessment.property?.address {
+                            var addressComponents: [String] = []
+                            if let street = property.street1, !street.isEmpty {
+                                addressComponents.append(street)
+                            }
+                            if let city = property.city, !city.isEmpty {
+                                addressComponents.append(city)
+                            }
+                            if let province = property.province, !province.isEmpty {
+                                addressComponents.append(province)
+                            }
+                            address = addressComponents.joined(separator: ", ")
+                        } else {
+                            address = "Address not available"
+                        }
+                        
+                        // Determine status
+                        let status: String
+                        if assessment.completedAt != nil {
+                            status = "completed"
+                        } else if startAt <= Date() {
+                            status = "in_progress" 
+                        } else {
+                            status = "scheduled"
+                        }
+
+                        // Create CalendarJob for assessments
+                        let calendarJob = CalendarJob(
+                            id: assessment.id,
+                            title: title,
+                            location: address,
+                            startDate: startAt,
+                            endDate: assessment.endAt != nil ? self.parseDate(assessment.endAt!) : nil,
+                            jobberJobId: assessment.id,
+                            clientName: clientName,
+                            jobDescription: title,
+                            jobNumber: nil,
+                            clientAddress: address,
+                            clientPhone: nil,
+                            jobNotes: nil,
+                            jobStatus: status,
+                            visitType: "assessment",
+                            estimatedDuration: nil,
+                            assignedTechnician: assignedUsers.isEmpty ? nil : assignedUsers
+                        )
+                        
+                        fetchedCalendarJobs.append(calendarJob)
+                        
+                        // Also create JobberJob for backwards compatibility
+                        let jobberJob = JobberJob(
+                            jobId: assessment.id,
+                            clientName: clientName,
+                            address: address,
+                            scheduledAt: startAt,
+                            status: status
+                        )
+                        
+                        fetchedJobs.append(jobberJob)
+                        
+                        print("Added assessment: \(clientName) - \(title) at \(startAt) (\(status))")
+                    }
+
+                    self.jobs = fetchedJobs
+                    self.calendarJobs = fetchedCalendarJobs
+                    print("Fetched \(fetchedJobs.count) scheduled assessments for this week")
+
+                case .failure(let error):
+                    print("Failed to fetch scheduled assessments: \(error)")
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     private func createJobberJob(from job: JobNode, scheduledAt: Date, status: String) -> JobberJob {
         let clientName = job.client.name
         let address: String
@@ -2196,6 +2375,49 @@ struct QuoteWithJobNode: Codable {
     let jobs: JobsConnection
 }
 
+// MARK: - Scheduled Assessments Structures
+struct ScheduledAssessmentsResponse: Codable {
+    let data: ScheduledAssessmentsData
+}
+
+struct ScheduledAssessmentsData: Codable {
+    let scheduledItems: ScheduledItemsConnection
+}
+
+struct ScheduledItemsConnection: Codable {
+    let nodes: [AssessmentNode]
+    let pageInfo: PageInfo
+    let totalCount: Int
+}
+
+struct AssessmentNode: Codable {
+    let id: String
+    let title: String?
+    let startAt: String
+    let endAt: String?
+    let completedAt: String?
+    let client: ClientNode
+    let property: PropertyNode?
+    let assignedUsers: AssignedUsersConnection
+}
+
+struct AssignedUsersConnection: Codable {
+    let nodes: [AssessmentUser]
+}
+
+struct AssessmentUser: Codable {
+    let name: UserName
+}
+
+struct UserName: Codable {
+    let full: String
+}
+
+struct PageInfo: Codable {
+    let hasNextPage: Bool
+    let endCursor: String?
+}
+
 struct QuoteCreateResponse: Codable {
     let data: QuoteCreateData
 }
@@ -2685,43 +2907,52 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var jobberAPI: JobberAPI
     @Query private var jobs: [JobberJob]
-    @State private var calendarJobs: [CalendarJob] = []
     @State private var isLoadingCalendar = false
     @State private var calendarError: String? = nil
-    // Replace with your Jobber .ics URL
-    private let jobberCalendarURL = URL(string: "https://secure.getjobber.com/calendar/72215818528336050607776452572210621366838541254420/jobber.ics?at[]=651682&ot[]=visits&ot[]=assessments")!
 
     var allCalendarJobs: [CalendarJob] {
-        calendarJobs.sorted { $0.startDate > $1.startDate }
+        jobberAPI.calendarJobs.sorted { $0.startDate > $1.startDate }
     }
 
     var body: some View {
         NavigationStack {
             VStack {
                 if isLoadingCalendar {
-                    ProgressView("Loading calendar jobs...")
+                    ProgressView("Loading scheduled assessments...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    if calendarError != nil {
-                        Text("Calendar Sync Error: \(calendarError!)")
+                    if let error = calendarError {
+                        Text("Error: \(error)")
                             .foregroundColor(.red)
                             .padding(.bottom, 8)
-                    } else {
-                        Text("Calendar Connected")
+                    } else if jobberAPI.isAuthenticated {
+                        Text("Jobber Connected")
                             .foregroundColor(.green)
                             .padding(.bottom, 8)
+                    } else {
+                        Text("Connect to Jobber to see scheduled assessments")
+                            .foregroundColor(.orange)
+                            .padding(.bottom, 8)
                     }
+                    
                     if allCalendarJobs.isEmpty {
                         VStack(spacing: 20) {
                             Image(systemName: "calendar")
                                 .font(.system(size: 60))
                                 .foregroundColor(.secondary)
-                            Text("No Jobs Found")
+                            Text("No Assessments Found")
                                 .font(.title2)
                                 .fontWeight(.medium)
-                            Text("No jobs found in your calendar feed. Check back later or create a new quote.")
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
+                            
+                            if jobberAPI.isAuthenticated {
+                                Text("No assessments scheduled for this week. Check back later or create a new quote.")
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                            } else {
+                                Text("Connect your Jobber account to see scheduled assessments.")
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
                         }
                         .padding()
                     } else {
@@ -2733,65 +2964,46 @@ struct HomeView: View {
                     }
                 }
             }
-            .navigationTitle("Calendar Jobs")
+            .navigationTitle("Scheduled Assessments")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Refresh") {
-                        loadCalendarJobs()
+                        loadScheduledAssessments()
                     }
                 }
             }
             .onAppear {
-                loadCalendarJobs()
+                loadScheduledAssessments()
             }
             .refreshable {
-                loadCalendarJobs()
+                await loadScheduledAssessments()
             }
         }
     }
 
-    private func loadCalendarJobs() {
+    private func loadScheduledAssessments() {
+        guard jobberAPI.isAuthenticated else {
+            calendarError = "Please connect your Jobber account"
+            return
+        }
+        
         isLoadingCalendar = true
         calendarError = nil
-        let manager = ICalendarManager(calendarURL: jobberCalendarURL)
-        manager.fetchJobs { jobs in
-            if jobs.isEmpty {
-                DispatchQueue.main.async {
-                    self.calendarJobs = []
-                    self.isLoadingCalendar = false
-                    self.calendarError = "No jobs found or calendar feed is empty."
-                }
-            } else {
-                // Fetch detailed information from Jobber API if authenticated
-                if jobberAPI.isAuthenticated {
-                    Task {
-                        await enhanceCalendarJobsWithJobberData(jobs: jobs)
-                    }
-                } else {
-                    DispatchQueue.main.async {
-                        self.calendarJobs = jobs
-                        self.isLoadingCalendar = false
-                        print("Loaded \(jobs.count) calendar jobs (basic info only - not connected to Jobber)")
-                    }
+        
+        Task {
+            await jobberAPI.fetchScheduledAssessments()
+            
+            DispatchQueue.main.async {
+                self.isLoadingCalendar = false
+                
+                if self.jobberAPI.calendarJobs.isEmpty {
+                    self.calendarError = "No scheduled assessments found for this week"
                 }
             }
         }
     }
 
-    private func fetchTodayJobs() async {
-        if jobberAPI.isAuthenticated {
-            await jobberAPI.fetchWeekScheduledRequests()
-            print("Jobber jobs fetched: \(jobberAPI.jobs.count)")
-            // Also search for test entries across all endpoints
-            await jobberAPI.searchForTestEntry()
-            print("Jobber jobs after test entry search: \(jobberAPI.jobs.count)")
-        } else {
-            // For local sample data when not authenticated with Jobber
-            if jobs.isEmpty {
-                addSampleJobs()
-            }
-        }
-    }
+    // Methods removed - now using direct Jobber API calls
 
     private func addSampleJobs() {
         let sampleJobs = [
@@ -2823,110 +3035,6 @@ struct HomeView: View {
         }
 
         try? modelContext.save()
-    }
-    
-    // MARK: - Enhanced Calendar Integration
-    private func enhanceCalendarJobsWithJobberData(jobs: [CalendarJob]) async {
-        print("=== Enhancing calendar jobs with Jobber data ===")
-        
-        // Fetch visits and requests from Jobber and wait for completion
-        await loadJobberVisits()
-        await loadJobberRequests()
-        
-        // Wait a moment for the async operations to complete
-        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-        
-        await MainActor.run {
-            let enhancedJobs = jobs.compactMap { job -> CalendarJob? in
-                var enhancedJob = job
-                
-                // Try to find matching Jobber data by date and title similarity
-                if let matchingJobberJob = self.findMatchingJobberJob(for: job) {
-                    enhancedJob.jobberJobId = matchingJobberJob.jobId
-                    enhancedJob.clientName = matchingJobberJob.clientName
-                    enhancedJob.clientAddress = matchingJobberJob.address
-                    enhancedJob.jobStatus = matchingJobberJob.status
-                    enhancedJob.visitType = "visit"
-                    print("✅ Enhanced calendar job: '\(job.title)' with Jobber data from '\(matchingJobberJob.clientName)'")
-                } else {
-                    print("❌ No Jobber match found for calendar job: '\(job.title)' (checked against \(self.jobberAPI.jobs.count) Jobber jobs)")
-                }
-                
-                return enhancedJob
-            }
-            
-            self.calendarJobs = enhancedJobs
-            self.isLoadingCalendar = false
-            print("🎯 Enhanced \(enhancedJobs.count) calendar jobs with Jobber details")
-            print("📊 Available Jobber jobs for matching: \(self.jobberAPI.jobs.count)")
-            
-            // Debug: Print available Jobber jobs
-            for (index, jobberJob) in self.jobberAPI.jobs.enumerated() {
-                print("  Jobber Job \(index + 1): '\(jobberJob.clientName)' at \(jobberJob.scheduledAt)")
-            }
-        }
-    }
-    
-    private func findMatchingJobberJob(for calendarJob: CalendarJob) -> JobberJob? {
-        print("🔍 Looking for Jobber match for calendar job: '\(calendarJob.title)' at \(calendarJob.startDate)")
-        
-        // Find Jobber jobs that match by date (same day) and have similar titles/client names
-        let matches = jobberAPI.jobs.filter { jobberJob in
-            let calendar = Calendar.current
-            let isSameDay = calendar.isDate(calendarJob.startDate, inSameDayAs: jobberJob.scheduledAt)
-            
-            print("  Comparing with Jobber job: '\(jobberJob.clientName)' at \(jobberJob.scheduledAt) - Same day: \(isSameDay)")
-            
-            if isSameDay {
-                // Check if calendar title contains client name or vice versa
-                let calendarTitle = calendarJob.title.lowercased()
-                let clientName = jobberJob.clientName.lowercased()
-                let similarity = titleSimilarity(calendarJob.title, jobberJob.clientName)
-                
-                let containsMatch = calendarTitle.contains(clientName) || clientName.contains(calendarTitle)
-                let similarityMatch = similarity > 0.3
-                
-                print("    Title similarity: \(String(format: "%.2f", similarity)), Contains match: \(containsMatch)")
-                
-                return containsMatch || similarityMatch
-            }
-            
-            return false
-        }
-        
-        let bestMatch = matches.first
-        if let match = bestMatch {
-            print("✅ Found match: '\(match.clientName)' for calendar job '\(calendarJob.title)'")
-        } else {
-            print("❌ No match found for calendar job '\(calendarJob.title)'")
-        }
-        
-        return bestMatch
-    }
-    
-    private func loadJobberVisits() async {
-        // This leverages the existing fetchWeekScheduledRequests method
-        await jobberAPI.fetchWeekScheduledRequests()
-    }
-    
-    private func loadJobberRequests() async {
-        // This leverages the existing searchForTestEntry method which searches multiple endpoints
-        await jobberAPI.searchForTestEntry()
-    }
-    
-    // MARK: - Helper Methods for Calendar Enhancement
-    private func parseVisitDate(_ dateString: String?) -> Date? {
-        guard let dateString = dateString else { return nil }
-        let formatter = ISO8601DateFormatter()
-        return formatter.date(from: dateString)
-    }
-    
-    private func titleSimilarity(_ title1: String, _ title2: String) -> Double {
-        let words1 = Set(title1.lowercased().components(separatedBy: .whitespacesAndNewlines))
-        let words2 = Set(title2.lowercased().components(separatedBy: .whitespacesAndNewlines))
-        let intersection = words1.intersection(words2)
-        let union = words1.union(words2)
-        return union.isEmpty ? 0.0 : Double(intersection.count) / Double(union.count)
     }
 }
 
@@ -5451,6 +5559,42 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Jobber Integration") {
+                    if jobberAPI.isAuthenticated {
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text("Connected")
+                                    .foregroundColor(.green)
+                                if let email = jobberAPI.connectedEmail {
+                                    Text(email)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            Spacer()
+                            Button("Disconnect") {
+                                jobberAPI.signOut()
+                            }
+                            .foregroundColor(.red)
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Connect to Jobber to see scheduled assessments")
+                                .font(.subheadline)
+                            Button("Connect to Jobber") {
+                                jobberAPI.authenticate()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            
+                            if let error = jobberAPI.errorMessage {
+                                Text("Error: \(error)")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    }
+                }
+                
                 Section("Materials Cost per Foot") {
                     HStack {
                         Text("Gutter")
