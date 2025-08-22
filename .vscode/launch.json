@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch iOS Simulator",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Build/Products/Debug-iphonesimulator/DTS App.app/DTS App",
+            "preLaunchTask": "Run on Simulator",
+            "stopOnEntry": false,
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "args": [],
+            "env": {}
+        }
+    ]
+}

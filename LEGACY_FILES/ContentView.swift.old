@@ -1,0 +1,38 @@
+//
+//  ContentView.swift
+//  DTS App
+//
+//  Created by Chandler Staton on 8/13/25.
+//
+
+import SwiftUI
+import SwiftData
+import Foundation
+
+struct ContentView: View {
+    var body: some View {
+        TabView {
+            HomeView()
+                .tabItem {
+                    Image(systemName: "house.fill")
+                    Text("Home")
+                }
+
+            QuoteFormView()
+                .tabItem {
+                    Image(systemName: "doc.text.fill")
+                    Text("Quote")
+                }
+
+            SettingsView()
+                .tabItem {
+                    Image(systemName: "gear")
+                    Text("Settings")
+                }
+        }
+    }
+}
+
+#Preview {
+    ContentView()
+}

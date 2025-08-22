@@ -1,0 +1,137 @@
+{
+    "version": "2.0.0",
+    "inputs": [
+        {
+            "id": "projectPath",
+            "description": "Path to the Xcode project",
+            "default": "DTS App/DTS App.xcodeproj",
+            "type": "promptString"
+        },
+        {
+            "id": "schemeName",
+            "description": "Xcode scheme name",
+            "default": "DTS App",
+            "type": "promptString"
+        },
+        {
+            "id": "simulatorName",
+            "description": "iOS Simulator name",
+            "default": "iPhone 16 Pro",
+            "type": "promptString"
+        }
+    ],
+    "tasks": [
+        {
+            "label": "Build iOS Simulator",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project",
+                "${input:projectPath}",
+                "-scheme",
+                "${input:schemeName}",
+                "-destination",
+                "platform=iOS Simulator,name=${input:simulatorName}",
+                "-derivedDataPath",
+                "build",
+                "CODE_SIGN_IDENTITY=",
+                "CODE_SIGNING_REQUIRED=NO",
+                "CODE_SIGNING_ALLOWED=NO",
+                "clean",
+                "build"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true
+            },
+            "problemMatcher": [],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "label": "Run on Simulator",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "set -e; echo 'Opening Simulator...'; open -a Simulator; echo 'Booting simulator if needed...'; xcrun simctl boot '${input:simulatorName}' 2>/dev/null || echo 'Simulator already booted or boot attempted'; sleep 3; APP_PATH=\"build/Build/Products/Debug-iphonesimulator/DTS App.app\"; if [ ! -d \"$APP_PATH\" ]; then echo 'Error: App not found at expected path. Please build first.'; exit 1; fi; echo 'Installing app...'; xcrun simctl install '${input:simulatorName}' \"$APP_PATH\"; BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' \"$APP_PATH/Info.plist\" 2>/dev/null || echo 'DTS.DTS-App'); echo \"Launching app with bundle ID: $BUNDLE_ID\"; xcrun simctl launch '${input:simulatorName}' \"$BUNDLE_ID\""
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true
+            },
+            "dependsOn": "Build iOS Simulator",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "label": "Discover Project Info",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "echo '=== Available Schemes ==='; xcodebuild -list -project '${input:projectPath}' 2>/dev/null | grep -A 100 'Schemes:' | grep -v 'Schemes:' | head -20 || echo 'Could not list schemes'; echo ''; echo '=== Available Simulators ==='; xcrun simctl list devices | grep -E '(iPhone|iPad)' | grep -v 'unavailable' | head -10 || echo 'Could not list simulators'"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "new"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "label": "Clean Build Folder",
+            "type": "shell",
+            "command": "rm",
+            "args": [
+                "-rf",
+                "build"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "label": "Open in Xcode",
+            "type": "shell",
+            "command": "open",
+            "args": [
+                "${input:projectPath}"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }
+        }
+    ]
+}

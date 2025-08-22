@@ -1,0 +1,25 @@
+{
+  "configurations" : [
+    {
+      "id" : "FA1E7420-0E7F-4AE1-8B4D-B5225B81E3A1",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:DTS App.xcodeproj",
+        "identifier" : "C87799F12E4CFCB200D3E76D",
+        "name" : "DTS AppTests"
+      }
+    }
+  ],
+  "version" : 1
+}

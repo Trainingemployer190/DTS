@@ -1,0 +1,597 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		C87799F32E4CFCB200D3E76D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C87799DD2E4CFCB000D3E76D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C87799E42E4CFCB000D3E76D;
+			remoteInfo = "DTS App";
+		};
+		C87799FD2E4CFCB200D3E76D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C87799DD2E4CFCB000D3E76D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C87799E42E4CFCB000D3E76D;
+			remoteInfo = "DTS App";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		C87799E52E4CFCB000D3E76D /* DTS App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DTS App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C87799F22E4CFCB200D3E76D /* DTS AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DTS AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C87799FC2E4CFCB200D3E76D /* DTS AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DTS AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C8AC97C02E57E3B100EA1CC6 /* DTS App.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "DTS App.xcodeproj"; sourceTree = "<group>"; };
+		C8ED64772E53769900A5BD76 /* DTS App.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "DTS App.xcodeproj"; sourceTree = "<group>"; };
+		C8ED6E832E55E92900A5BD76 /* DTS App.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = "DTS App.xctestplan"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		C87799E72E4CFCB000D3E76D /* DTS App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "DTS App";
+			sourceTree = "<group>";
+		};
+		C87799F52E4CFCB200D3E76D /* DTS AppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "DTS AppTests";
+			sourceTree = "<group>";
+		};
+		C87799FF2E4CFCB200D3E76D /* DTS AppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "DTS AppUITests";
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		C87799E22E4CFCB000D3E76D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C87799EF2E4CFCB200D3E76D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C87799F92E4CFCB200D3E76D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		C87799DC2E4CFCB000D3E76D = {
+			isa = PBXGroup;
+			children = (
+				C8ED6E832E55E92900A5BD76 /* DTS App.xctestplan */,
+				C87799E72E4CFCB000D3E76D /* DTS App */,
+				C87799F52E4CFCB200D3E76D /* DTS AppTests */,
+				C87799FF2E4CFCB200D3E76D /* DTS AppUITests */,
+				C87799E62E4CFCB000D3E76D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		C87799E62E4CFCB000D3E76D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C87799E52E4CFCB000D3E76D /* DTS App.app */,
+				C87799F22E4CFCB200D3E76D /* DTS AppTests.xctest */,
+				C87799FC2E4CFCB200D3E76D /* DTS AppUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C8AC97CA2E57E3B100EA1CC6 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C8ED64782E53769900A5BD76 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		C87799E42E4CFCB000D3E76D /* DTS App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C8779A062E4CFCB200D3E76D /* Build configuration list for PBXNativeTarget "DTS App" */;
+			buildPhases = (
+				C87799E12E4CFCB000D3E76D /* Sources */,
+				C87799E22E4CFCB000D3E76D /* Frameworks */,
+				C87799E32E4CFCB000D3E76D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C87799E72E4CFCB000D3E76D /* DTS App */,
+			);
+			name = "DTS App";
+			packageProductDependencies = (
+			);
+			productName = "DTS App";
+			productReference = C87799E52E4CFCB000D3E76D /* DTS App.app */;
+			productType = "com.apple.product-type.application";
+		};
+		C87799F12E4CFCB200D3E76D /* DTS AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C8779A092E4CFCB200D3E76D /* Build configuration list for PBXNativeTarget "DTS AppTests" */;
+			buildPhases = (
+				C87799EE2E4CFCB200D3E76D /* Sources */,
+				C87799EF2E4CFCB200D3E76D /* Frameworks */,
+				C87799F02E4CFCB200D3E76D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C87799F42E4CFCB200D3E76D /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				C87799F52E4CFCB200D3E76D /* DTS AppTests */,
+			);
+			name = "DTS AppTests";
+			packageProductDependencies = (
+			);
+			productName = "DTS AppTests";
+			productReference = C87799F22E4CFCB200D3E76D /* DTS AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		C87799FB2E4CFCB200D3E76D /* DTS AppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C8779A0C2E4CFCB200D3E76D /* Build configuration list for PBXNativeTarget "DTS AppUITests" */;
+			buildPhases = (
+				C87799F82E4CFCB200D3E76D /* Sources */,
+				C87799F92E4CFCB200D3E76D /* Frameworks */,
+				C87799FA2E4CFCB200D3E76D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C87799FE2E4CFCB200D3E76D /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				C87799FF2E4CFCB200D3E76D /* DTS AppUITests */,
+			);
+			name = "DTS AppUITests";
+			packageProductDependencies = (
+			);
+			productName = "DTS AppUITests";
+			productReference = C87799FC2E4CFCB200D3E76D /* DTS AppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		C87799DD2E4CFCB000D3E76D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					C87799E42E4CFCB000D3E76D = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					C87799F12E4CFCB200D3E76D = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = C87799E42E4CFCB000D3E76D;
+					};
+					C87799FB2E4CFCB200D3E76D = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = C87799E42E4CFCB000D3E76D;
+					};
+				};
+			};
+			buildConfigurationList = C87799E02E4CFCB000D3E76D /* Build configuration list for PBXProject "DTS App" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = C87799DC2E4CFCB000D3E76D;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = C87799E62E4CFCB000D3E76D /* Products */;
+			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = C8ED64782E53769900A5BD76 /* Products */;
+					ProjectRef = C8ED64772E53769900A5BD76 /* DTS App.xcodeproj */;
+				},
+				{
+					ProductGroup = C8AC97CA2E57E3B100EA1CC6 /* Products */;
+					ProjectRef = C8AC97C02E57E3B100EA1CC6 /* DTS App.xcodeproj */;
+				},
+			);
+			projectRoot = "";
+			targets = (
+				C87799E42E4CFCB000D3E76D /* DTS App */,
+				C87799F12E4CFCB200D3E76D /* DTS AppTests */,
+				C87799FB2E4CFCB200D3E76D /* DTS AppUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C87799E32E4CFCB000D3E76D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C87799F02E4CFCB200D3E76D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C87799FA2E4CFCB200D3E76D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C87799E12E4CFCB000D3E76D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C87799EE2E4CFCB200D3E76D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C87799F82E4CFCB200D3E76D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C87799F42E4CFCB200D3E76D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C87799E42E4CFCB000D3E76D /* DTS App */;
+			targetProxy = C87799F32E4CFCB200D3E76D /* PBXContainerItemProxy */;
+		};
+		C87799FE2E4CFCB200D3E76D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C87799E42E4CFCB000D3E76D /* DTS App */;
+			targetProxy = C87799FD2E4CFCB200D3E76D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		C8779A042E4CFCB200D3E76D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = WNU63L8T28;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		C8779A052E4CFCB200D3E76D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = WNU63L8T28;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		C8779A072E4CFCB200D3E76D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WNU63L8T28;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture photos of job sites and measurements for documentation purposes.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app needs location access to add GPS coordinates to photos for accurate job site documentation.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured photos and access existing images for job documentation.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "DTS.DTS-App";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C8779A082E4CFCB200D3E76D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WNU63L8T28;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture photos of job sites and measurements for documentation purposes.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app needs location access to add GPS coordinates to photos for accurate job site documentation.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured photos and access existing images for job documentation.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "DTS.DTS-App";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C8779A0A2E4CFCB200D3E76D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WNU63L8T28;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "DTS.DTS-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DTS App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DTS App";
+			};
+			name = Debug;
+		};
+		C8779A0B2E4CFCB200D3E76D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WNU63L8T28;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "DTS.DTS-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DTS App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DTS App";
+			};
+			name = Release;
+		};
+		C8779A0D2E4CFCB200D3E76D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WNU63L8T28;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "DTS.DTS-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "DTS App";
+			};
+			name = Debug;
+		};
+		C8779A0E2E4CFCB200D3E76D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WNU63L8T28;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "DTS.DTS-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "DTS App";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C87799E02E4CFCB000D3E76D /* Build configuration list for PBXProject "DTS App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C8779A042E4CFCB200D3E76D /* Debug */,
+				C8779A052E4CFCB200D3E76D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C8779A062E4CFCB200D3E76D /* Build configuration list for PBXNativeTarget "DTS App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C8779A072E4CFCB200D3E76D /* Debug */,
+				C8779A082E4CFCB200D3E76D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C8779A092E4CFCB200D3E76D /* Build configuration list for PBXNativeTarget "DTS AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C8779A0A2E4CFCB200D3E76D /* Debug */,
+				C8779A0B2E4CFCB200D3E76D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C8779A0C2E4CFCB200D3E76D /* Build configuration list for PBXNativeTarget "DTS AppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C8779A0D2E4CFCB200D3E76D /* Debug */,
+				C8779A0E2E4CFCB200D3E76D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = C87799DD2E4CFCB000D3E76D /* Project object */;
+}

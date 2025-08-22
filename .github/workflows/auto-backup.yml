@@ -1,0 +1,64 @@
+# Auto-backup workflow to prevent catastrophic merge issues
+name: Project Backup & Health Check
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Check for duplicate files
+      run: |
+        echo "Checking for backup files that could cause conflicts..."
+        find . -name "*.bak*" -o -name "*_backup_*" -o -name "*.swift.bak*" | tee duplicate_files.log
+        if [ -s duplicate_files.log ]; then
+          echo "⚠️ Warning: Found potential backup files that could cause build conflicts"
+          cat duplicate_files.log
+          exit 1
+        else
+          echo "✅ No problematic backup files found"
+        fi
+    
+    - name: Check ContentView.swift integrity
+      run: |
+        CONTENT_VIEW="DTS App/DTS App/ContentView.swift"
+        if [ -f "$CONTENT_VIEW" ]; then
+          LINE_COUNT=$(wc -l < "$CONTENT_VIEW")
+          echo "ContentView.swift has $LINE_COUNT lines"
+          
+          # Check for suspicious line count (duplicate code usually results in 5000+ lines)
+          if [ "$LINE_COUNT" -gt 4000 ]; then
+            echo "⚠️ Warning: ContentView.swift has $LINE_COUNT lines - possible duplicate code detected"
+            exit 1
+          fi
+          
+          # Check for duplicate struct declarations
+          STRUCT_COUNT=$(grep -c "^struct ContentView:" "$CONTENT_VIEW" || echo "0")
+          if [ "$STRUCT_COUNT" -gt 1 ]; then
+            echo "⚠️ Error: Found $STRUCT_COUNT ContentView struct declarations - duplicate code detected"
+            exit 1
+          fi
+          
+          echo "✅ ContentView.swift appears healthy ($LINE_COUNT lines)"
+        else
+          echo "❌ Error: ContentView.swift not found"
+          exit 1
+        fi
+    
+    - name: Create safety snapshot
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "Creating safety snapshot..."
+        tar -czf "project-snapshot-$(date +%Y%m%d-%H%M%S).tar.gz" \
+          --exclude='.git' \
+          --exclude='build' \
+          --exclude='*.xcuserdata' \
+          --exclude='DerivedData' \
+          "DTS App/"
+        echo "✅ Safety snapshot created"
