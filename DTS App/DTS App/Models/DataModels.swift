@@ -8,39 +8,17 @@
 import SwiftUI
 import SwiftData
 import Foundation
-<<<<<<< HEAD
-=======
 import CoreLocation
 
 #if canImport(UIKit)
 import UIKit
 #endif
->>>>>>> jobber-integration-complete
 
 // MARK: - SwiftData Models
 
 @Model
 final class AppSettings {
     // Gutter-specific material costs
-<<<<<<< HEAD
-    var materialCostPerFootGutter: Double = 3.50
-    var materialCostPerFootDownspout: Double = 4.00
-    var costPerElbow: Double = 8.00
-    var costPerHanger: Double = 2.50
-    var hangerSpacingFeet: Double = 3.0
-    var gutterGuardMaterialPerFoot: Double = 6.00
-    var gutterGuardLaborPerFoot: Double = 3.00
-
-    // Labor rates
-    var laborPerFootGutter: Double = 5.00
-
-    // Markup and profit margins
-    var defaultMarkupPercent: Double = 0.35
-    var defaultProfitMarginPercent: Double = 0.20
-    var defaultSalesCommissionPercent: Double = 0.03
-    var gutterGuardMarkupPercent: Double = 0.40
-    var gutterGuardProfitMarginPercent: Double = 0.25
-=======
     var materialCostPerFootGutter: Double = 1.62
     var materialCostPerFootDownspout: Double = 1.85
     var costPerElbow: Double = 2.03
@@ -58,7 +36,6 @@ final class AppSettings {
     var defaultSalesCommissionPercent: Double = 0.03
     var gutterGuardMarkupPercent: Double = 0.61
     var gutterGuardProfitMarginPercent: Double = 0.35
->>>>>>> jobber-integration-complete
 
     // Tax and currency
     var taxRate: Double = 0.08
@@ -75,24 +52,15 @@ final class AppSettings {
 final class JobberJob {
     var jobId: String
     var clientName: String
-<<<<<<< HEAD
-=======
     var clientPhone: String?
->>>>>>> jobber-integration-complete
     var address: String
     var scheduledAt: Date
     var status: String
 
-<<<<<<< HEAD
-    init(jobId: String, clientName: String, address: String, scheduledAt: Date, status: String) {
-        self.jobId = jobId
-        self.clientName = clientName
-=======
     init(jobId: String, clientName: String, clientPhone: String? = nil, address: String, scheduledAt: Date, status: String) {
         self.jobId = jobId
         self.clientName = clientName
         self.clientPhone = clientPhone
->>>>>>> jobber-integration-complete
         self.address = address
         self.scheduledAt = scheduledAt
         self.status = status
@@ -162,8 +130,6 @@ final class QuoteDraft: ObservableObject {
             ))
         }
 
-<<<<<<< HEAD
-=======
         // Add sales commission as a line item
         if commissionAmount > 0 {
             items.append(JobberLineItem(
@@ -173,8 +139,6 @@ final class QuoteDraft: ObservableObject {
                 unitPrice: commissionAmount
             ))
         }
-
->>>>>>> jobber-integration-complete
         return items
     }
 
@@ -257,8 +221,6 @@ struct QuoteDraftLineItem {
     let unitPrice: Double
     let totalPrice: Double
 }
-<<<<<<< HEAD
-=======
 
 // MARK: - Additional Models
 
@@ -531,6 +493,3 @@ struct JobberError: Codable {
     let message: String
     let path: [String]?
 }
-
-
->>>>>>> jobber-integration-complete

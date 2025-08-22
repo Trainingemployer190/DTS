@@ -10,6 +10,13 @@ Professional iOS app for DTS Gutters & Restoration, built with SwiftUI and integ
 - **PDF Generation**: Professional quote PDFs with photos and detailed pricing breakdowns
 - **SwiftData Storage**: Local data persistence with seamless sync capabilities
 
+## Jobber API Documentation
+
+Complete documentation for Jobber API integration:
+- **[📚 Full Documentation](JOBBER_API_DOCUMENTATION.md)** - Complete setup and integration guide
+- **[🚀 Quick Start](JOBBER_API_QUICKSTART.md)** - 5-minute setup guide  
+- **[📖 API Reference](JOBBER_API_REFERENCE.md)** - Complete method reference
+
 ## Tech Stack
 - **SwiftUI** (iOS 18+) - Modern declarative UI framework
 - **SwiftData** - Core Data replacement for data persistence
