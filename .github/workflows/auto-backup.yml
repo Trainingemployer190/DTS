@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Check for backup files
       run: |
         echo "Checking for backup files that could cause conflicts..."
@@ -24,11 +24,11 @@ jobs:
         else
           echo "✅ No problematic backup files found"
         fi
-    
+
     - name: Check project structure
       run: |
         echo "Checking DTS App project structure..."
-        
+
         # Check for main app files
         MAIN_APP="DTS App/DTS App/DTSApp.swift"
         if [ -f "$MAIN_APP" ]; then
@@ -37,7 +37,7 @@ jobs:
           echo "❌ Error: DTSApp.swift not found"
           exit 1
         fi
-        
+
         # Check for MainContentView (replaces ContentView)
         MAIN_CONTENT="DTS App/DTS App/MainContentView.swift"
         if [ -f "$MAIN_CONTENT" ]; then
@@ -46,7 +46,7 @@ jobs:
           echo "❌ Error: MainContentView.swift not found"
           exit 1
         fi
-        
+
         # Check for Jobber integration
         JOBBER_API="DTS App/DTS App/Managers/JobberAPI.swift"
         if [ -f "$JOBBER_API" ]; then
@@ -54,7 +54,7 @@ jobs:
         else
           echo "⚠️ Warning: Jobber API integration not found"
         fi
-        
+
         # Check for loading screen
         LOADING_SCREEN="DTS App/DTS App/Views/LoadingScreenView.swift"
         if [ -f "$LOADING_SCREEN" ]; then
@@ -62,18 +62,18 @@ jobs:
         else
           echo "⚠️ Warning: Loading screen not found"
         fi
-        
+
         echo "✅ Project structure validation complete"
-    
+
     - name: Validate Swift files
       run: |
         echo "Validating Swift files for basic syntax..."
         find "DTS App/" -name "*.swift" -exec echo "Checking: {}" \;
-        
+
         # Count total Swift files
         SWIFT_COUNT=$(find "DTS App/" -name "*.swift" | wc -l)
         echo "Found $SWIFT_COUNT Swift files"
-        
+
         if [ "$SWIFT_COUNT" -lt 5 ]; then
           echo "⚠️ Warning: Only $SWIFT_COUNT Swift files found - project may be incomplete"
         else

@@ -307,6 +307,12 @@ struct SettingsView: View {
                 }
 
                 Button(action: {
+                    print("🔄 User tapped Connect to Jobber button")
+                    print("Current authentication status: \(jobberAPI.isAuthenticated)")
+                    print("Current loading status: \(jobberAPI.isLoading)")
+                    if let error = jobberAPI.errorMessage {
+                        print("Current error: \(error)")
+                    }
                     jobberAPI.authenticate()
                 }) {
                     HStack {
@@ -320,6 +326,14 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(jobberAPI.isLoading)
+                
+                // Show error message if there is one
+                if let error = jobberAPI.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.top, 4)
+                }
             }
         }
     }
