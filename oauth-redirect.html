@@ -35,7 +35,7 @@
             if (code || error) {
                 // Build the callback URL for the iOS app using the custom URL scheme
                 const appCallbackUrl = `dtsapp://oauth?${params.toString()}`;
-                
+
                 // Show status message
                 document.getElementById('status').innerHTML =
                     code ? '✅ Authentication successful! Redirecting to app...' :

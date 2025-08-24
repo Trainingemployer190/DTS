@@ -219,7 +219,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         }
     }
 
-    private func handleOAuthCallback(url: URL) async {
+    func handleOAuthCallback(url: URL) async {
         print("=== handleOAuthCallback ===")
         print("Full callback URL: \(url.absoluteString)")
 

@@ -50,31 +50,33 @@ struct DTSApp: App {
     var body: some Scene {
         WindowGroup {
             if showLoadingScreen {
-                LoadingScreenView {
-                    // Called when loading is complete
-                    withAnimation(.easeInOut(duration: 0.5)) {
+                LoadingScreenView(onComplete: {
+                    withAnimation {
                         showLoadingScreen = false
                     }
-                }
+                })
+                    .onOpenURL { url in
+                        handleIncomingURL(url)
+                    }
             } else {
                 MainContentView()
                     .modelContainer(for: [AppSettings.self, QuoteDraft.self, PhotoRecord.self, LineItem.self, OutboxOperation.self])
                     .environmentObject(jobberAPI)
+                    .onOpenURL { url in
+                        handleIncomingURL(url)
+                    }
             }
         }
-        .onOpenURL { url in
-            handleIncomingURL(url)
-        }
     }
-    
+
     private func handleIncomingURL(_ url: URL) {
         print("🔗 Received URL: \(url.absoluteString)")
-        
+
         // Handle Jobber OAuth callback
         if url.scheme == "dtsapp" {
             print("📱 Processing Jobber OAuth callback")
             Task {
-                await jobberAPI.handleOAuthCallback(url)
+                await jobberAPI.handleOAuthCallback(url: url)
             }
         }
     }

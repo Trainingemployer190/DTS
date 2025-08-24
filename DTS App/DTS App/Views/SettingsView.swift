@@ -326,7 +326,7 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(jobberAPI.isLoading)
-                
+
                 // Show error message if there is one
                 if let error = jobberAPI.errorMessage {
                     Text(error)
