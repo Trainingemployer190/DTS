@@ -311,8 +311,8 @@ struct QuoteFormView: View {
     }
 
 
-    private var breakdown: PriceBreakdown {
-        PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
+    private var breakdown: PricingEngine.PriceBreakdown {
+        return PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
     }
 
     var body: some View {
@@ -340,7 +340,7 @@ struct QuoteFormView: View {
                 }
             }
             .sheet(isPresented: $showingPhotoGallery) {
-                PhotoGalleryView(photos: photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId })
+                PhotoGalleryView(photos: photoCaptureManager.capturedImages)
             }
             .alert("PDF Generated", isPresented: $showingPDFAlert) {
                 Button("View & Share PDF") {
@@ -354,7 +354,7 @@ struct QuoteFormView: View {
             }
             .sheet(isPresented: $showingShareSheet) {
                 if let pdfURL = generatedPDFURL {
-                    ShareSheet(items: [pdfURL])
+                    ShareSheet(activityItems: [pdfURL])
                 }
             }
             .sheet(isPresented: $showingCalculator) {
@@ -428,12 +428,12 @@ struct QuoteFormView: View {
                 .padding(.top)
 
             VStack(spacing: 16) {
-                ForEach(quoteDraft.additionalLaborItems, id: \.title) { item in
+                ForEach(Array(quoteDraft.additionalLaborItems.enumerated()), id: \.offset) { index, item in
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(item.title)
                                 .font(.subheadline)
-                            Text(item.amount.currencyFormatted)
+                            Text(item.amount.toCurrency())
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -574,6 +574,73 @@ struct QuoteFormView: View {
         }
     }
 
+    // Computed property for filtered photos
+    private var quoteDraftPhotos: [CapturedPhoto] {
+        return photoCaptureManager.capturedImages
+    }
+
+    @ViewBuilder
+    private var photosButtonSection: some View {
+        HStack {
+            Button(action: {
+                photoCaptureManager.capturePhoto(quoteDraftId: quoteDraft.localId)
+            }) {
+                HStack {
+                    Image(systemName: "camera.fill")
+                    Text("Capture Photo")
+                }
+                .foregroundColor(.blue)
+            }
+
+            Spacer()
+
+            if !quoteDraftPhotos.isEmpty {
+                Button("View Photos (\(quoteDraftPhotos.count))") {
+                    showingPhotoGallery = true
+                }
+                .font(.caption)
+                .foregroundColor(.blue)
+            }
+        }
+    }
+
+        @ViewBuilder
+    private func photoPreviewSection() -> some View {
+        if !quoteDraftPhotos.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(0..<min(quoteDraftPhotos.count, 3), id: \.self) { index in
+                        let image = quoteDraftPhotos[index].image
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 80, height: 80)
+                            .clipped()
+                            .cornerRadius(8)
+                    }
+
+                    if quoteDraftPhotos.count > 3 {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 80, height: 80)
+
+                            VStack {
+                                Image(systemName: "photo.stack")
+                                    .foregroundColor(.gray)
+                                Text("+\(quoteDraftPhotos.count - 3)")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+            .frame(height: 100)
+        }
+    }
+
     @ViewBuilder
     private var photosSectionContent: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -583,47 +650,8 @@ struct QuoteFormView: View {
                 .padding(.top)
 
             VStack(spacing: 16) {
-                HStack {
-                    Button(action: {
-                        photoCaptureManager.capturePhoto(quoteDraftId: quoteDraft.localId)
-                    }) {
-                        HStack {
-                            Image(systemName: "camera.fill")
-                            Text("Capture Photo")
-                        }
-                        .foregroundColor(.blue)
-                    }
-
-                    Spacer()
-
-                    if !photoCaptureManager.capturedImages.filter({ $0.quoteDraftId == quoteDraft.localId }).isEmpty {
-                        Button("View Photos (\(photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId }.count))") {
-                            showingPhotoGallery = true
-                        }
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                    }
-                }
-
-                if !photoCaptureManager.capturedImages.filter({ $0.quoteDraftId == quoteDraft.localId }).isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId }.prefix(3)) { photo in
-                                AsyncImage(url: URL(string: "file://" + photo.fileURL)) { image in
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                } placeholder: {
-                                    Rectangle()
-                                        .fill(Color.gray.opacity(0.3))
-                                }
-                                .frame(width: 60, height: 60)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                            }
-                        }
-                        .padding(.horizontal, 4)
-                    }
-                }
+                photosButtonSection
+                photoPreviewSection()
 
                 if let locationError = photoCaptureManager.locationError {
                     Text(locationError)
@@ -688,7 +716,8 @@ struct QuoteFormView: View {
 
         // Then sync to Jobber
         Task {
-            await jobberAPI.createQuoteDraft(quoteDraft: quoteDraft)
+            // TODO: Implement createQuoteDraft method in JobberAPI
+            // await jobberAPI.createQuoteDraft(quoteDraft: quoteDraft)
 
             DispatchQueue.main.async {
                 self.isSavingToJobber = false
@@ -696,23 +725,24 @@ struct QuoteFormView: View {
         }
     }
 
-    private func generateQuotePDF(breakdown: PriceBreakdown) {
-        // Get photos for this quote
-        let quotePhotos = photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId }
-
-        // Get job info if available
-        let jobInfo: JobberJob? = nil // We could enhance this to fetch job details if needed
+    private func generateQuotePDF(breakdown: PricingEngine.PriceBreakdown) {
+        // Get photos for this quote (currently unused but available for future features)
+        let _ = photoCaptureManager.capturedImages
 
         // Generate PDF
-        if let pdfURL = PDFGenerator.generateQuotePDF(
-            quote: quoteDraft,
+        if let pdfData = PDFGenerator.shared.generateQuotePDF(
             breakdown: breakdown,
-            settings: settings,
-            photos: quotePhotos,
-            jobInfo: jobInfo
+            customerName: "Customer" // TODO: Add customer name field to QuoteDraft
         ) {
-            generatedPDFURL = pdfURL
-            showingPDFAlert = true
+            // Save to temporary URL for sharing
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("quote_\(quoteDraft.localId.uuidString).pdf")
+            do {
+                try pdfData.write(to: tempURL)
+                generatedPDFURL = tempURL
+                showingPDFAlert = true
+            } catch {
+                print("Error saving PDF: \(error)")
+            }
         }
     }
 

@@ -8,8 +8,11 @@
 import Foundation
 import SwiftUI
 import AuthenticationServices
-import UIKit
 import SwiftData
+
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - API Error Types
 
@@ -157,7 +160,12 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         }
 
         // Extract scheme from redirect URI
-        let callbackScheme = URL(string: redirectURI)?.scheme ?? "https"
+        let callbackScheme: String
+        if let url = URL(string: redirectURI) {
+            callbackScheme = url.scheme ?? "https"
+        } else {
+            callbackScheme = "https"
+        }
 
         let authSession = ASWebAuthenticationSession(
             url: authURL,
@@ -211,7 +219,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         }
     }
 
-    private func handleOAuthCallback(url: URL) async {
+    func handleOAuthCallback(url: URL) async {
         print("=== handleOAuthCallback ===")
         print("Full callback URL: \(url.absoluteString)")
 
@@ -432,11 +440,19 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         }
     }
 
-    private func ensureValidAccessToken() async -> Bool {
-        // Check if access token is expired
-        if let expiry = tokenExpiry, Date() >= expiry {
-            // Token is expired, try to refresh
-            await refreshAccessTokens()
+    func ensureValidAccessToken() async -> Bool {
+        guard accessToken != nil else {
+            print("No access token available")
+            return false
+        }
+
+        // Check if access token is expired or will expire in the next 5 minutes
+        if let expiry = tokenExpiry {
+            let bufferTime: TimeInterval = 300 // 5 minutes
+            if Date().addingTimeInterval(bufferTime) >= expiry {
+                print("Token expired or expiring soon, attempting refresh...")
+                await refreshAccessTokens()
+            }
         }
 
         return isAuthenticated && accessToken != nil
@@ -467,7 +483,26 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         }
     }
 
+    // Add rate limiting protection
+    private var lastRequestTime: Date = Date.distantPast
+    private let minimumRequestInterval: TimeInterval = 2.0 // 2 seconds between requests
+
+    private func shouldAllowRequest() -> Bool {
+        let now = Date()
+        if now.timeIntervalSince(lastRequestTime) < minimumRequestInterval {
+            print("Rate limiting: Request blocked, too soon since last request")
+            return false
+        }
+        lastRequestTime = now
+        return true
+    }
+
     func fetchScheduledAssessments() async {
+        guard shouldAllowRequest() else {
+            print("Skipping request due to rate limiting")
+            return
+        }
+
         guard await ensureValidAccessToken() else {
             await MainActor.run {
                 self.errorMessage = "Please connect your Jobber account first"
@@ -498,9 +533,9 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         print("Fetching scheduled assessments for next 7 days")
         print("Date range: \(weekStart) to \(weekEnd)")
 
-        // Use the correct Jobber API schema with scheduledItems
+        // Use the working GraphQL query from GraphiQL
         let query = """
-        query GetScheduledItems($start: ISO8601DateTime!, $end: ISO8601DateTime!, $first: Int!) {
+        query getScheduledAssessments($start: ISO8601DateTime!, $end: ISO8601DateTime!, $first: Int!) {
           scheduledItems(
             filter: {
               scheduleItemType: ASSESSMENT
@@ -511,19 +546,32 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
             nodes {
               ... on Assessment {
                 id
-                startAt
                 title
+                startAt
+                endAt
                 completedAt
+                instructions
                 client {
                   id
                   name
-                  phones {
-                    number
-                    primary
-                  }
+                  firstName
+                  lastName
+                  companyName
                   emails {
                     address
+                    description
                     primary
+                  }
+                  phones {
+                    number
+                    description
+                    primary
+                  }
+                  billingAddress {
+                    street1
+                    city
+                    province
+                    postalCode
                   }
                 }
                 property {
@@ -540,6 +588,11 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                     }
                   }
                 }
+                request {
+                  requestStatus
+                  source
+                  title
+                }
               }
             }
             pageInfo {
@@ -554,7 +607,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         let variables: [String: Any] = [
             "start": weekStart,
             "end": weekEnd,
-            "first": 10
+            "first": 20
         ]
 
         print("About to make GraphQL request with variables: \(variables)")
@@ -572,15 +625,6 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
 
                     print("SUCCESS: Found \(response.data.scheduledItems.nodes.count) scheduled assessments")
 
-                    if response.data.scheduledItems.nodes.isEmpty {
-                        print("No assessments found in the specified date range")
-                        print("Trying to fetch all scheduled items without date filter...")
-
-                        // If no items found with date filter, try without filter
-                        await self.fetchAllScheduledItems()
-                        return
-                    }
-
                     for assessment in response.data.scheduledItems.nodes {
                         print("Processing assessment: \(assessment.id)")
                         print("Assessment title: \(assessment.title ?? "No title")")
@@ -592,10 +636,8 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                         }
 
                         let clientName = assessment.client.name
-                        let title = assessment.title ?? "Assessment"
-                        let _ = assessment.assignedUsers.nodes.map { $0.name.full }.joined(separator: ", ")
 
-                        // Extract primary phone number
+                        // Extract primary phone number from enhanced phone structure
                         let clientPhone: String? = assessment.client.phones?.first(where: { $0.primary })?.number ?? assessment.client.phones?.first?.number
 
                         // Build address from property
@@ -637,40 +679,30 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                         )
 
                         fetchedJobs.append(jobberJob)
-                        print("Added assessment: \(clientName) - \(title) at \(startAt) (\(status))")
+                        print("Added assessment: \(clientName) at \(startAt) (\(status))")
                     }
 
                     self.jobs = fetchedJobs
-                    print("Successfully fetched \(fetchedJobs.count) scheduled assessments for this week")
+                    print("Successfully fetched \(fetchedJobs.count) scheduled assessments")
 
                 case .failure(let error):
                     print("FAILED to fetch scheduled assessments: \(error)")
-                    print("Error type: \(type(of: error))")
-                    print("Error description: \(error.localizedDescription)")
 
                     if let apiError = error as? APIError {
-                        print("APIError case: \(apiError)")
                         switch apiError {
                         case .graphQLError(let message):
-                            print("GraphQL Error: \(message)")
-                            self.errorMessage = "Jobber API Error: \(message)"
-                        case .noToken:
-                            print("No authentication token available")
-                            self.errorMessage = "Authentication required. Please reconnect to Jobber in Settings."
-                        case .invalidURL:
-                            print("Invalid URL")
-                            self.errorMessage = "Configuration error. Please try again."
-                        case .unauthorized:
-                            print("Unauthorized - token may be expired")
-                            self.errorMessage = "Authentication expired. Please reconnect to Jobber in Settings."
-                            self.signOut() // Auto sign out if unauthorized
-                        case .invalidResponse:
-                            print("Invalid response from server")
-                            self.errorMessage = "Invalid response from Jobber. Please try again."
+                            if message.contains("Throttled") {
+                                self.errorMessage = "API rate limit reached. Please wait a moment and try again."
+                                print("API throttled - waiting before retry")
+                            } else {
+                                print("GraphQL Error: \(message)")
+                                self.errorMessage = "Jobber API Error: \(message)"
+                            }
+                        default:
+                            self.errorMessage = error.localizedDescription
                         }
                     } else {
-                        print("Non-API error: \(error)")
-                        self.errorMessage = "Network error: \(error.localizedDescription)"
+                        self.errorMessage = error.localizedDescription
                     }
                 }
             }
@@ -678,6 +710,11 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     }
 
     func fetchAllScheduledItems() async {
+        guard shouldAllowRequest() else {
+            print("Skipping fetchAllScheduledItems due to rate limiting")
+            return
+        }
+
         guard await ensureValidAccessToken() else {
             await MainActor.run {
                 self.errorMessage = "Please connect your Jobber account first"
@@ -685,11 +722,33 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
             return
         }
 
-        print("Fetching ALL scheduled items (no date filter)...")
+        print("Fetching recent scheduled items...")
+
+        // Use the same dynamic date logic as fetchScheduledAssessments
+        let today = Date()
+        let calendar = Calendar.current
+
+        // Get current date at start of day
+        let startOfDay = calendar.startOfDay(for: today)
+        // Get date 7 days from now
+        let endDate = calendar.date(byAdding: .day, value: 7, to: startOfDay) ?? today
+        let endOfWeek = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) ?? endDate
+
+        // Use ISO format for GraphQL variables
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let startDate = isoFormatter.string(from: startOfDay)
+        let endDateFormatted = isoFormatter.string(from: endOfWeek)
 
         let query = """
-        query getAllScheduledItems($first: Int!) {
-          scheduledItems(first: $first) {
+        query getAllScheduledItems($start: ISO8601DateTime!, $end: ISO8601DateTime!, $first: Int!) {
+          scheduledItems(
+            filter: {
+              scheduleItemType: ASSESSMENT
+              occursWithin: { startAt: $start, endAt: $end }
+            }
+            first: $first
+          ) {
             nodes {
               ... on Assessment {
                 id
@@ -697,9 +756,29 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                 startAt
                 endAt
                 completedAt
+                instructions
                 client {
                   id
                   name
+                  firstName
+                  lastName
+                  companyName
+                  emails {
+                    address
+                    description
+                    primary
+                  }
+                  phones {
+                    number
+                    description
+                    primary
+                  }
+                  billingAddress {
+                    street1
+                    city
+                    province
+                    postalCode
+                  }
                 }
                 property {
                   address {
@@ -707,6 +786,18 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                     city
                     province
                   }
+                }
+                assignedUsers {
+                  nodes {
+                    name {
+                      full
+                    }
+                  }
+                }
+                request {
+                  requestStatus
+                  source
+                  title
                 }
               }
             }
@@ -720,46 +811,33 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         """
 
         let variables: [String: Any] = [
-            "first": 50
+            "start": startDate,
+            "end": endDateFormatted,
+            "first": 10  // Reduced to 10 most recent items
         ]
 
-        print("About to make GraphQL request for ALL scheduled items")
+        print("About to make GraphQL request for recent scheduled items")
+        print("Dynamic date range: \(startDate) to \(endDateFormatted)")
 
         await performGraphQLRequest(query: query, variables: variables) { [weak self] (result: Result<ScheduledAssessmentsResponse, Error>) in
             Task { @MainActor in
                 guard let self = self else { return }
 
-                print("GraphQL request for ALL items completed")
+                print("GraphQL request for recent items completed")
 
                 switch result {
                 case .success(let response):
                     var fetchedJobs: [JobberJob] = []
 
-                    print("SUCCESS: Found \(response.data.scheduledItems.nodes.count) total scheduled items")
+                    print("SUCCESS: Found \(response.data.scheduledItems.nodes.count) scheduled items in next 7 days")
 
                     for assessment in response.data.scheduledItems.nodes {
-                        print("Processing item: \(assessment.id)")
-                        print("Item title: \(assessment.title ?? "No title")")
-                        print("Item startAt: \(assessment.startAt)")
-
                         guard let startAt = self.parseDate(assessment.startAt) else {
-                            print("Could not parse start date: \(assessment.startAt)")
                             continue
                         }
 
                         let clientName = assessment.client.name
-                        let title = assessment.title ?? "Assessment"
-
-                        // Extract client phone number
-                        let clientPhone: String? = {
-                            // Try to find a primary phone first, otherwise use the first phone
-                            if let primaryPhone = assessment.client.phones?.first(where: { $0.primary }) {
-                                return primaryPhone.number
-                            } else if let firstPhone = assessment.client.phones?.first {
-                                return firstPhone.number
-                            }
-                            return nil
-                        }()
+                        let clientPhone: String? = assessment.client.phones?.first(where: { $0.primary })?.number ?? assessment.client.phones?.first?.number
 
                         // Build address from property
                         let address: String
@@ -779,7 +857,6 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                             address = "Address not available"
                         }
 
-                        // Determine status
                         let status: String
                         if assessment.completedAt != nil {
                             status = "completed"
@@ -789,7 +866,6 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                             status = "scheduled"
                         }
 
-                        // Create JobberJob
                         let jobberJob = JobberJob(
                             jobId: assessment.id,
                             clientName: clientName,
@@ -800,218 +876,28 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                         )
 
                         fetchedJobs.append(jobberJob)
-                        print("Added item: \(clientName) - \(title) at \(startAt) (\(status))")
+                        print("Added item: \(clientName) at \(startAt) (\(status))")
                     }
 
                     self.jobs = fetchedJobs
-                    print("Successfully fetched \(fetchedJobs.count) total scheduled items")
+                    print("Successfully fetched \(fetchedJobs.count) scheduled items for next 7 days")
 
                 case .failure(let error):
-                    print("FAILED to fetch all scheduled items: \(error)")
-                    self.errorMessage = "Failed to fetch scheduled items: \(error.localizedDescription)"
-                }
-            }
-        }
-    }
-
-    func fetchWeekScheduledRequests() async {
-        guard await ensureValidAccessToken() else {
-            await MainActor.run {
-                self.errorMessage = "Please connect your Jobber account first"
-            }
-            return
-        }
-
-        await MainActor.run {
-            isLoading = true
-            errorMessage = nil
-        }
-
-        let today = Date()
-        let calendar = Calendar.current
-
-        // Debug: Print the current date we're working with
-        print("Current date: \(today)")
-        print("Calendar: \(calendar.identifier)")
-
-        // Get the start of today
-        let startOfToday = calendar.startOfDay(for: today)
-
-        // Get the end date (7 days from today)
-        guard let endDate = calendar.date(byAdding: .day, value: 7, to: startOfToday) else {
-            print("Failed to calculate end date")
-            return
-        }
-
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        dateFormatter.timeZone = TimeZone.current // Use current timezone
-        let weekStartString = dateFormatter.string(from: startOfToday)
-        let weekEndString = dateFormatter.string(from: endDate)
-
-        print("Week start: \(startOfToday)")
-        print("Week end: \(endDate)")
-        print("Fetching scheduled items for this week (\(weekStartString) to \(weekEndString))")
-
-        // Query for scheduled assessments this week
-        let query = """
-        query getScheduledAssessments($start: ISO8601DateTime!, $end: ISO8601DateTime!, $first: Int!) {
-          scheduledItems(
-            filter: {
-              scheduleItemType: ASSESSMENT
-              occursWithin: { startAt: $start, endAt: $end }
-            }
-            first: $first
-          ) {
-            nodes {
-              ... on Assessment {
-                id
-                title
-                startAt
-                endAt
-                completedAt
-                client {
-                  id
-                  name
-                  firstName
-                  lastName
-                  companyName
-                  emails {
-                    address
-                    primary
-                  }
-                  phones {
-                    number
-                    primary
-                  }
-                }
-                property {
-                  address {
-                    street1
-                    city
-                    province
-                  }
-                }
-                assignedUsers {
-                  nodes {
-                    name {
-                      full
-                    }
-                  }
-                }
-                request {
-                  title
-                }
-              }
-            }
-            pageInfo {
-              hasNextPage
-              endCursor
-            }
-            totalCount
-          }
-        }
-        """
-
-        // Use ISO format for GraphQL variables
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        let variables: [String: Any] = [
-            "start": isoFormatter.string(from: startOfToday),
-            "end": isoFormatter.string(from: endDate),
-            "first": 10
-        ]
-
-        print("GraphQL variables: \(variables)")
-
-        await performGraphQLRequest(query: query, variables: variables) { [weak self] (result: Result<ScheduledAssessmentsResponse, Error>) in
-            Task { @MainActor in
-                guard let self = self else { return }
-                self.isLoading = false
-
-                switch result {
-                case .success(let response):
-                    var fetchedJobs: [JobberJob] = []
-
-                    print("Found \(response.data.scheduledItems.nodes.count) assessments from GraphQL query (should be filtered to this week)")
-
-                    // Since we're filtering at the GraphQL level, all returned assessments should be in range
-                    for assessment in response.data.scheduledItems.nodes {
-                        let clientName = assessment.client.name
-                        let title = assessment.title ?? "Assessment"
-                        let startAtString = assessment.startAt
-
-                        // Extract client phone number
-                        let clientPhone: String? = {
-                            // Try to find a primary phone first, otherwise use the first phone
-                            if let primaryPhone = assessment.client.phones?.first(where: { $0.primary }) {
-                                return primaryPhone.number
-                            } else if let firstPhone = assessment.client.phones?.first {
-                                return firstPhone.number
+                    print("FAILED to fetch scheduled items: \(error)")
+                    if let apiError = error as? APIError {
+                        switch apiError {
+                        case .graphQLError(let message):
+                            if message.contains("Throttled") {
+                                self.errorMessage = "API rate limit reached. Please wait a moment before refreshing."
+                            } else {
+                                self.errorMessage = "Jobber API Error: \(message)"
                             }
-                            return nil
-                        }()
-
-                        // Debug: print all assessments we get back
-                        print("Processing assessment: \(clientName) - \(title) at \(startAtString)")
-
-                        guard let startAt = self.parseDate(startAtString) else {
-                            print("Failed to parse date for assessment: \(startAtString)")
-                            continue
+                        default:
+                            self.errorMessage = error.localizedDescription
                         }
-
-                        // Build address from property
-                        let address: String
-                        if let propertyAddress = assessment.property?.address {
-                            var addressComponents: [String] = []
-                            if let street = propertyAddress.street1, !street.isEmpty {
-                                addressComponents.append(street)
-                            }
-                            if let city = propertyAddress.city, !city.isEmpty {
-                                addressComponents.append(city)
-                            }
-                            if let province = propertyAddress.province, !province.isEmpty {
-                                addressComponents.append(province)
-                            }
-                            address = addressComponents.joined(separator: ", ")
-                        } else {
-                            address = "Address not available"
-                        }
-
-                        // Determine status
-                        let status: String
-                        if assessment.completedAt != nil {
-                            status = "completed"
-                        } else if startAt <= Date() {
-                            status = "in_progress"
-                        } else {
-                            status = "scheduled"
-                        }
-
-                        // Create JobberJob for all returned assessments (they should all be in range)
-                        let job = JobberJob(
-                            jobId: assessment.id,
-                            clientName: clientName,
-                            clientPhone: clientPhone,
-                            address: address,
-                            scheduledAt: startAt,
-                            status: status
-                        )
-                        fetchedJobs.append(job)
-                        print("Added assessment: \(job.clientName) at \(job.scheduledAt)")
+                    } else {
+                        self.errorMessage = error.localizedDescription
                     }
-
-                    self.jobs = fetchedJobs
-                    print("Fetched \(fetchedJobs.count) scheduled assessments for this week")
-
-                    if fetchedJobs.isEmpty {
-                        print("No assessments found for this week after GraphQL filtering.")
-                    }
-
-                case .failure(let error):
-                    print("Failed to fetch visits: \(error)")
-                    self.errorMessage = error.localizedDescription
                 }
             }
         }
@@ -1179,13 +1065,11 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     private func createJobberJobFromVisit(visit: VisitWithJobNode, scheduledAt: Date, status: String) -> JobberJob {
         let clientName = visit.job.client.name
         let address = formatVisitAddress(visit)
-        // Note: VisitWithJobNode doesn't have phone data in this older API structure
-        let clientPhone: String? = nil
 
         let jobberJob = JobberJob(
             jobId: visit.job.id,
             clientName: clientName,
-            clientPhone: clientPhone,
+            clientPhone: nil as String?, // No phone data available in visit structure
             address: address,
             scheduledAt: scheduledAt,
             status: status
@@ -1246,8 +1130,46 @@ struct SimpleJobNode: Codable {
     let property: PropertyNode?
 }
 
+struct EnhancedClientNode: Codable {
+    let id: String
+    let name: String
+    let firstName: String?
+    let lastName: String?
+    let companyName: String?
+    let phones: [EnhancedPhone]?
+    let emails: [EnhancedEmail]?
+    let billingAddress: BillingAddress?
+}
+
+struct EnhancedPhone: Codable {
+    let number: String
+    let description: String?
+    let primary: Bool
+}
+
+struct EnhancedEmail: Codable {
+    let address: String
+    let description: String?
+    let primary: Bool
+}
+
+struct BillingAddress: Codable {
+    let street1: String?
+    let city: String?
+    let province: String?
+    let postalCode: String?
+}
+
+struct RequestNode: Codable {
+    let requestStatus: String?
+    let source: String?
+    let title: String?
+}
+
 struct ClientNode: Codable {
     let name: String
+    let phones: [Phone]?
+    let emails: [Email]?
 }
 
 struct PropertyNode: Codable {
@@ -1257,4 +1179,102 @@ struct PropertyNode: Codable {
 struct PropertyAddress: Codable {
     let street1: String?
     let city: String?
+    let province: String?
+}
+
+// MARK: - Missing Response Models
+struct TokenResponse: Codable {
+    let access_token: String
+    let refresh_token: String
+    let expires_in: Int?
+}
+
+struct AccountResponse: Codable {
+    let data: AccountData
+}
+
+struct AccountData: Codable {
+    let account: Account
+}
+
+struct Account: Codable {
+    let id: String
+    let name: String
+}
+
+struct ScheduledAssessmentsResponse: Codable {
+    let data: ScheduledAssessmentsData
+}
+
+struct ScheduledAssessmentsData: Codable {
+    let scheduledItems: ScheduledItemsConnection
+}
+
+struct ScheduledItemsConnection: Codable {
+    let nodes: [AssessmentNode]
+    let pageInfo: PageInfo
+    let totalCount: Int
+}
+
+struct AssessmentNode: Codable {
+    let id: String
+    let title: String?
+    let startAt: String
+    let endAt: String?
+    let completedAt: String?
+    let instructions: String?
+    let client: EnhancedClientNode
+    let property: PropertyNode?
+    let assignedUsers: AssignedUsersConnection
+    let request: RequestNode?
+}
+
+struct AssignedUsersConnection: Codable {
+    let nodes: [AssignedUser]
+}
+
+struct AssignedUser: Codable {
+    let name: UserName
+}
+
+struct UserName: Codable {
+    let full: String
+}
+
+struct PageInfo: Codable {
+    let hasNextPage: Bool
+    let endCursor: String?
+}
+
+struct QuoteCreateResponse: Codable {
+    let data: QuoteCreateData
+}
+
+struct QuoteCreateData: Codable {
+    let quoteCreate: QuoteCreateResult
+}
+
+struct QuoteCreateResult: Codable {
+    let quote: Quote?
+    let userErrors: [UserError]?
+}
+
+struct Quote: Codable {
+    let id: String
+    let title: String
+}
+
+struct UserError: Codable {
+    let field: String
+    let message: String
+}
+
+struct Phone: Codable {
+    let number: String
+    let primary: Bool
+}
+
+struct Email: Codable {
+    let address: String
+    let primary: Bool
 }

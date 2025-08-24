@@ -24,6 +24,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		C81A592F2E5B36C800691B25 /* DTS App.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "DTS App.xcodeproj"; sourceTree = "<group>"; };
 		C87799E52E4CFCB000D3E76D /* DTS App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DTS App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C87799F22E4CFCB200D3E76D /* DTS AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DTS AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C87799FC2E4CFCB200D3E76D /* DTS AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DTS AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -75,6 +76,13 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		C81A59352E5B36C800691B25 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		C87799DC2E4CFCB000D3E76D = {
 			isa = PBXGroup;
 			children = (
@@ -222,6 +230,10 @@
 				{
 					ProductGroup = C8AC97CA2E57E3B100EA1CC6 /* Products */;
 					ProjectRef = C8AC97C02E57E3B100EA1CC6 /* DTS App.xcodeproj */;
+				},
+				{
+					ProductGroup = C81A59352E5B36C800691B25 /* Products */;
+					ProjectRef = C81A592F2E5B36C800691B25 /* DTS App.xcodeproj */;
 				},
 			);
 			projectRoot = "";

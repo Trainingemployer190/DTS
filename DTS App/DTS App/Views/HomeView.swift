@@ -81,51 +81,32 @@ struct HomeView: View {
     }
 
     private func loadJobs() {
-        guard jobberAPI.isAuthenticated else { return }
+        print("🔍 HomeView.loadJobs() called")
+        print("🔍 JobberAPI isAuthenticated: \(jobberAPI.isAuthenticated)")
+        print("🔍 JobberAPI jobs count: \(jobberAPI.jobs.count)")
+        print("🔍 JobberAPI isLoading: \(jobberAPI.isLoading)")
+        print("🔍 JobberAPI errorMessage: \(jobberAPI.errorMessage ?? "none")")
+
+        guard jobberAPI.isAuthenticated else {
+            print("❌ Not authenticated, skipping job load")
+            return
+        }
 
         Task {
-            // Try both assessments and visits
-            await jobberAPI.fetchScheduledAssessments()
+            print("🔍 Starting fetchAllScheduledItems...")
+            await jobberAPI.fetchAllScheduledItems()
+            print("🔍 After fetchAllScheduledItems: \(jobberAPI.jobs.count) jobs")
+
             if jobberAPI.jobs.isEmpty {
-                await jobberAPI.fetchWeekScheduledRequests()
+                print("🔍 No jobs found, trying again...")
+                await jobberAPI.fetchAllScheduledItems()
+                print("🔍 After retry: \(jobberAPI.jobs.count) jobs")
             }
         }
     }
-
 }
 
-// MARK: - Supporting Views
-struct StatusBadge: View {
-    let status: String
-    var statusColor: Color {
-        switch status.lowercased() {
-        case "scheduled": return .blue
-        case "in_progress": return .orange
-        case "completed": return .green
-        case "cancelled": return .red
-        default: return .gray
-        }
-    }
-    var body: some View {
-        Text(status.capitalized)
-            .font(.caption)
-            .fontWeight(.medium)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(statusColor.opacity(0.2))
-            .foregroundColor(statusColor)
-            .clipShape(Capsule())
-    }
-}
-
-// Map helper
-func openInMaps(address: String) {
-    let encoded = address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-    if let url = URL(string: "http://maps.apple.com/?address=\(encoded)") {
-        #if canImport(UIKit)
-        if UIApplication.shared.canOpenURL(url) {
-            UIApplication.shared.open(url)
-        }
-        #endif
-    }
+#Preview {
+    HomeView()
+        .environmentObject(JobberAPI())
 }

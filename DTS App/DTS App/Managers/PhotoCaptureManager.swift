@@ -209,13 +209,25 @@ class PhotoCaptureManager: NSObject, ObservableObject {
             do {
                 try imageData.write(to: fileURL)
 
+                // Convert data to UIImage
+                guard let uiImage = UIImage(data: imageData) else {
+                    DispatchQueue.main.async {
+                        self.locationError = "Failed to convert image data"
+                    }
+                    return
+                }
+
+                // Convert location to string if available
+                let locationString: String?
+                if let location = currentLocation {
+                    locationString = "\(location.coordinate.latitude),\(location.coordinate.longitude)"
+                } else {
+                    locationString = nil
+                }
+
                 let capturedPhoto = CapturedPhoto(
-                    id: UUID(),
-                    fileURL: fileURL.path,
-                    jobId: jobId,
-                    quoteDraftId: quoteDraftId,
-                    location: currentLocation,
-                    capturedAt: Date()
+                    image: uiImage,
+                    location: locationString
                 )
 
                 capturedImages.append(capturedPhoto)

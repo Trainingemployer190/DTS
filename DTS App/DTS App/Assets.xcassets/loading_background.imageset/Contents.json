@@ -1,15 +1,12 @@
 {
   "images" : [
     {
-<<<<<<< HEAD
       "filename" : "loading_background.jpg",
-=======
-      "filename" : "loading_background.png",
->>>>>>> jobber-integration-complete
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
+      "filename" : "loading_background.png",
       "idiom" : "universal",
       "scale" : "2x"
     },

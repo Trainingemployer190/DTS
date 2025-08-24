@@ -622,15 +622,14 @@ struct PhotoGalleryView: View {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 2) {
                     ForEach(photos.indices, id: \.self) { index in
-                        if let image = photos[index].image {
-                            Image(uiImage: image)
-                                .resizable()
-                                .aspectRatio(1, contentMode: .fill)
-                                .clipped()
-                                .onTapGesture {
-                                    selectedPhoto = photos[index]
-                                }
-                        }
+                        let image = photos[index].image
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(1, contentMode: .fill)
+                            .clipped()
+                            .onTapGesture {
+                                selectedPhoto = photos[index]
+                            }
                     }
                 }
                 .padding(1)
@@ -658,11 +657,9 @@ struct PhotoDetailView: View {
             ZStack {
                 Color.black.ignoresSafeArea()
 
-                if let image = photo.image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                }
+                Image(uiImage: photo.image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
