@@ -33,23 +33,27 @@
             const state = params.get('state');
 
             if (code || error) {
-                // Build the callback URL for the iOS app
-                const callbackUrl = `https://trainingemployer190.github.io/dtsapp-oauth-redirect/?${params.toString()}`;
-
-                // For iOS apps using ASWebAuthenticationSession,
-                // the session will automatically capture this URL
+                // Build the callback URL for the iOS app using the custom URL scheme
+                const appCallbackUrl = `dtsapp://oauth?${params.toString()}`;
+                
+                // Show status message
                 document.getElementById('status').innerHTML =
-                    code ? 'Authentication successful! You can close this window.' :
-                           `Authentication failed: ${error}. You can close this window.`;
+                    code ? '✅ Authentication successful! Redirecting to app...' :
+                           `❌ Authentication failed: ${error}`;
 
-                // Attempt to close the window (works in some contexts)
-                setTimeout(() => {
-                    try {
-                        window.close();
-                    } catch (e) {
-                        // Window close might fail in some browsers
-                    }
-                }, 1000);
+                if (code) {
+                    // Redirect to the iOS app
+                    window.location.href = appCallbackUrl;
+                } else {
+                    // For errors, just show the message
+                    setTimeout(() => {
+                        try {
+                            window.close();
+                        } catch (e) {
+                            // Window close might fail in some browsers
+                        }
+                    }, 2000);
+                }
             } else {
                 document.getElementById('status').innerHTML = 'No authentication parameters found. Please try again.';
             }

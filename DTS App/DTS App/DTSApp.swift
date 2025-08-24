@@ -71,7 +71,7 @@ struct DTSApp: App {
         print("🔗 Received URL: \(url.absoluteString)")
         
         // Handle Jobber OAuth callback
-        if url.scheme == "dtsapp" && url.host == "oauth" {
+        if url.scheme == "dtsapp" {
             print("📱 Processing Jobber OAuth callback")
             Task {
                 await jobberAPI.handleOAuthCallback(url)
