@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct MainContentView: View {
-    @StateObject private var jobberAPI = JobberAPI()
+    @EnvironmentObject private var jobberAPI: JobberAPI
     @Environment(\.modelContext) private var modelContext
     @State private var selectedTab = 0
 
@@ -35,7 +35,6 @@ struct MainContentView: View {
             }
             .tag(2)
         }
-        .environmentObject(jobberAPI)
         .onAppear {
             setupJobberAPI()
         }

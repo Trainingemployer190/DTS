@@ -54,7 +54,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     // OAuth Configuration
     private let clientId = "bc74e0a3-3f65-4373-b758-a512536ded90"
     private let clientSecret = "c4cc587785949060e4dd052e598a702d0ed8e91410302ceed2702d30413a6c03"
-    private let redirectURI = "https://trainingemployer190.github.io/dtsapp-oauth-redirect/"
+    private let redirectURI = "dtsapp://oauth/callback"
     private let scopes = "read_clients write_clients read_requests write_requests read_quotes write_quotes read_jobs write_jobs read_scheduled_items write_scheduled_items read_invoices write_invoices read_jobber_payments read_users write_users write_tax_rates read_expenses write_expenses read_custom_field_configurations write_custom_field_configurations read_time_sheets"
 
     // API Endpoints

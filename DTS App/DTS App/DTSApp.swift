@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import BackgroundTasks
+import UIKit
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
@@ -44,6 +45,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 struct DTSApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var showLoadingScreen = true
+    @StateObject private var jobberAPI = JobberAPI()
 
     var body: some Scene {
         WindowGroup {
@@ -57,6 +59,22 @@ struct DTSApp: App {
             } else {
                 MainContentView()
                     .modelContainer(for: [AppSettings.self, QuoteDraft.self, PhotoRecord.self, LineItem.self, OutboxOperation.self])
+                    .environmentObject(jobberAPI)
+            }
+        }
+        .onOpenURL { url in
+            handleIncomingURL(url)
+        }
+    }
+    
+    private func handleIncomingURL(_ url: URL) {
+        print("🔗 Received URL: \(url.absoluteString)")
+        
+        // Handle Jobber OAuth callback
+        if url.scheme == "dtsapp" && url.host == "oauth" {
+            print("📱 Processing Jobber OAuth callback")
+            Task {
+                await jobberAPI.handleOAuthCallback(url)
             }
         }
     }
