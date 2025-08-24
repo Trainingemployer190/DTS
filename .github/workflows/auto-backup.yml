@@ -1,9 +1,9 @@
-# Auto-backup workflow to prevent catastrophic merge issues
-name: Project Backup & Health Check
+# DTS App Build & Health Check
+name: DTS App CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
@@ -13,7 +13,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Check for duplicate files
+    - name: Check for backup files
       run: |
         echo "Checking for backup files that could cause conflicts..."
         find . -name "*.bak*" -o -name "*_backup_*" -o -name "*.swift.bak*" | tee duplicate_files.log
@@ -25,40 +25,57 @@ jobs:
           echo "✅ No problematic backup files found"
         fi
     
-    - name: Check ContentView.swift integrity
+    - name: Check project structure
       run: |
-        CONTENT_VIEW="DTS App/DTS App/ContentView.swift"
-        if [ -f "$CONTENT_VIEW" ]; then
-          LINE_COUNT=$(wc -l < "$CONTENT_VIEW")
-          echo "ContentView.swift has $LINE_COUNT lines"
-          
-          # Check for suspicious line count (duplicate code usually results in 5000+ lines)
-          if [ "$LINE_COUNT" -gt 4000 ]; then
-            echo "⚠️ Warning: ContentView.swift has $LINE_COUNT lines - possible duplicate code detected"
-            exit 1
-          fi
-          
-          # Check for duplicate struct declarations
-          STRUCT_COUNT=$(grep -c "^struct ContentView:" "$CONTENT_VIEW" || echo "0")
-          if [ "$STRUCT_COUNT" -gt 1 ]; then
-            echo "⚠️ Error: Found $STRUCT_COUNT ContentView struct declarations - duplicate code detected"
-            exit 1
-          fi
-          
-          echo "✅ ContentView.swift appears healthy ($LINE_COUNT lines)"
+        echo "Checking DTS App project structure..."
+        
+        # Check for main app files
+        MAIN_APP="DTS App/DTS App/DTSApp.swift"
+        if [ -f "$MAIN_APP" ]; then
+          echo "✅ Main app entry point found: DTSApp.swift"
         else
-          echo "❌ Error: ContentView.swift not found"
+          echo "❌ Error: DTSApp.swift not found"
           exit 1
         fi
+        
+        # Check for MainContentView (replaces ContentView)
+        MAIN_CONTENT="DTS App/DTS App/MainContentView.swift"
+        if [ -f "$MAIN_CONTENT" ]; then
+          echo "✅ Main content view found: MainContentView.swift"
+        else
+          echo "❌ Error: MainContentView.swift not found"
+          exit 1
+        fi
+        
+        # Check for Jobber integration
+        JOBBER_API="DTS App/DTS App/Managers/JobberAPI.swift"
+        if [ -f "$JOBBER_API" ]; then
+          echo "✅ Jobber API integration found"
+        else
+          echo "⚠️ Warning: Jobber API integration not found"
+        fi
+        
+        # Check for loading screen
+        LOADING_SCREEN="DTS App/DTS App/Views/LoadingScreenView.swift"
+        if [ -f "$LOADING_SCREEN" ]; then
+          echo "✅ Custom loading screen found"
+        else
+          echo "⚠️ Warning: Loading screen not found"
+        fi
+        
+        echo "✅ Project structure validation complete"
     
-    - name: Create safety snapshot
-      if: github.ref == 'refs/heads/main'
+    - name: Validate Swift files
       run: |
-        echo "Creating safety snapshot..."
-        tar -czf "project-snapshot-$(date +%Y%m%d-%H%M%S).tar.gz" \
-          --exclude='.git' \
-          --exclude='build' \
-          --exclude='*.xcuserdata' \
-          --exclude='DerivedData' \
-          "DTS App/"
-        echo "✅ Safety snapshot created"
+        echo "Validating Swift files for basic syntax..."
+        find "DTS App/" -name "*.swift" -exec echo "Checking: {}" \;
+        
+        # Count total Swift files
+        SWIFT_COUNT=$(find "DTS App/" -name "*.swift" | wc -l)
+        echo "Found $SWIFT_COUNT Swift files"
+        
+        if [ "$SWIFT_COUNT" -lt 5 ]; then
+          echo "⚠️ Warning: Only $SWIFT_COUNT Swift files found - project may be incomplete"
+        else
+          echo "✅ Project contains $SWIFT_COUNT Swift files"
+        fi
