@@ -24,9 +24,13 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		C81A592F2E5B36C800691B25 /* DTS App.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "DTS App.xcodeproj"; sourceTree = "<group>"; };
 		C87799E52E4CFCB000D3E76D /* DTS App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DTS App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C87799F22E4CFCB200D3E76D /* DTS AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DTS AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C87799FC2E4CFCB200D3E76D /* DTS AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DTS AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C8AC97C02E57E3B100EA1CC6 /* DTS App.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "DTS App.xcodeproj"; sourceTree = "<group>"; };
+		C8ED64772E53769900A5BD76 /* DTS App.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "DTS App.xcodeproj"; sourceTree = "<group>"; };
+		C8ED6E832E55E92900A5BD76 /* DTS App.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = "DTS App.xctestplan"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -72,9 +76,17 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		C81A59352E5B36C800691B25 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		C87799DC2E4CFCB000D3E76D = {
 			isa = PBXGroup;
 			children = (
+				C8ED6E832E55E92900A5BD76 /* DTS App.xctestplan */,
 				C87799E72E4CFCB000D3E76D /* DTS App */,
 				C87799F52E4CFCB200D3E76D /* DTS AppTests */,
 				C87799FF2E4CFCB200D3E76D /* DTS AppUITests */,
@@ -89,6 +101,18 @@
 				C87799F22E4CFCB200D3E76D /* DTS AppTests.xctest */,
 				C87799FC2E4CFCB200D3E76D /* DTS AppUITests.xctest */,
 			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C8AC97CA2E57E3B100EA1CC6 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C8ED64782E53769900A5BD76 /* Products */ = {
+			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
 		};
@@ -198,6 +222,20 @@
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C87799E62E4CFCB000D3E76D /* Products */;
 			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = C8ED64782E53769900A5BD76 /* Products */;
+					ProjectRef = C8ED64772E53769900A5BD76 /* DTS App.xcodeproj */;
+				},
+				{
+					ProductGroup = C8AC97CA2E57E3B100EA1CC6 /* Products */;
+					ProjectRef = C8AC97C02E57E3B100EA1CC6 /* DTS App.xcodeproj */;
+				},
+				{
+					ProductGroup = C81A59352E5B36C800691B25 /* Products */;
+					ProjectRef = C81A592F2E5B36C800691B25 /* DTS App.xcodeproj */;
+				},
+			);
 			projectRoot = "";
 			targets = (
 				C87799E42E4CFCB000D3E76D /* DTS App */,
@@ -399,7 +437,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = WNU63L8T28;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture photos of job sites and measurements for documentation purposes.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app needs location access to add GPS coordinates to photos for accurate job site documentation.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured photos and access existing images for job documentation.";
@@ -430,7 +469,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = WNU63L8T28;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture photos of job sites and measurements for documentation purposes.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app needs location access to add GPS coordinates to photos for accurate job site documentation.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured photos and access existing images for job documentation.";

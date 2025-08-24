@@ -43,17 +43,20 @@ final class AppSettings {
     init() {}
 }
 
-@Model
-final class JobberJob {
+// JobberJob class for API data - simplified without @Model to avoid conflicts
+final class JobberJob: Identifiable {
+    var id: String { jobId } // Conforms to Identifiable
     var jobId: String
     var clientName: String
+    var clientPhone: String?
     var address: String
     var scheduledAt: Date
     var status: String
 
-    init(jobId: String, clientName: String, address: String, scheduledAt: Date, status: String) {
+    init(jobId: String, clientName: String, clientPhone: String?, address: String, scheduledAt: Date, status: String) {
         self.jobId = jobId
         self.clientName = clientName
+        self.clientPhone = clientPhone
         self.address = address
         self.scheduledAt = scheduledAt
         self.status = status
@@ -205,3 +208,22 @@ struct QuoteDraftLineItem {
     let unitPrice: Double
     let totalPrice: Double
 }
+
+// MARK: - Photo Capture Models
+
+#if canImport(UIKit)
+import UIKit
+
+struct CapturedPhoto: Identifiable {
+    let id = UUID()
+    let image: UIImage
+    let timestamp: Date
+    let location: String?
+
+    init(image: UIImage, location: String? = nil) {
+        self.image = image
+        self.timestamp = Date()
+        self.location = location
+    }
+}
+#endif

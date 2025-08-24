@@ -8,12 +8,11 @@
 import SwiftUI
 import SwiftData
 
-@main
+// @main // Commented out - using DTSApp.swift instead
 struct DTS_AppApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             AppSettings.self,
-            JobberJob.self,
             QuoteDraft.self,
             LineItem.self,
             PhotoRecord.self,
@@ -30,7 +29,7 @@ struct DTS_AppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainContentView()
                 .onOpenURL { url in
                     handleIncomingURL(url)
                 }

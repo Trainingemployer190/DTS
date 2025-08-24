@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTS App OAuth Redirect</title>
+</head>
+<body>
+    <div style="text-align: center; margin-top: 50px;">
+        <h2>Connecting to Jobber...</h2>
+        <p>Please wait while we complete the authentication process.</p>
+    </div>
+
+    <script>
+        // This script handles the OAuth callback and passes it back to the iOS app
+        (function() {
+            // Get the current URL and its parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const fragment = new URLSearchParams(window.location.hash.substring(1));
+
+            // Combine query parameters and fragment parameters
+            const params = new URLSearchParams();
+            for (const [key, value] of urlParams) {
+                params.set(key, value);
+            }
+            for (const [key, value] of fragment) {
+                params.set(key, value);
+            }
+
+            // Check if we have the necessary parameters (code or error)
+            const code = params.get('code');
+            const error = params.get('error');
+            const state = params.get('state');
+
+            if (code || error) {
+                // Build the callback URL for the iOS app
+                const callbackUrl = `https://trainingemployer190.github.io/dtsapp-oauth-redirect/?${params.toString()}`;
+
+                // For iOS apps using ASWebAuthenticationSession,
+                // the session will automatically capture this URL
+                document.getElementById('status').innerHTML =
+                    code ? 'Authentication successful! You can close this window.' :
+                           `Authentication failed: ${error}. You can close this window.`;
+
+                // Attempt to close the window (works in some contexts)
+                setTimeout(() => {
+                    try {
+                        window.close();
+                    } catch (e) {
+                        // Window close might fail in some browsers
+                    }
+                }, 1000);
+            } else {
+                document.getElementById('status').innerHTML = 'No authentication parameters found. Please try again.';
+            }
+        })();
+    </script>
+
+    <div id="status" style="text-align: center; margin-top: 20px;"></div>
+</body>
+</html>

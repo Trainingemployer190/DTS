@@ -41,3 +41,15 @@ xcuserdata/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Custom additions to prevent backup and legacy files
+*.backup*
+*.disabled
+*.broken
+*.minimal
+project.pbxproj.backup
+LEGACY_FILES/
+DUPLICATE_FILES_BACKUP/
+Old_Views/
+Backup/
+Archive/
