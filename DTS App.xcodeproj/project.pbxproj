@@ -24,7 +24,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		C80A8B492E61EBD800241B76 /* DTS App.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "DTS App.xcodeproj"; sourceTree = "<group>"; };
 		C81A592F2E5B36C800691B25 /* DTS App.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "DTS App.xcodeproj"; sourceTree = "<group>"; };
+		C86C85FA2E61F71C00CB872E /* DTS App.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "DTS App.xcodeproj"; sourceTree = "<group>"; };
 		C87799E52E4CFCB000D3E76D /* DTS App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DTS App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C87799F22E4CFCB200D3E76D /* DTS AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DTS AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C87799FC2E4CFCB200D3E76D /* DTS AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DTS AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -76,7 +78,21 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		C80A8B532E61EBD800241B76 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		C81A59352E5B36C800691B25 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C86C86002E61F71C00CB872E /* Products */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -230,6 +246,14 @@
 				{
 					ProductGroup = C8AC97CA2E57E3B100EA1CC6 /* Products */;
 					ProjectRef = C8AC97C02E57E3B100EA1CC6 /* DTS App.xcodeproj */;
+				},
+				{
+					ProductGroup = C80A8B532E61EBD800241B76 /* Products */;
+					ProjectRef = C80A8B492E61EBD800241B76 /* DTS App.xcodeproj */;
+				},
+				{
+					ProductGroup = C86C86002E61F71C00CB872E /* Products */;
+					ProjectRef = C86C85FA2E61F71C00CB872E /* DTS App.xcodeproj */;
 				},
 				{
 					ProductGroup = C81A59352E5B36C800691B25 /* Products */;
