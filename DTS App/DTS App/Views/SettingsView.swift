@@ -8,6 +8,10 @@
 import SwiftUI
 import SwiftData
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var jobberAPI: JobberAPI
@@ -63,6 +67,10 @@ struct SettingsView: View {
                 jobberSection
             }
             .navigationTitle("Settings")
+            .onTapGesture {
+                // Dismiss keyboard when tapping outside of text fields
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
         }
     }
 
