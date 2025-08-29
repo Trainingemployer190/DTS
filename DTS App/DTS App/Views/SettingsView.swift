@@ -7,6 +7,11 @@
 
 import SwiftUI
 import SwiftData
+import Combine
+
+#if canImport(UIKit)
+import UIKit
+#endif
 
 #if canImport(UIKit)
 import UIKit
@@ -58,19 +63,27 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                materialCostsSection
-                componentCostsSection
-                laborCostsSection
-                defaultPricingSection
-                gutterGuardPricingSection
-                jobberSection
+            VStack {
+                Form {
+                    materialCostsSection
+                    componentCostsSection
+                    laborCostsSection
+                    defaultPricingSection
+                    gutterGuardPricingSection
+                }
+                .onTapGesture {
+                    // Only dismiss keyboard when tapping outside of interactive elements
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
+                .simultaneousGesture(
+                    // Allow button taps to work properly
+                    TapGesture().onEnded { _ in }
+                )
+
+                // Jobber section outside Form for better button responsiveness
+                jobberSectionStandalone
             }
             .navigationTitle("Settings")
-            .onTapGesture {
-                // Dismiss keyboard when tapping outside of text fields
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            }
         }
     }
 
@@ -332,6 +345,12 @@ struct SettingsView: View {
                         }
                         Text(jobberAPI.isLoading ? "Connecting..." : "Connect to Jobber")
                     }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
                 .disabled(jobberAPI.isLoading)
 
@@ -343,6 +362,92 @@ struct SettingsView: View {
                         .padding(.top, 4)
                 }
             }
+        }
+    }
+
+    private var jobberSectionStandalone: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Jobber Integration")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top)
+
+            VStack(spacing: 12) {
+                if jobberAPI.isAuthenticated {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        VStack(alignment: .leading) {
+                            Text("Connected to Jobber")
+                                .font(.headline)
+                            if let email = jobberAPI.connectedEmail {
+                                Text("Account: \(email)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        Spacer()
+                    }
+
+                    Button("Disconnect") {
+                        jobberAPI.signOut()
+                    }
+                    .foregroundColor(.red)
+                } else {
+                    HStack {
+                        Image(systemName: "exclamationmark.circle")
+                            .foregroundColor(.orange)
+                        VStack(alignment: .leading) {
+                            Text("Not connected to Jobber")
+                                .font(.headline)
+                            Text("Connect to sync your jobs and quotes")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+
+                    // Direct Button implementation without Form wrapper - like Add Labor Item
+                    Button(action: {
+                        print("🔄 User tapped Connect to Jobber button")
+                        print("Current authentication status: \(jobberAPI.isAuthenticated)")
+                        print("Current loading status: \(jobberAPI.isLoading)")
+                        if let error = jobberAPI.errorMessage {
+                            print("Current error: \(error)")
+                        }
+                        jobberAPI.authenticate()
+                    }) {
+                        HStack {
+                            if jobberAPI.isLoading {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "link.circle.fill")
+                            }
+                            Text(jobberAPI.isLoading ? "Connecting..." : "Connect to Jobber")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(.blue)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .disabled(jobberAPI.isLoading)
+
+                    // Show error message if there is one
+                    if let error = jobberAPI.errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .padding(.top, 4)
+                    }
+                }
+            }
+            .padding()
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal)
         }
     }
 }
