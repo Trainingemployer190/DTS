@@ -103,7 +103,7 @@ class JobberAPI: ObservableObject {
     private let clientSecret = "YOUR_CLIENT_SECRET_HERE"
     private let redirectUri = "dts-app://oauth/callback"
     private let baseUrl = "https://api.getjobber.com/api/graphql"
-    
+
     // Authentication endpoints
     private let authUrl = "https://api.getjobber.com/api/oauth/authorize"
     private let tokenUrl = "https://api.getjobber.com/api/oauth/token"

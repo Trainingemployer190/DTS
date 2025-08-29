@@ -17,7 +17,7 @@ struct CalculatorView: View {
     @State private var shouldResetDisplay = false
 
     private let buttons: [[String]] = [
-        ["C", "±", "%", "÷"],
+        ["⌫", "±", "%", "÷"],
         ["7", "8", "9", "×"],
         ["4", "5", "6", "-"],
         ["1", "2", "3", "+"]
@@ -54,6 +54,7 @@ struct CalculatorView: View {
                                 CalculatorButton(
                                     title: button,
                                     action: { buttonPressed(button) },
+                                    longPressAction: button == "⌫" ? { clear() } : nil,
                                     isSelected: false,
                                     size: CGSize(
                                         width: (geometry.size.width - 3) / 4,
@@ -139,8 +140,8 @@ struct CalculatorView: View {
 
     private func buttonPressed(_ button: String) {
         switch button {
-        case "C":
-            clear()
+        case "⌫":
+            backspace()
         case "±":
             toggleSign()
         case "%":
@@ -167,6 +168,45 @@ struct CalculatorView: View {
         expression = ""
         currentNumber = "0"
         shouldResetDisplay = false
+    }
+    
+    private func backspace() {
+        if shouldResetDisplay {
+            // If we should reset display, just clear everything
+            clear()
+            return
+        }
+        
+        if !expression.isEmpty && currentNumber == "0" {
+            // We're in the middle of an expression, remove the last character from expression
+            expression = String(expression.dropLast())
+            if expression.isEmpty {
+                currentNumber = "0"
+            } else {
+                // Find the last number in the expression
+                let components = expression.components(separatedBy: CharacterSet(charactersIn: "+-×÷"))
+                if let lastComponent = components.last, !lastComponent.isEmpty {
+                    currentNumber = lastComponent
+                    // Remove the number we just extracted from expression
+                    let operatorIndex = expression.lastIndex { "+-×÷".contains($0) }
+                    if let index = operatorIndex {
+                        expression = String(expression[...index])
+                    } else {
+                        expression = ""
+                    }
+                } else {
+                    currentNumber = "0"
+                }
+            }
+        } else if currentNumber != "0" {
+            // Remove the last digit from current number
+            currentNumber = String(currentNumber.dropLast())
+            if currentNumber.isEmpty || currentNumber == "-" {
+                currentNumber = "0"
+            }
+        }
+        
+        updateDisplay()
     }
 
     private func toggleSign() {
@@ -274,19 +314,21 @@ struct CalculatorView: View {
 struct CalculatorButton: View {
     let title: String
     let action: () -> Void
+    let longPressAction: (() -> Void)?
     let isSelected: Bool
     let size: CGSize
 
-    init(title: String, action: @escaping () -> Void, isSelected: Bool = false, size: CGSize = CGSize(width: 80, height: 80)) {
+    init(title: String, action: @escaping () -> Void, longPressAction: (() -> Void)? = nil, isSelected: Bool = false, size: CGSize = CGSize(width: 80, height: 80)) {
         self.title = title
         self.action = action
+        self.longPressAction = longPressAction
         self.isSelected = isSelected
         self.size = size
     }
 
     private var backgroundColor: Color {
         switch title {
-        case "C", "±", "%":
+        case "⌫", "±", "%":
             return Color(.systemGray)
         case "÷", "×", "-", "+", "=":
             return isSelected ? .white : .orange
@@ -317,6 +359,13 @@ struct CalculatorButton: View {
                 .background(backgroundColor)
         }
         .buttonStyle(PlainButtonStyle())
+        .simultaneousGesture(
+            longPressAction != nil ? 
+            LongPressGesture(minimumDuration: 0.5)
+                .onEnded { _ in
+                    longPressAction?()
+                } : nil
+        )
     }
 }
 
