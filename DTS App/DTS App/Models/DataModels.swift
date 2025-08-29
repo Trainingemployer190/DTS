@@ -47,14 +47,20 @@ final class AppSettings {
 final class JobberJob: Identifiable {
     var id: String { jobId } // Conforms to Identifiable
     var jobId: String
+    var requestId: String? // Add request ID for note creation
+    var clientId: String // Required for quote creation
+    var propertyId: String? // Required for quote creation if no requestId
     var clientName: String
     var clientPhone: String?
     var address: String
     var scheduledAt: Date
     var status: String
 
-    init(jobId: String, clientName: String, clientPhone: String?, address: String, scheduledAt: Date, status: String) {
+    init(jobId: String, requestId: String? = nil, clientId: String, propertyId: String? = nil, clientName: String, clientPhone: String?, address: String, scheduledAt: Date, status: String) {
         self.jobId = jobId
+        self.requestId = requestId
+        self.clientId = clientId
+        self.propertyId = propertyId
         self.clientName = clientName
         self.clientPhone = clientPhone
         self.address = address
@@ -75,6 +81,7 @@ final class QuoteDraft: ObservableObject {
     var localId: UUID = UUID()
     var jobId: String?
     var clientId: String?
+    var clientName: String = ""
     var gutterFeet: Double = 0
     var downspoutFeet: Double = 0
     var elbowsCount: Int = 0

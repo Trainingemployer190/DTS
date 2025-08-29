@@ -35,6 +35,9 @@ class PhotoCaptureManager: NSObject, ObservableObject {
     private let maxCachedImages = 20 // Limit cached images to prevent memory issues
     private let geocoder = CLGeocoder()
 
+    // Cached authorization status to avoid main thread warnings
+    private var cachedAuthorizationStatus: CLAuthorizationStatus = .notDetermined
+
     // Geocoding throttling and caching
     private var lastGeocodingTime: Date = .distantPast
     private var lastGeocodedLocation: CLLocation?
@@ -44,6 +47,8 @@ class PhotoCaptureManager: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        // Initialize cached status synchronously since this is during object creation
+        cachedAuthorizationStatus = locationManager.authorizationStatus
         setupLocationManager()
         checkLocationPermission()
         checkPhotosPermission()
@@ -87,25 +92,36 @@ class PhotoCaptureManager: NSObject, ObservableObject {
     }
 
     private func checkLocationPermission() {
-        switch locationManager.authorizationStatus {
-        case .authorizedWhenInUse, .authorizedAlways:
-            isLocationAuthorized = true
-            // Don't start continuous updates - only get location when needed
-            locationError = nil
-        case .notDetermined:
-            locationManager.requestWhenInUseAuthorization()
-        case .denied, .restricted:
-            isLocationAuthorized = false
-            locationError = "Location access denied. Go to Settings > Privacy & Security > Location Services to enable location access for this app."
-        @unknown default:
-            isLocationAuthorized = false
-            locationError = "Location access status unknown."
+        Task {
+            let status = locationManager.authorizationStatus
+            await MainActor.run {
+                cachedAuthorizationStatus = status
+                switch status {
+                case .authorizedWhenInUse, .authorizedAlways:
+                    isLocationAuthorized = true
+                    // Don't start continuous updates - only get location when needed
+                    locationError = nil
+                case .notDetermined:
+                    Task {
+                        locationManager.requestWhenInUseAuthorization()
+                    }
+                case .denied, .restricted:
+                    isLocationAuthorized = false
+                    locationError = "Location access denied. Go to Settings > Privacy & Security > Location Services to enable location access for this app."
+                @unknown default:
+                    isLocationAuthorized = false
+                    locationError = "Location access status unknown."
+                }
+            }
         }
     }
 
     func requestLocationPermission() {
-        if locationManager.authorizationStatus == .notDetermined {
-            locationManager.requestWhenInUseAuthorization()
+        Task {
+            let status = locationManager.authorizationStatus
+            if status == .notDetermined {
+                locationManager.requestWhenInUseAuthorization()
+            }
         }
     }
 
@@ -351,8 +367,8 @@ class PhotoCaptureManager: NSObject, ObservableObject {
             return "Location services disabled"
         }
 
-        // Check authorization status
-        switch locationManager.authorizationStatus {
+        // Check cached authorization status to avoid main thread warnings
+        switch cachedAuthorizationStatus {
         case .denied, .restricted:
             return "Location access denied"
         case .notDetermined:
@@ -381,8 +397,8 @@ class PhotoCaptureManager: NSObject, ObservableObject {
             return "📍 Location services disabled"
         }
 
-        // Check authorization status
-        switch locationManager.authorizationStatus {
+        // Check cached authorization status to avoid main thread warnings
+        switch cachedAuthorizationStatus {
         case .denied, .restricted:
             return "📍 Location access denied. Enable in Settings > Privacy & Security > Location Services"
         case .notDetermined:
@@ -503,6 +519,7 @@ extension PhotoCaptureManager: CLLocationManagerDelegate {
 
     nonisolated func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
         Task { @MainActor in
+            cachedAuthorizationStatus = status
             switch status {
             case .authorizedWhenInUse, .authorizedAlways:
                 isLocationAuthorized = true

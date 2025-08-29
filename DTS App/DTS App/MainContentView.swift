@@ -18,7 +18,7 @@ struct MainContentView: View {
             .tag(0)
 
             NavigationView {
-                QuoteFormView()
+                QuoteFormView(job: nil)
             }
             .tabItem {
                 Image(systemName: "doc.text")

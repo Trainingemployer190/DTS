@@ -4,7 +4,8 @@ import SwiftData
 // MARK: - Quote Form View
 
 struct QuoteFormView: View {
-    let jobId: String?
+    let job: JobberJob?
+    let prefilledQuoteDraft: QuoteDraft?
 
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var jobberAPI: JobberAPI
@@ -16,6 +17,8 @@ struct QuoteFormView: View {
     @State private var newLineItemAmount: Double = 0
     @State private var showingSaveToJobberAlert = false
     @State private var isSavingToJobber = false
+    @State private var showingJobberSuccess = false
+    @State private var jobberSubmissionError: String?
     @StateObject private var photoCaptureManager = PhotoCaptureManager()
     @State private var showingPhotoGallery = false
     @State private var generatedPDFURL: URL?
@@ -31,6 +34,17 @@ struct QuoteFormView: View {
         case downspoutFeet
         case elbowsCount
         case endCapPairs
+    }
+
+    // Convenience initializers
+    init(job: JobberJob?) {
+        self.job = job
+        self.prefilledQuoteDraft = nil
+    }
+
+    init(job: JobberJob?, prefilledQuoteDraft: QuoteDraft?) {
+        self.job = job
+        self.prefilledQuoteDraft = prefilledQuoteDraft
     }
 
     // Common labor items for quick selection
@@ -56,10 +70,6 @@ struct QuoteFormView: View {
                 // No action needed as this will be updated automatically
             }
         )
-    }
-
-    init(jobId: String? = nil) {
-        self.jobId = jobId
     }
 
     // Helper function to create a binding that clears zero values
@@ -318,7 +328,7 @@ struct QuoteFormView: View {
     var body: some View {
         NavigationStack {
             formContent
-            .navigationTitle(jobId != nil ? "Create Quote" : "Standalone Quote")
+            .navigationTitle(job != nil ? "Create Quote" : "Standalone Quote")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     toolbarContent
@@ -327,7 +337,7 @@ struct QuoteFormView: View {
             .alert("Save to Jobber", isPresented: $showingSaveToJobberAlert) {
                 alertButtons
             } message: {
-                Text("Would you like to save this quote locally only or create a quote draft in Jobber?")
+                Text("Would you like to save this quote locally only or submit it to Jobber?\n\nJobber submission will:\n• Add quote details as a note with photos\n• Create an official quote with proper line items")
             }
             .fullScreenCover(isPresented: $photoCaptureManager.showingCamera) {
                 CameraView(isPresented: $photoCaptureManager.showingCamera, captureCount: $photoCaptureManager.captureCount) { image in
@@ -352,6 +362,18 @@ struct QuoteFormView: View {
             } message: {
                 Text("Quote PDF has been generated successfully. You can view and share it with your client.")
             }
+            .alert("Quote Submitted Successfully!", isPresented: $showingJobberSuccess) {
+                Button("OK") { }
+            } message: {
+                Text("Your quote has been added as a note to the Jobber assessment and created as an official quote with proper line items and pricing.")
+            }
+            .alert("Submission Failed", isPresented: .constant(jobberSubmissionError != nil)) {
+                Button("OK") {
+                    jobberSubmissionError = nil
+                }
+            } message: {
+                Text(jobberSubmissionError ?? "Unknown error occurred")
+            }
             .sheet(isPresented: $showingShareSheet) {
                 if let pdfURL = generatedPDFURL {
                     ShareSheet(activityItems: [pdfURL])
@@ -364,12 +386,27 @@ struct QuoteFormView: View {
             }
         }
         .onAppear {
-            // Initialize with default values from settings
-            // Settings values are already stored as decimals (e.g., 0.35 for 35%)
-            quoteDraft.markupPercent = settings.defaultMarkupPercent
-            quoteDraft.profitMarginPercent = settings.defaultProfitMarginPercent
-            quoteDraft.salesCommissionPercent = settings.defaultSalesCommissionPercent
-            quoteDraft.jobId = jobId
+            // If we have a pre-filled quote draft, use it
+            if let prefilledQuoteDraft = prefilledQuoteDraft {
+                quoteDraft = prefilledQuoteDraft
+                print("Using pre-filled quote draft for client: \(prefilledQuoteDraft.clientName)")
+            }
+
+            // Initialize with default values from settings if not already set
+            if quoteDraft.markupPercent == 0 {
+                quoteDraft.markupPercent = settings.defaultMarkupPercent
+            }
+            if quoteDraft.profitMarginPercent == 0 {
+                quoteDraft.profitMarginPercent = settings.defaultProfitMarginPercent
+            }
+            if quoteDraft.salesCommissionPercent == 0 {
+                quoteDraft.salesCommissionPercent = settings.defaultSalesCommissionPercent
+            }
+
+            // Set job ID if available
+            if let jobId = job?.jobId {
+                quoteDraft.jobId = jobId
+            }
         }
     }
 
@@ -669,8 +706,8 @@ struct QuoteFormView: View {
     @ViewBuilder
     private var toolbarContent: some View {
         HStack {
-            if jobberAPI.isAuthenticated && jobId != nil {
-                Button("Save to Jobber") {
+            if jobberAPI.isAuthenticated && job != nil {
+                Button(isSavingToJobber ? "Saving..." : "Save to Jobber") {
                     showingSaveToJobberAlert = true
                 }
                 .disabled(quoteDraft.gutterFeet == 0 || isSavingToJobber)
@@ -689,9 +726,10 @@ struct QuoteFormView: View {
             saveQuote()
         }
 
-        Button("Save to Jobber") {
+        Button(isSavingToJobber ? "Saving..." : "Save to Jobber") {
             saveQuoteToJobber()
         }
+        .disabled(isSavingToJobber)
 
         Button("Cancel", role: .cancel) { }
     }
@@ -714,13 +752,82 @@ struct QuoteFormView: View {
         // First save locally
         saveQuote()
 
-        // Then sync to Jobber
+        // Then submit to Jobber as note AND create a quote
         Task {
-            // TODO: Implement createQuoteDraft method in JobberAPI
-            // await jobberAPI.createQuoteDraft(quoteDraft: quoteDraft)
+            do {
+                guard let job = job else {
+                    throw JobberAPIError.invalidRequest("No job available")
+                }
 
-            DispatchQueue.main.async {
-                self.isSavingToJobber = false
+                print("🔍 saveQuoteToJobber - Job: \(job.jobId)")
+                print("🔍 saveQuoteToJobber - Job requestId: \(String(describing: job.requestId))")
+
+                guard let requestId = job.requestId else {
+                    throw JobberAPIError.invalidRequest("No request ID available for this assessment - this assessment might not be linked to a request")
+                }
+
+                print("📤 Submitting quote to Jobber with requestId: \(requestId)")
+
+                // Calculate current breakdown
+                let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
+
+                // Get captured photos
+                let photos = photoCaptureManager.capturedImages.map { $0.image }
+
+                // Step 1: Submit quote as note to Jobber (existing functionality)
+                let noteResult = await jobberAPI.submitQuoteAsNote(
+                    requestId: requestId,
+                    quote: quoteDraft,
+                    breakdown: breakdown,
+                    photos: photos
+                )
+
+                // Step 2: Create actual quote in Jobber with proper line items
+                let quoteResult = await jobberAPI.createQuoteFromJobWithMeasurements(
+                    job: job,
+                    quoteDraft: quoteDraft,
+                    breakdown: breakdown
+                )
+
+                await MainActor.run {
+                    var hasError = false
+                    var errorMessages: [String] = []
+
+                    // Check note creation result
+                    switch noteResult {
+                    case .success(_):
+                        print("✅ Note created successfully")
+                    case .failure(let error):
+                        hasError = true
+                        errorMessages.append("Note creation failed: \(error.localizedDescription)")
+                    }
+
+                    // Check quote creation result
+                    switch quoteResult {
+                    case .success(let quoteId):
+                        print("✅ Quote created successfully with ID: \(quoteId)")
+                    case .failure(let error):
+                        hasError = true
+                        errorMessages.append("Quote creation failed: \(error.localizedDescription)")
+                    }
+
+                    if hasError {
+                        jobberSubmissionError = errorMessages.joined(separator: "\n")
+                    } else {
+                        // Show success message
+                        showingJobberSuccess = true
+                        // Provide haptic feedback
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                        impactFeedback.impactOccurred()
+                    }
+
+                    isSavingToJobber = false
+                }
+            } catch {
+                await MainActor.run {
+                    jobberSubmissionError = error.localizedDescription
+                    isSavingToJobber = false
+                }
             }
         }
     }

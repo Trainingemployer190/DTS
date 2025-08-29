@@ -169,14 +169,14 @@ struct CalculatorView: View {
         currentNumber = "0"
         shouldResetDisplay = false
     }
-    
+
     private func backspace() {
         if shouldResetDisplay {
             // If we should reset display, just clear everything
             clear()
             return
         }
-        
+
         if !expression.isEmpty && currentNumber == "0" {
             // We're in the middle of an expression, remove the last character from expression
             expression = String(expression.dropLast())
@@ -205,7 +205,7 @@ struct CalculatorView: View {
                 currentNumber = "0"
             }
         }
-        
+
         updateDisplay()
     }
 
@@ -360,7 +360,7 @@ struct CalculatorButton: View {
         }
         .buttonStyle(PlainButtonStyle())
         .simultaneousGesture(
-            longPressAction != nil ? 
+            longPressAction != nil ?
             LongPressGesture(minimumDuration: 0.5)
                 .onEnded { _ in
                     longPressAction?()

@@ -547,7 +547,7 @@ struct ActionButtonsSection: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            NavigationLink(destination: QuoteFormView(jobId: job.jobId)) {
+            NavigationLink(destination: QuoteFormView(job: job)) {
                 HStack {
                     Image(systemName: "doc.text.fill")
                     Text("Create Quote")

@@ -24,6 +24,25 @@ enum APIError: Error {
     case graphQLError(String)
 }
 
+enum JobberAPIError: Error {
+    case invalidRequest(String)
+    case networkError(String)
+    case authenticationRequired
+}
+
+extension JobberAPIError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .invalidRequest(let message):
+            return "Invalid request: \(message)"
+        case .networkError(let message):
+            return "Network error: \(message)"
+        case .authenticationRequired:
+            return "Please connect to Jobber first"
+        }
+    }
+}
+
 extension APIError: LocalizedError {
     var errorDescription: String? {
         switch self {
@@ -575,6 +594,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                   }
                 }
                 property {
+                  id
                   address {
                     street1
                     city
@@ -589,6 +609,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                   }
                 }
                 request {
+                  id
                   requestStatus
                   source
                   title
@@ -629,6 +650,8 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                         print("Processing assessment: \(assessment.id)")
                         print("Assessment title: \(assessment.title ?? "No title")")
                         print("Assessment startAt: \(assessment.startAt)")
+                        print("Assessment request: \(String(describing: assessment.request))")
+                        print("Assessment request ID: \(String(describing: assessment.request?.id))")
 
                         guard let startAt = self.parseDate(assessment.startAt) else {
                             print("Could not parse start date: \(assessment.startAt)")
@@ -671,6 +694,9 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                         // Create JobberJob
                         let jobberJob = JobberJob(
                             jobId: assessment.id,
+                            requestId: assessment.request?.id,
+                            clientId: assessment.client.id,
+                            propertyId: assessment.property?.id,
                             clientName: clientName,
                             clientPhone: clientPhone,
                             address: address,
@@ -678,6 +704,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                             status: status
                         )
 
+                        print("Created JobberJob with requestId: \(String(describing: jobberJob.requestId))")
                         fetchedJobs.append(jobberJob)
                         print("Added assessment: \(clientName) at \(startAt) (\(status))")
                     }
@@ -781,6 +808,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                   }
                 }
                 property {
+                  id
                   address {
                     street1
                     city
@@ -795,6 +823,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                   }
                 }
                 request {
+                  id
                   requestStatus
                   source
                   title
@@ -868,6 +897,9 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
 
                         let jobberJob = JobberJob(
                             jobId: assessment.id,
+                            requestId: assessment.request?.id,
+                            clientId: assessment.client.id,
+                            propertyId: assessment.property?.id,
                             clientName: clientName,
                             clientPhone: clientPhone,
                             address: address,
@@ -926,7 +958,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         }
 
         let variables: [String: Any] = [
-            "input": [
+            "attributes": [
                 "clientId": quoteDraft.clientId ?? "",
                 "title": "Gutter Installation Quote",
                 "lineItems": lineItems
@@ -934,8 +966,8 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         ]
 
         let mutation = """
-        mutation CreateQuote($input: QuoteCreateInput!) {
-          quoteCreate(input: $input) {
+        mutation CreateQuote($attributes: QuoteCreateAttributes!) {
+          quoteCreate(attributes: $attributes) {
             quote {
               id
               title
@@ -965,6 +997,707 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                 case .failure(let error):
                     self.errorMessage = "Failed to create quote: \(error.localizedDescription)"
                 }
+            }
+        }
+    }
+
+    /// Creates a simple Jobber quote from a JobberJob (assessment)
+    func createQuoteFromJob(
+        job: JobberJob,
+        quoteDraft: QuoteDraft,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) async {
+        guard await ensureValidAccessToken() else {
+            await MainActor.run {
+                self.errorMessage = "Please connect your Jobber account first"
+            }
+            completion(.failure(APIError.noToken))
+            return
+        }
+
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+
+        print("Creating quote from JobberJob: \(job.jobId)")
+        print("Client: \(job.clientName)")
+        print("Request ID: \(String(describing: job.requestId))")
+
+        // Debug the job data first
+        print("DEBUG: JobberJob data:")
+        print("  - jobId: \(job.jobId)")
+        print("  - clientId: '\(job.clientId)'")
+        print("  - propertyId: \(String(describing: job.propertyId))")
+        print("  - requestId: \(String(describing: job.requestId))")
+
+        // Convert QuoteDraft line items to Jobber format
+        let lineItems = quoteDraft.lineItemsForJobber.map { item in
+            [
+                "name": item.name,
+                "description": item.description,
+                "quantity": item.quantity,
+                "unitCost": item.unitPrice
+            ]
+        }
+
+        // Build input dictionary with proper client and property references
+        var inputDict: [String: Any] = [
+            "title": "Gutter Installation Quote - \(job.clientName)",
+            "lineItems": lineItems
+        ]
+
+        // Use request ID first, otherwise use clientId and propertyId
+        // But based on the error, it seems like we need to provide clientId and propertyId even when we have requestId
+        if let requestId = job.requestId {
+            inputDict["requestId"] = requestId
+            print("Linking quote to request ID: \(requestId)")
+
+            // Also provide clientId and propertyId if available (seems to be required by the API)
+            if !job.clientId.isEmpty && job.clientId != "unknown" {
+                inputDict["clientId"] = job.clientId
+                print("Also including clientId: \(job.clientId)")
+            }
+            if let propertyId = job.propertyId, !propertyId.isEmpty {
+                inputDict["propertyId"] = propertyId
+                print("Also including propertyId: \(propertyId)")
+            }
+        } else if !job.clientId.isEmpty && job.clientId != "unknown", let propertyId = job.propertyId, !propertyId.isEmpty {
+            inputDict["clientId"] = job.clientId
+            inputDict["propertyId"] = propertyId
+            print("Using clientId: \(job.clientId) and propertyId: \(propertyId)")
+        } else {
+            await MainActor.run {
+                self.isLoading = false
+                self.errorMessage = "Cannot create quote: Missing client ID ('\(job.clientId)') or property ID ('\(String(describing: job.propertyId))')"
+            }
+            completion(.failure(APIError.invalidResponse))
+            return
+        }
+
+        let variables: [String: Any] = ["attributes": inputDict]
+
+        let mutation = """
+        mutation CreateQuote($attributes: QuoteCreateAttributes!) {
+          quoteCreate(attributes: $attributes) {
+            quote {
+              id
+              title
+              createdAt
+              client {
+                id
+                name
+              }
+            }
+            userErrors {
+              field
+              message
+              path
+            }
+          }
+        }
+        """
+
+        await performGraphQLRequest(query: mutation, variables: variables) { [weak self] (result: Result<QuoteCreateResponse, Error>) in
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.isLoading = false
+
+                switch result {
+                case .success(let response):
+                    if let userErrors = response.data.quoteCreate.userErrors, !userErrors.isEmpty {
+                        let errors = userErrors.map { $0.message }.joined(separator: ", ")
+                        let errorMessage = "Quote creation failed: \(errors)"
+                        self.errorMessage = errorMessage
+                        print("❌ Quote creation failed: \(errors)")
+                        completion(.failure(APIError.graphQLError(errorMessage)))
+                    } else if let quote = response.data.quoteCreate.quote {
+                        self.errorMessage = nil
+                        let successMessage = "Quote '\(quote.title)' created successfully with ID: \(quote.id)"
+                        print("✅ \(successMessage)")
+                        completion(.success(quote.id))
+                    } else {
+                        let errorMessage = "Quote creation succeeded but no quote data returned"
+                        self.errorMessage = errorMessage
+                        print("❌ \(errorMessage)")
+                        completion(.failure(APIError.invalidResponse))
+                    }
+                case .failure(let error):
+                    let errorMessage = "Failed to create quote: \(error.localizedDescription)"
+                    self.errorMessage = errorMessage
+                    print("❌ \(errorMessage)")
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+
+    /// Creates a Jobber quote draft from an assessment with pre-filled line items
+    func createQuoteFromAssessment(
+        assessment: AssessmentNode,
+        quoteDraft: QuoteDraft,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) async {
+        guard await ensureValidAccessToken() else {
+            await MainActor.run {
+                self.errorMessage = "Please connect your Jobber account first"
+            }
+            completion(.failure(APIError.noToken))
+            return
+        }
+
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+
+        print("Creating quote from assessment: \(assessment.id)")
+        print("Assessment title: \(assessment.title ?? "No title")")
+        print("Client ID: \(assessment.client.id)")
+        print("Request ID: \(String(describing: assessment.request?.id))")
+
+        // Convert QuoteDraft line items to Jobber format
+        let lineItems = quoteDraft.lineItemsForJobber.map { item in
+            [
+                "name": item.name,
+                "description": item.description,
+                "quantity": item.quantity,
+                "unitCost": item.unitPrice
+            ]
+        }
+
+        var inputDict: [String: Any] = [
+            "clientId": assessment.client.id,
+            "title": assessment.title ?? "Gutter Installation Quote",
+            "lineItems": lineItems
+        ]
+
+        // Link to original request if available
+        if let requestId = assessment.request?.id {
+            inputDict["requestId"] = requestId
+            print("Linking quote to request ID: \(requestId)")
+        }
+
+        let variables: [String: Any] = ["attributes": inputDict]
+
+        let mutation = """
+        mutation CreateQuote($attributes: QuoteCreateAttributes!) {
+          quoteCreate(attributes: $attributes) {
+            quote {
+              id
+              title
+              createdAt
+              client {
+                id
+                name
+              }
+            }
+            userErrors {
+              field
+              message
+              path
+            }
+          }
+        }
+        """
+
+        await performGraphQLRequest(query: mutation, variables: variables) { [weak self] (result: Result<QuoteCreateResponse, Error>) in
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.isLoading = false
+
+                switch result {
+                case .success(let response):
+                    if let userErrors = response.data.quoteCreate.userErrors, !userErrors.isEmpty {
+                        let errors = userErrors.map { $0.message }.joined(separator: ", ")
+                        let errorMessage = "Quote creation failed: \(errors)"
+                        self.errorMessage = errorMessage
+                        print("❌ Quote creation failed: \(errors)")
+                        completion(.failure(APIError.graphQLError(errorMessage)))
+                    } else if let quote = response.data.quoteCreate.quote {
+                        self.errorMessage = nil
+                        let successMessage = "Quote '\(quote.title)' created successfully with ID: \(quote.id)"
+                        print("✅ \(successMessage)")
+                        completion(.success(quote.id))
+                    } else {
+                        let errorMessage = "Quote creation succeeded but no quote data returned"
+                        self.errorMessage = errorMessage
+                        print("❌ \(errorMessage)")
+                        completion(.failure(APIError.invalidResponse))
+                    }
+                case .failure(let error):
+                    let errorMessage = "Failed to create quote: \(error.localizedDescription)"
+                    self.errorMessage = errorMessage
+                    print("❌ \(errorMessage)")
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+
+    /// Creates a Jobber quote from measurements with proper line item structure
+    func createQuoteFromJobWithMeasurements(
+        job: JobberJob,
+        quoteDraft: QuoteDraft,
+        breakdown: PricingEngine.PriceBreakdown
+    ) async -> Result<String, Error> {
+        guard await ensureValidAccessToken() else {
+            await MainActor.run {
+                self.errorMessage = "Please connect your Jobber account first"
+            }
+            return .failure(APIError.noToken)
+        }
+
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+
+        print("Creating measurement-based quote for JobberJob: \(job.jobId)")
+        print("Client: \(job.clientName)")
+        print("Gutter Feet: \(quoteDraft.gutterFeet)")
+        print("Downspout Feet: \(quoteDraft.downspoutFeet)")
+        print("Include Gutter Guard: \(quoteDraft.includeGutterGuard)")
+        print("Gutter Guard Feet: \(quoteDraft.gutterGuardFeet)")
+
+        // Create line items based on measurements and pricing logic
+        var lineItems: [[String: Any]] = []
+
+        // Calculate gutter pricing
+        if quoteDraft.gutterFeet > 0 {
+            let gutterPrice: Double
+            let gutterDescription: String
+
+            if quoteDraft.includeGutterGuard && quoteDraft.gutterGuardFeet > 0 {
+                // Gutter guard is included - split pricing
+                let gutterOnlyPrice = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost + breakdown.laborCost
+
+                gutterPrice = gutterOnlyPrice
+                gutterDescription = """
+                Gutter Installation - \(String(format: "%.0f", quoteDraft.gutterFeet))ft gutter, \
+                \(String(format: "%.0f", quoteDraft.downspoutFeet))ft downspout, \
+                \(quoteDraft.elbowsCount) elbows, \(quoteDraft.endCapPairs) end caps
+                """
+
+                print("Gutter-only line item: \(gutterPrice.toCurrency())")
+            } else {
+                // No gutter guard - full price for gutter
+                gutterPrice = breakdown.totalPrice - breakdown.additionalItemsCost
+                gutterDescription = """
+                Complete Gutter Installation - \(String(format: "%.0f", quoteDraft.gutterFeet))ft gutter, \
+                \(String(format: "%.0f", quoteDraft.downspoutFeet))ft downspout, \
+                \(quoteDraft.elbowsCount) elbows, \(quoteDraft.endCapPairs) end caps
+                """
+
+                print("Complete gutter line item: \(gutterPrice.toCurrency())")
+            }
+
+            lineItems.append([
+                "name": "Gutter Installation",
+                "description": gutterDescription,
+                "quantity": 1,
+                "unitCost": gutterPrice,
+                "saveToProductsAndServices": false
+            ])
+        }
+
+        // Add gutter guard as separate line item if included
+        if quoteDraft.includeGutterGuard && quoteDraft.gutterGuardFeet > 0 {
+            let gutterGuardPrice = breakdown.gutterGuardCost
+            let gutterGuardDescription = "Gutter Guard Installation - \(String(format: "%.0f", quoteDraft.gutterGuardFeet))ft"
+
+            lineItems.append([
+                "name": "Gutter Guard Installation",
+                "description": gutterGuardDescription,
+                "quantity": 1,
+                "unitCost": gutterGuardPrice,
+                "saveToProductsAndServices": false
+            ])
+
+            print("Gutter guard line item: \(gutterGuardPrice.toCurrency())")
+        }
+
+        // Add any additional labor items
+        for item in quoteDraft.additionalLaborItems {
+            lineItems.append([
+                "name": item.title,
+                "description": item.title,
+                "quantity": 1,
+                "unitCost": item.amount,
+                "saveToProductsAndServices": false
+            ])
+            print("Additional item: \(item.title) - \(item.amount.toCurrency())")
+        }
+
+        // Build the input dictionary
+        var inputDict: [String: Any] = [
+            "title": "Gutter Installation Quote - \(job.clientName)",
+            "lineItems": lineItems
+        ]
+
+        // Debug the job data first
+        print("DEBUG: JobberJob data:")
+        print("  - jobId: \(job.jobId)")
+        print("  - clientId: '\(job.clientId)'")
+        print("  - propertyId: \(String(describing: job.propertyId))")
+        print("  - requestId: \(String(describing: job.requestId))")
+
+        // Link to request - API requires either requestId OR both clientId and propertyId
+        // But based on the error, it seems like we need to provide clientId and propertyId even when we have requestId
+        if let requestId = job.requestId {
+            inputDict["requestId"] = requestId
+            print("Linking quote to request ID: \(requestId)")
+
+            // Also provide clientId and propertyId if available (seems to be required by the API)
+            if !job.clientId.isEmpty && job.clientId != "unknown" {
+                inputDict["clientId"] = job.clientId
+                print("Also including clientId: \(job.clientId)")
+            }
+            if let propertyId = job.propertyId, !propertyId.isEmpty {
+                inputDict["propertyId"] = propertyId
+                print("Also including propertyId: \(propertyId)")
+            }
+        } else if !job.clientId.isEmpty && job.clientId != "unknown", let propertyId = job.propertyId, !propertyId.isEmpty {
+            // Use clientId and propertyId if available
+            inputDict["clientId"] = job.clientId
+            inputDict["propertyId"] = propertyId
+            print("Using clientId: \(job.clientId) and propertyId: \(propertyId)")
+        } else {
+            // For now, we can't create quotes without proper client/property linkage
+            await MainActor.run {
+                self.isLoading = false
+                self.errorMessage = "Cannot create quote: Missing client ID ('\(job.clientId)') or property ID ('\(String(describing: job.propertyId))')"
+            }
+            return .failure(APIError.invalidResponse)
+        }
+
+        let variables: [String: Any] = ["attributes": inputDict]
+
+        let mutation = """
+        mutation CreateQuote($attributes: QuoteCreateAttributes!) {
+          quoteCreate(attributes: $attributes) {
+            quote {
+              id
+              title
+              createdAt
+              client {
+                id
+                name
+              }
+            }
+            userErrors {
+              message
+              path
+            }
+          }
+        }
+        """
+
+        return await withCheckedContinuation { continuation in
+            Task {
+                await performGraphQLRequest(query: mutation, variables: variables) { [weak self] (result: Result<QuoteCreateResponse, Error>) in
+                    Task { @MainActor in
+                        guard let self = self else {
+                            continuation.resume(returning: .failure(APIError.invalidResponse))
+                            return
+                        }
+                        self.isLoading = false
+
+                        switch result {
+                        case .success(let response):
+                            if let userErrors = response.data.quoteCreate.userErrors, !userErrors.isEmpty {
+                                let errors = userErrors.map { $0.message }.joined(separator: ", ")
+                                let errorMessage = "Quote creation failed: \(errors)"
+                                self.errorMessage = errorMessage
+                                print("❌ Quote creation failed: \(errors)")
+                                continuation.resume(returning: .failure(APIError.graphQLError(errorMessage)))
+                            } else if let quote = response.data.quoteCreate.quote {
+                                self.errorMessage = nil
+                                let successMessage = "Quote '\(quote.title)' created successfully with ID: \(quote.id)"
+                                print("✅ \(successMessage)")
+                                continuation.resume(returning: .success(quote.id))
+                            } else {
+                                let errorMessage = "Quote creation succeeded but no quote data returned"
+                                self.errorMessage = errorMessage
+                                print("❌ \(errorMessage)")
+                                continuation.resume(returning: .failure(APIError.invalidResponse))
+                            }
+                        case .failure(let error):
+                            let errorMessage = "Failed to create quote: \(error.localizedDescription)"
+                            self.errorMessage = errorMessage
+                            print("❌ \(errorMessage)")
+                            continuation.resume(returning: .failure(error))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Creates a pre-filled QuoteDraft from an AssessmentNode
+    func createQuoteDraftFromAssessment(_ assessment: AssessmentNode) -> QuoteDraft {
+        let quoteDraft = QuoteDraft()
+
+        // Pre-fill basic information
+        quoteDraft.clientId = assessment.client.id
+        quoteDraft.clientName = assessment.client.name
+
+        // Use assessment title as quote notes
+        if let title = assessment.title {
+            quoteDraft.notes = "Assessment: \(title)"
+        }
+
+        // Add assessment instructions to notes if available
+        if let instructions = assessment.instructions, !instructions.isEmpty {
+            if !quoteDraft.notes.isEmpty {
+                quoteDraft.notes += "\n\nInstructions: \(instructions)"
+            } else {
+                quoteDraft.notes = "Instructions: \(instructions)"
+            }
+        }
+
+        // Add address information if available
+        if let property = assessment.property?.address {
+            var addressComponents: [String] = []
+            if let street = property.street1, !street.isEmpty {
+                addressComponents.append(street)
+            }
+            if let city = property.city, !city.isEmpty {
+                addressComponents.append(city)
+            }
+            if let province = property.province, !province.isEmpty {
+                addressComponents.append(province)
+            }
+
+            if !addressComponents.isEmpty {
+                let address = addressComponents.joined(separator: ", ")
+                if !quoteDraft.notes.isEmpty {
+                    quoteDraft.notes += "\n\nProperty: \(address)"
+                } else {
+                    quoteDraft.notes = "Property: \(address)"
+                }
+            }
+        }
+
+        print("Created QuoteDraft from assessment:")
+        print("- Client: \(quoteDraft.clientName)")
+        print("- Client ID: \(quoteDraft.clientId ?? "nil")")
+        print("- Notes: \(quoteDraft.notes)")
+
+        return quoteDraft
+    }
+
+    // MARK: - Quote to Note Conversion
+
+    /// Creates a formatted note message from quote data
+    func formatQuoteForNote(quote: QuoteDraft, breakdown: PricingEngine.PriceBreakdown) -> String {
+        var message = "DTS APP QUOTE SUMMARY\n\n"
+
+        // Notes section if available
+        if !quote.notes.isEmpty {
+            message += "NOTES\n"
+            message += "\(quote.notes)\n\n"
+        }
+
+        // Materials
+        message += "MATERIAL\n"
+        message += "Gutter: \(String(format: "%.0f", quote.gutterFeet))ft\n"
+        message += "Downspout: \(String(format: "%.0f", quote.downspoutFeet))ft\n"
+
+        // Calculate gutter guard footage (assuming it matches gutter footage)
+        let gutterGuardFeet = quote.gutterFeet
+        message += "Gutter Guard: \(String(format: "%.0f", gutterGuardFeet))ft\n"
+        message += "Elbows: \(quote.elbowsCount)\n"
+        message += "End Caps: \(quote.endCapPairs) Pair\n\n"
+
+        // Additional Labor Items
+        if !quote.additionalLaborItems.isEmpty {
+            message += "ADDITIONAL LABOR ITEMS\n"
+            for item in quote.additionalLaborItems {
+                message += "\(item.title): \(item.amount.toCurrency())\n"
+            }
+            message += "\n"
+        }
+
+        // Pricing Breakdown
+        let totalMaterialCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost + breakdown.gutterGuardCost
+        let commission = breakdown.markupAmount // Assuming markup is commission
+
+        message += "PRICING BREAKDOWN\n"
+        message += "Material: \(totalMaterialCost.toCurrency())\n"
+        message += "Labor: \(breakdown.laborCost.toCurrency())\n"
+        message += "Profit: \(commission.toCurrency())\n"
+        message += "Commission: \(commission.toCurrency())\n\n"
+
+        // Calculate price per foot (total price divided by total linear feet)
+        let totalLinearFeet = quote.gutterFeet + quote.downspoutFeet
+        let pricePerFoot = totalLinearFeet > 0 ? breakdown.totalPrice / totalLinearFeet : 0
+
+        message += "Price/ft: \(pricePerFoot.toCurrency())\n"
+        message += "Total Price: \(breakdown.totalPrice.toCurrency())\n\n"
+
+        // App signature
+        message += "Generated by DTS App\n"
+        message += "Date: \(Date().formatted(date: .abbreviated, time: .shortened))"
+
+        return message
+    }
+
+    /// Creates note attachments from captured photos
+    func createNoteAttachments(from photos: [UIImage]) -> [NoteAttachmentAttributes] {
+        var attachments: [NoteAttachmentAttributes] = []
+
+        for (index, photo) in photos.enumerated() {
+            guard let imageData = photo.jpegData(compressionQuality: 0.8) else { continue }
+
+            let attachment = NoteAttachmentAttributes(
+                fileName: "quote_photo_\(index + 1).jpg",
+                fileData: imageData,
+                contentType: "image/jpeg"
+            )
+            attachments.append(attachment)
+        }
+
+        return attachments
+    }
+
+    /// Submits quote as a note to Jobber request
+    func submitQuoteAsNote(
+        requestId: String,
+        quote: QuoteDraft,
+        breakdown: PricingEngine.PriceBreakdown,
+        photos: [UIImage] = []
+    ) async -> Result<RequestNote, APIError> {
+
+        print("📝 submitQuoteAsNote called with requestId: \(requestId)")
+
+        let message = formatQuoteForNote(quote: quote, breakdown: breakdown)
+        let attachments = createNoteAttachments(from: photos)
+
+        let input = RequestCreateNoteInput(
+            message: message,
+            attachments: attachments.isEmpty ? nil : attachments,
+            pinned: true, // Pin important quotes
+            linkedTo: nil // Could link to related jobs if needed
+        )
+
+        return await withCheckedContinuation { continuation in
+            Task {
+                await createRequestNote(requestId: requestId, input: input) { result in
+                    switch result {
+                    case .success(let response):
+                        if !response.userErrors.isEmpty {
+                            let errorMessage = response.userErrors.map { $0.message }.joined(separator: ", ")
+                            print("❌ Request note creation failed with user errors: \(errorMessage)")
+                            continuation.resume(returning: .failure(.graphQLError(errorMessage)))
+                        } else {
+                            if let noteData = response.requestNote {
+                                print("✅ Request note created successfully with ID: \(noteData.id)")
+                                continuation.resume(returning: .success(noteData))
+                            } else {
+                                print("❌ Request note creation succeeded but no note data returned")
+                                continuation.resume(returning: .failure(.invalidResponse))
+                            }
+                        }
+                    case .failure(let error):
+                        print("❌ Request note creation failed with error: \(error)")
+                        if let apiError = error as? APIError {
+                            continuation.resume(returning: .failure(apiError))
+                        } else {
+                            continuation.resume(returning: .failure(.graphQLError(error.localizedDescription)))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// GraphQL mutation to create a request note
+    private func createRequestNote(
+        requestId: String,
+        input: RequestCreateNoteInput,
+        completion: @escaping (Result<RequestCreateNoteResponse, Error>) -> Void
+    ) async {
+
+        let mutation = """
+        mutation RequestCreateNote($requestId: EncodedId!, $input: RequestCreateNoteInput!) {
+          requestCreateNote(requestId: $requestId, input: $input) {
+            requestNote {
+              id
+              message
+              createdAt
+              createdBy {
+                ... on User {
+                  name {
+                    first
+                    last
+                  }
+                }
+              }
+            }
+            userErrors {
+              message
+              path
+            }
+          }
+        }
+        """
+
+        var variables: [String: Any] = [
+            "requestId": requestId,
+            "input": [
+                "message": input.message,
+                "pinned": input.pinned
+            ]
+        ]
+
+        // Add attachments if present
+        if let attachments = input.attachments {
+            var attachmentData: [[String: Any]] = []
+            for attachment in attachments {
+                let base64Data = attachment.fileData.base64EncodedString()
+                attachmentData.append([
+                    "fileName": attachment.fileName,
+                    "fileData": base64Data,
+                    "contentType": attachment.contentType
+                ])
+            }
+            var inputDict = variables["input"] as! [String: Any]
+            inputDict["attachments"] = attachmentData
+            variables["input"] = inputDict
+        }
+
+        // Add linked items if present
+        if let linkedTo = input.linkedTo {
+            var linkData: [String: Any] = [:]
+            if let jobIds = linkedTo.jobIds {
+                linkData["jobIds"] = jobIds
+            }
+            if let quoteIds = linkedTo.quoteIds {
+                linkData["quoteIds"] = quoteIds
+            }
+            if let invoiceIds = linkedTo.invoiceIds {
+                linkData["invoiceIds"] = invoiceIds
+            }
+            if !linkData.isEmpty {
+                var inputDict = variables["input"] as! [String: Any]
+                inputDict["linkedTo"] = linkData
+                variables["input"] = inputDict
+            }
+        }
+
+        await performGraphQLRequest(query: mutation, variables: variables) { (result: Result<RequestCreateNoteRawResponse, Error>) in
+            switch result {
+            case .success(let rawResponse):
+                let response = RequestCreateNoteResponse(
+                    requestNote: rawResponse.data.requestCreateNote.requestNote,
+                    userErrors: rawResponse.data.requestCreateNote.userErrors?.map {
+                        GraphQLError(message: $0.message, path: $0.path ?? [])
+                    } ?? []
+                )
+                completion(.success(response))
+            case .failure(let error):
+                completion(.failure(error))
             }
         }
     }
@@ -1068,6 +1801,9 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
 
         let jobberJob = JobberJob(
             jobId: visit.job.id,
+            requestId: nil, // Visit-based jobs don't have request info in current schema
+            clientId: "unknown", // Visit-based jobs don't have client ID in current schema
+            propertyId: visit.job.property?.id,
             clientName: clientName,
             clientPhone: nil as String?, // No phone data available in visit structure
             address: address,
@@ -1161,6 +1897,7 @@ struct BillingAddress: Codable {
 }
 
 struct RequestNode: Codable {
+    let id: String?
     let requestStatus: String?
     let source: String?
     let title: String?
@@ -1173,6 +1910,7 @@ struct ClientNode: Codable {
 }
 
 struct PropertyNode: Codable {
+    let id: String?
     let address: PropertyAddress?
 }
 
@@ -1262,11 +2000,18 @@ struct QuoteCreateResult: Codable {
 struct Quote: Codable {
     let id: String
     let title: String
+    let createdAt: String?
+    let client: QuoteClient?
+}
+
+struct QuoteClient: Codable {
+    let id: String
+    let name: String
 }
 
 struct UserError: Codable {
-    let field: String
     let message: String
+    let path: [String]?
 }
 
 struct Phone: Codable {
@@ -1277,4 +2022,66 @@ struct Phone: Codable {
 struct Email: Codable {
     let address: String
     let primary: Bool
+}
+
+// MARK: - Note Creation Types
+
+struct RequestCreateNoteInput {
+    let message: String
+    let attachments: [NoteAttachmentAttributes]?
+    let pinned: Bool
+    let linkedTo: RequestNoteLinkInput?
+}
+
+struct NoteAttachmentAttributes {
+    let fileName: String
+    let fileData: Data
+    let contentType: String
+}
+
+struct RequestNoteLinkInput {
+    let jobIds: [String]?
+    let quoteIds: [String]?
+    let invoiceIds: [String]?
+}
+
+struct RequestNote: Codable {
+    let id: String
+    let message: String
+    let createdAt: String
+    let createdBy: RequestNoteCreator?
+}
+
+struct RequestNoteCreator: Codable {
+    let first: String?
+    let last: String?
+}
+
+struct RequestCreateNoteResponse {
+    let requestNote: RequestNote?
+    let userErrors: [GraphQLError]
+}
+
+struct GraphQLError {
+    let message: String
+    let path: [String]
+}
+
+// MARK: - Raw Response Types for GraphQL
+struct RequestCreateNoteRawResponse: Codable {
+    let data: RequestCreateNoteDataResponse
+}
+
+struct RequestCreateNoteDataResponse: Codable {
+    let requestCreateNote: RequestCreateNotePayload
+}
+
+struct RequestCreateNotePayload: Codable {
+    let requestNote: RequestNote?
+    let userErrors: [RequestNoteUserError]?
+}
+
+struct RequestNoteUserError: Codable {
+    let message: String
+    let path: [String]?
 }
