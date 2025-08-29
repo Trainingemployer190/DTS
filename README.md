@@ -65,6 +65,216 @@ To change these:
 1. Run "Discover Project Info" task to see available options
 2. Modify the `default` values in the `inputs` section of `tasks.json`
 
+## Jobber API Configuration & Setup
+
+The DTS App integrates with Jobber CRM using OAuth 2.0 authentication and GraphQL API. Here's a complete breakdown of how it's configured:
+
+### 1. OAuth Application Setup in Jobber
+
+Before the app can connect to Jobber, you need to create an OAuth application in your Jobber account:
+
+1. **Login to Jobber Developer Portal**:
+   - Go to [Jobber Developer Portal](https://developer.getjobber.com/)
+   - Login with your Jobber account credentials
+
+2. **Create New Application**:
+   - Navigate to "My Apps" → "Create App"
+   - Fill in application details:
+     - **App Name**: `DTS Gutter App` (or your preferred name)
+     - **Description**: `Mobile app for DTS Gutters & Restoration quote management`
+     - **Redirect URI**: `dts-app://oauth/callback`
+   - Save the application
+
+3. **Obtain Credentials**:
+   - **Client ID**: Copy this from your created app (e.g., `abc123def456`)
+   - **Client Secret**: Copy this securely (e.g., `secret789xyz`)
+   - **Redirect URI**: Must match exactly: `dts-app://oauth/callback`
+
+### 2. App Configuration Files
+
+#### A. JobberAPI.swift (`DTS App/DTS App/Managers/JobberAPI.swift`)
+
+This is the main integration file containing:
+
+```swift
+class JobberAPI: ObservableObject {
+    // OAuth Configuration
+    private let clientId = "YOUR_CLIENT_ID_HERE"
+    private let clientSecret = "YOUR_CLIENT_SECRET_HERE"
+    private let redirectUri = "dts-app://oauth/callback"
+    private let baseUrl = "https://api.getjobber.com/api/graphql"
+    
+    // Authentication endpoints
+    private let authUrl = "https://api.getjobber.com/api/oauth/authorize"
+    private let tokenUrl = "https://api.getjobber.com/api/oauth/token"
+}
+```
+
+**Key Components**:
+- **Authentication State**: `@Published var isAuthenticated = false`
+- **Token Management**: Secure storage using Keychain
+- **GraphQL Queries**: Job fetching, quote creation
+- **OAuth Flow**: ASWebAuthenticationSession handling
+
+#### B. Info.plist URL Scheme
+
+The app must handle the OAuth callback. In `Info.plist`:
+
+```xml
+<key>CFBundleURLTypes</key>
+<array>
+    <dict>
+        <key>CFBundleURLName</key>
+        <string>DTS App OAuth</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+            <string>dts-app</string>
+        </array>
+    </dict>
+</array>
+```
+
+### 3. Authentication Flow
+
+#### Step-by-Step OAuth Process:
+
+1. **User Taps "Connect to Jobber"**:
+   ```swift
+   Button("Connect to Jobber") {
+       jobberAPI.authenticate()
+   }
+   ```
+
+2. **App Opens Jobber OAuth**:
+   - Constructs authorization URL with scopes
+   - Opens ASWebAuthenticationSession
+   - User sees Jobber login page
+
+3. **User Authorizes App**:
+   - User enters Jobber credentials
+   - Jobber shows permission screen
+   - User approves app access
+
+4. **Callback Handling**:
+   - Jobber redirects to `dts-app://oauth/callback?code=AUTH_CODE`
+   - App extracts authorization code
+   - Exchanges code for access token
+
+5. **Token Storage**:
+   - Access token stored securely in Keychain
+   - Refresh token saved for token renewal
+   - User email/account info cached
+
+### 4. GraphQL API Integration
+
+#### Required Scopes:
+- `jobs:read` - Read job information
+- `quotes:write` - Create and modify quotes
+- `clients:read` - Access client information
+
+#### Key GraphQL Queries:
+
+**Fetch Jobs**:
+```graphql
+query GetJobs($first: Int!) {
+  jobs(first: $first) {
+    edges {
+      node {
+        id
+        title
+        scheduledAt
+        client {
+          name
+          email
+        }
+        property {
+          address
+        }
+      }
+    }
+  }
+}
+```
+
+**Create Quote**:
+```graphql
+mutation CreateQuote($input: QuoteCreateInput!) {
+  quoteCreate(input: $input) {
+    quote {
+      id
+      title
+      total
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}
+```
+
+### 5. Security Implementation
+
+#### Token Security:
+- **Keychain Storage**: All tokens stored in iOS Keychain
+- **Automatic Refresh**: Handles token expiration
+- **Secure Deletion**: Tokens removed on logout
+
+#### Network Security:
+- **HTTPS Only**: All API calls use secure connections
+- **Certificate Pinning**: Validates Jobber's SSL certificates
+- **Request Signing**: OAuth 2.0 Bearer token authentication
+
+### 6. Error Handling & Edge Cases
+
+#### Common Scenarios Handled:
+- **Network Failures**: Retry logic with exponential backoff
+- **Token Expiration**: Automatic refresh using refresh token
+- **Rate Limiting**: Respects Jobber's API rate limits
+- **Offline Mode**: Graceful degradation when no internet
+
+#### User Experience:
+- **Loading States**: Shows spinner during API calls
+- **Error Messages**: User-friendly error descriptions
+- **Reconnection**: Easy re-authentication flow
+
+### 7. Testing & Development
+
+#### Development Setup:
+1. **Sandbox Environment**: Use Jobber's sandbox API for testing
+2. **Test Credentials**: Create separate test OAuth app
+3. **Mock Data**: Local test data for offline development
+
+#### Debugging:
+- **Console Logging**: Detailed API call logging in debug mode
+- **Network Inspector**: Monitor all GraphQL requests/responses
+- **Token Validation**: Check token expiration and refresh cycles
+
+### 8. Deployment Checklist
+
+Before releasing updates involving Jobber integration:
+
+- [ ] **Update OAuth Credentials**: Ensure production client ID/secret
+- [ ] **Test Authentication Flow**: Full OAuth cycle works
+- [ ] **Verify API Scopes**: All required permissions granted
+- [ ] **Test Error Scenarios**: Network failures, token expiration
+- [ ] **Validate URL Scheme**: Deep linking works correctly
+- [ ] **Security Review**: No credentials in source code
+
+### 9. Future Maintenance
+
+#### Regular Tasks:
+- **Token Monitoring**: Check for authentication issues
+- **API Updates**: Monitor Jobber's GraphQL schema changes
+- **Performance**: Review API call efficiency
+- **User Feedback**: Address integration pain points
+
+#### Jobber API Updates:
+- Subscribe to Jobber developer newsletter
+- Review API changelog for breaking changes
+- Test new features and endpoints
+- Update GraphQL queries as needed
+
 ## Troubleshooting
 
 ### Signing Errors
