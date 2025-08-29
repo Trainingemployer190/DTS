@@ -48,8 +48,19 @@ Thumbs.db
 *.broken
 *.minimal
 project.pbxproj.backup
+
+# Comprehensive backup file patterns
+*.bak
+*.bak1
+*.bak2
+*.bak3
+*.bak4
+*.bak5
+*.massive_backup
+*.old
+*.legacy
+*.temp
 LEGACY_FILES/
-DUPLICATE_FILES_BACKUP/
-Old_Views/
-Backup/
-Archive/
+**/LEGACY_FILES/
+*.backup/
+**/*.backup/
