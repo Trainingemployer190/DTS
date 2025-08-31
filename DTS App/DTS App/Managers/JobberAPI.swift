@@ -1648,12 +1648,15 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     }
 
     /// Creates a pre-filled QuoteDraft from an AssessmentNode
-    func createQuoteDraftFromAssessment(_ assessment: AssessmentNode) -> QuoteDraft {
+    func createQuoteDraftFromAssessment(_ assessment: AssessmentNode, settings: AppSettings) -> QuoteDraft {
         let quoteDraft = QuoteDraft()
 
         // Pre-fill basic information
         quoteDraft.clientId = assessment.client.id
         quoteDraft.clientName = assessment.client.name
+
+        // Apply default settings for markup and commission percentages
+        quoteDraft.applyDefaultSettings(settings)
 
         // Use assessment title as quote notes
         if let title = assessment.title {

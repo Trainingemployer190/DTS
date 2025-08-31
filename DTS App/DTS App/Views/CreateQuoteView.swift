@@ -6,11 +6,16 @@ import SwiftData
 struct CreateQuoteView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var jobberAPI: JobberAPI
+    @Query private var appSettings: [AppSettings]
     @State private var selectedJob: JobberJob? = nil
     @State private var showingNewQuoteForm = false
     @State private var prefilledQuoteDraft: QuoteDraft? = nil
     @State private var showingJobberQuoteAlert = false
     @State private var pendingQuoteDraft: QuoteDraft? = nil
+    
+    private var settings: AppSettings {
+        return appSettings.first ?? AppSettings()
+    }
 
     var body: some View {
         NavigationView {
@@ -186,6 +191,9 @@ struct CreateQuoteView: View {
         quoteDraft.jobId = job.jobId
         quoteDraft.clientName = job.clientName
         quoteDraft.notes = "Quote for \(job.clientName)\nAddress: \(job.address)\nScheduled: \(job.scheduledAt.formatted(date: .abbreviated, time: .shortened))"
+        
+        // Apply default settings for markup and commission percentages
+        quoteDraft.applyDefaultSettings(settings)
 
         // Show alert asking if user wants to create in Jobber or locally
         showingJobberQuoteAlert = true

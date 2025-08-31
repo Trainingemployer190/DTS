@@ -100,9 +100,9 @@ final class QuoteDraft: ObservableObject {
 
     var includeGutterGuard: Bool = false
     var gutterGuardFeet: Double = 0
-    var markupPercent: Double = 0.35  // Renamed from marginPercent
-    var profitMarginPercent: Double = 0.20  // New profit margin field
-    var salesCommissionPercent: Double = 0.03
+    var markupPercent: Double = 0  // Initialize to 0, will be set from settings
+    var profitMarginPercent: Double = 0  // Initialize to 0, will be set from settings
+    var salesCommissionPercent: Double = 0  // Initialize to 0, will be set from settings
     var notes: String = ""
     var syncStateRaw: String = SyncState.pending.rawValue
     var createdAt: Date = Date()
@@ -158,6 +158,19 @@ final class QuoteDraft: ObservableObject {
     }
 
     init() {}
+    
+    /// Initialize quote draft with current app settings
+    func applyDefaultSettings(_ settings: AppSettings) {
+        if self.markupPercent == 0 {
+            self.markupPercent = settings.defaultMarkupPercent
+        }
+        if self.profitMarginPercent == 0 {
+            self.profitMarginPercent = settings.defaultProfitMarginPercent
+        }
+        if self.salesCommissionPercent == 0 {
+            self.salesCommissionPercent = settings.defaultSalesCommissionPercent
+        }
+    }
 }
 
 @Model

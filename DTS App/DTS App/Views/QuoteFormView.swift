@@ -492,15 +492,24 @@ struct QuoteFormView: View {
                 print("Using pre-filled quote draft for client: \(prefilledQuoteDraft.clientName)")
             }
 
-            // Initialize with default values from settings if not already set
-            if quoteDraft.markupPercent == 0 {
+            // Initialize with default values from settings
+            // For new quotes (where all percentages are 0), always apply current settings
+            if quoteDraft.markupPercent == 0 && quoteDraft.profitMarginPercent == 0 && quoteDraft.salesCommissionPercent == 0 {
                 quoteDraft.markupPercent = settings.defaultMarkupPercent
-            }
-            if quoteDraft.profitMarginPercent == 0 {
-                quoteDraft.profitMarginPercent = settings.defaultProfitMarginPercent
-            }
-            if quoteDraft.salesCommissionPercent == 0 {
+                quoteDraft.profitMarginPercent = settings.defaultProfitMarginPercent  
                 quoteDraft.salesCommissionPercent = settings.defaultSalesCommissionPercent
+                print("Applied current settings to new quote: Markup \(settings.defaultMarkupPercent*100)%, Profit \(settings.defaultProfitMarginPercent*100)%, Commission \(settings.defaultSalesCommissionPercent*100)%")
+            } else {
+                // For existing quotes, only fill in missing values
+                if quoteDraft.markupPercent == 0 {
+                    quoteDraft.markupPercent = settings.defaultMarkupPercent
+                }
+                if quoteDraft.profitMarginPercent == 0 {
+                    quoteDraft.profitMarginPercent = settings.defaultProfitMarginPercent
+                }
+                if quoteDraft.salesCommissionPercent == 0 {
+                    quoteDraft.salesCommissionPercent = settings.defaultSalesCommissionPercent
+                }
             }
 
             // Set job ID if available
