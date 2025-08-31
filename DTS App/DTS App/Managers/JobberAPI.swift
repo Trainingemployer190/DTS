@@ -935,6 +935,66 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         }
     }
 
+    /// Fetches product details including description for use in quotes
+    private func fetchProductDetails(productId: String) async -> Result<(name: String, description: String), Error> {
+        guard await ensureValidAccessToken() else {
+            return .failure(APIError.noToken)
+        }
+
+        let query = """
+        query getProductDetails($productId: EncodedId!) {
+          product(id: $productId) {
+            id
+            name
+            description
+          }
+        }
+        """
+
+        let variables: [String: Any] = ["productId": productId]
+
+        return await withCheckedContinuation { continuation in
+            Task {
+                await performGraphQLRequest(query: query, variables: variables) { [weak self] (result: Result<ProductDetailsResponse, Error>) in
+                    Task { @MainActor in
+                        guard let self = self else {
+                            continuation.resume(returning: .failure(APIError.invalidResponse))
+                            return
+                        }
+
+                        switch result {
+                        case .success(let response):
+                            if let product = response.data.product {
+                                let name = product.name ?? ""
+                                let description = product.description ?? ""
+                                continuation.resume(returning: .success((name: name, description: description)))
+                            } else {
+                                continuation.resume(returning: .failure(APIError.invalidResponse))
+                            }
+                        case .failure(let error):
+                            continuation.resume(returning: .failure(error))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Product Details Response Models
+    struct ProductDetailsResponse: Codable {
+        let data: ProductDetailsData
+    }
+
+    struct ProductDetailsData: Codable {
+        let product: ProductDetailsNode?
+    }
+
+    struct ProductDetailsNode: Codable {
+        let id: String
+        let name: String?
+        let description: String?
+    }
+
     func createQuoteDraft(quoteDraft: QuoteDraft) async {
         guard await ensureValidAccessToken() else {
             await MainActor.run {
@@ -1236,6 +1296,15 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     }
 
     /// Creates a Jobber quote from measurements with proper line item structure
+    ///
+    /// IMPORTANT: This function ensures that the line item prices sent to Jobber include
+    /// the full calculated price (materials + labor + markup + commission + tax).
+    /// Previously, only base costs were being sent, causing a mismatch between the
+    /// app's total ($624.02) and Jobber's quote total ($424.00).
+    ///
+    /// The fix distributes the final marked-up price proportionally across line items
+    /// based on their base cost ratios, ensuring the Jobber quote total matches
+    /// the app's calculated total exactly.
     func createQuoteFromJobWithMeasurements(
         job: JobberJob,
         quoteDraft: QuoteDraft,
@@ -1260,66 +1329,126 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         print("Include Gutter Guard: \(quoteDraft.includeGutterGuard)")
         print("Gutter Guard Feet: \(quoteDraft.gutterGuardFeet)")
 
-        // Create line items based on measurements and pricing logic
-        var lineItems: [[String: Any]] = []
+        // The Correct IDs You Found
+        let gutterProductId = "Z2lkOi8vSm9iYmVyL1Byb2R1Y3RPclNlcnZpY2UvNzE0MDU3Mg=="
+        let gutterGuardProductId = "Z2lkOi8vSm9iYmVyL1Byb2R1Y3RPclNlcnZpY2UvODg4Nzk3OQ=="
 
-        // Calculate gutter pricing
-        if quoteDraft.gutterFeet > 0 {
-            let gutterPrice: Double
-            let gutterDescription: String
+        // Step 1: Fetch product details to get descriptions
+        print("Fetching product details...")
 
-            if quoteDraft.includeGutterGuard && quoteDraft.gutterGuardFeet > 0 {
-                // Gutter guard is included - split pricing
-                let gutterOnlyPrice = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost + breakdown.laborCost
-
-                gutterPrice = gutterOnlyPrice
-                gutterDescription = "Gutter Installation - \(String(format: "%.0f", quoteDraft.gutterFeet))ft gutter, \(String(format: "%.0f", quoteDraft.downspoutFeet))ft \(quoteDraft.isRoundDownspout ? "round" : "standard") downspout"
-
-                print("Gutter-only line item: $\(String(format: "%.2f", gutterPrice))")
-            } else {
-                // No gutter guard - full price for gutter
-                gutterPrice = breakdown.totalPrice - breakdown.additionalItemsCost
-                gutterDescription = "Complete Gutter Installation - \(String(format: "%.0f", quoteDraft.gutterFeet))ft gutter, \(String(format: "%.0f", quoteDraft.downspoutFeet))ft \(quoteDraft.isRoundDownspout ? "round" : "standard") downspout"
-
-                print("Complete gutter line item: $\(String(format: "%.2f", gutterPrice))")
+        let gutterDetailsResult = await fetchProductDetails(productId: gutterProductId)
+        guard case .success(let gutterDetails) = gutterDetailsResult else {
+            await MainActor.run {
+                self.isLoading = false
+                self.errorMessage = "Failed to fetch gutter product details"
             }
-
-            lineItems.append([
-                "name": "Gutter Installation",
-                "description": gutterDescription,
-                "quantity": 1,
-                "unitCost": gutterPrice,
-                "saveToProductsAndServices": false
-            ])
+            return .failure(APIError.invalidResponse)
         }
 
-        // Add gutter guard as separate line item if included
+        var gutterGuardDetails: (name: String, description: String)?
         if quoteDraft.includeGutterGuard && quoteDraft.gutterGuardFeet > 0 {
-            let gutterGuardPrice = breakdown.gutterGuardCost
-            let gutterGuardDescription = "Gutter Guard Installation - \(String(format: "%.0f", quoteDraft.gutterGuardFeet))ft"
+            let gutterGuardDetailsResult = await fetchProductDetails(productId: gutterGuardProductId)
+            guard case .success(let details) = gutterGuardDetailsResult else {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.errorMessage = "Failed to fetch gutter guard product details"
+                }
+                return .failure(APIError.invalidResponse)
+            }
+            gutterGuardDetails = details
+        }
 
+        // Step 2: Create line items with proper pricing that includes markup and commission
+        var lineItems: [[String: Any]] = []
+
+        // Calculate the total price for the main work (gutters + guard), excluding additional items
+        let additionalItemsTotal = quoteDraft.additionalLaborItems.reduce(0, { $0 + $1.amount })
+        let mainWorkTotalPrice = breakdown.totalPrice - additionalItemsTotal
+
+        print("📊 PRICING DEBUG:")
+        print("  Total breakdown price: $\(String(format: "%.2f", breakdown.totalPrice))")
+        print("  Additional items total: $\(String(format: "%.2f", additionalItemsTotal))")
+        print("  Main work total price: $\(String(format: "%.2f", mainWorkTotalPrice))")
+
+        if quoteDraft.includeGutterGuard && quoteDraft.gutterGuardFeet > 0, let guardDetails = gutterGuardDetails {
+            // SCENARIO 1: WITH Gutter Guard - Distribute final price proportionally
+
+            // Calculate the base cost of each component to find their proportion of the total
+            let gutterBaseCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost + breakdown.laborCost
+            let guardBaseCost = breakdown.gutterGuardCost // Base cost for guard
+            let totalBaseCost = gutterBaseCost + guardBaseCost
+
+            print("  Gutter base cost: $\(String(format: "%.2f", gutterBaseCost))")
+            print("  Guard base cost: $\(String(format: "%.2f", guardBaseCost))")
+            print("  Total base cost: $\(String(format: "%.2f", totalBaseCost))")
+
+            // Calculate the final, marked-up price for each line item proportionally
+            let gutterFinalPrice: Double
+            let guardFinalPrice: Double
+
+            if totalBaseCost > 0 {
+                gutterFinalPrice = mainWorkTotalPrice * (gutterBaseCost / totalBaseCost)
+                guardFinalPrice = mainWorkTotalPrice * (guardBaseCost / totalBaseCost)
+            } else {
+                gutterFinalPrice = 0.0
+                guardFinalPrice = 0.0
+            }
+
+            print("  Gutter final price (proportional): $\(String(format: "%.2f", gutterFinalPrice))")
+            print("  Guard final price (proportional): $\(String(format: "%.2f", guardFinalPrice))")
+            print("  Verification total: $\(String(format: "%.2f", gutterFinalPrice + guardFinalPrice))")
+
+            // 1. Gutter line item with final calculated price (includes markup/commission)
             lineItems.append([
-                "name": "Gutter Guard Installation",
-                "description": gutterGuardDescription,
+                "productOrServiceId": gutterProductId,
+                "name": gutterDetails.name,
+                "description": gutterDetails.description,
                 "quantity": 1,
-                "unitCost": gutterGuardPrice,
+                "unitPrice": gutterFinalPrice,
                 "saveToProductsAndServices": false
             ])
+            print("✅ Gutter line item (with markup): $\(String(format: "%.2f", gutterFinalPrice))")
 
-            print("Gutter guard line item: $\(String(format: "%.2f", gutterGuardPrice))")
+            // 2. Gutter Guard line item with final calculated price (includes markup/commission)
+            lineItems.append([
+                "productOrServiceId": gutterGuardProductId,
+                "name": guardDetails.name,
+                "description": guardDetails.description,
+                "quantity": 1,
+                "unitPrice": guardFinalPrice,
+                "saveToProductsAndServices": false
+            ])
+            print("✅ Gutter guard line item (with markup): $\(String(format: "%.2f", guardFinalPrice))")
+
+        } else {
+            // SCENARIO 2: WITHOUT Gutter Guard - All final price goes to gutter
+
+            print("  Single gutter line item gets full price: $\(String(format: "%.2f", mainWorkTotalPrice))")
+
+            lineItems.append([
+                "productOrServiceId": gutterProductId,
+                "name": gutterDetails.name,
+                "description": gutterDetails.description,
+                "quantity": 1,
+                "unitPrice": mainWorkTotalPrice,
+                "saveToProductsAndServices": false
+            ])
+            print("✅ Complete gutter line item (with markup): $\(String(format: "%.2f", mainWorkTotalPrice))")
         }
 
         // Add any additional labor items
         for item in quoteDraft.additionalLaborItems {
             lineItems.append([
                 "name": item.title,
-                "description": item.title,
                 "quantity": 1,
-                "unitCost": item.amount,
+                "unitPrice": item.amount,
                 "saveToProductsAndServices": false
             ])
             print("Additional item: \(item.title) - $\(String(format: "%.2f", item.amount))")
         }
+
+        // Debug: Print constructed line items
+        print("Constructed Line Items:", lineItems)
 
         // Build custom fields based on the quote data
         var customFields: [[String: Any]] = []
