@@ -496,7 +496,7 @@ struct QuoteFormView: View {
             // For new quotes (where all percentages are 0), always apply current settings
             if quoteDraft.markupPercent == 0 && quoteDraft.profitMarginPercent == 0 && quoteDraft.salesCommissionPercent == 0 {
                 quoteDraft.markupPercent = settings.defaultMarkupPercent
-                quoteDraft.profitMarginPercent = settings.defaultProfitMarginPercent  
+                quoteDraft.profitMarginPercent = settings.defaultProfitMarginPercent
                 quoteDraft.salesCommissionPercent = settings.defaultSalesCommissionPercent
                 print("Applied current settings to new quote: Markup \(settings.defaultMarkupPercent*100)%, Profit \(settings.defaultProfitMarginPercent*100)%, Commission \(settings.defaultSalesCommissionPercent*100)%")
             } else {

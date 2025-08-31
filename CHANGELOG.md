@@ -39,7 +39,7 @@
 ### ✨ Initial Features
 
 - Jobber CRM integration with OAuth authentication
-- Advanced quote calculator with markup and commission tracking  
+- Advanced quote calculator with markup and commission tracking
 - Photo capture with GPS watermarking
 - Professional PDF quote generation
 - SwiftData local storage with sync capabilities

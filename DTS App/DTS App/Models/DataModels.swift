@@ -158,7 +158,7 @@ final class QuoteDraft: ObservableObject {
     }
 
     init() {}
-    
+
     /// Initialize quote draft with current app settings
     func applyDefaultSettings(_ settings: AppSettings) {
         if self.markupPercent == 0 {
