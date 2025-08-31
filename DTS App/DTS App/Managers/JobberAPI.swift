@@ -1273,23 +1273,15 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                 let gutterOnlyPrice = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost + breakdown.laborCost
 
                 gutterPrice = gutterOnlyPrice
-                gutterDescription = """
-                Gutter Installation - \(String(format: "%.0f", quoteDraft.gutterFeet))ft gutter, \
-                \(String(format: "%.0f", quoteDraft.downspoutFeet))ft downspout, \
-                \(quoteDraft.elbowsCount) elbows, \(quoteDraft.endCapPairs) end caps
-                """
+                gutterDescription = "Gutter Installation - \(String(format: "%.0f", quoteDraft.gutterFeet))ft gutter, \(String(format: "%.0f", quoteDraft.downspoutFeet))ft \(quoteDraft.isRoundDownspout ? "round" : "standard") downspout"
 
-                print("Gutter-only line item: \(gutterPrice.toCurrency())")
+                print("Gutter-only line item: $\(String(format: "%.2f", gutterPrice))")
             } else {
                 // No gutter guard - full price for gutter
                 gutterPrice = breakdown.totalPrice - breakdown.additionalItemsCost
-                gutterDescription = """
-                Complete Gutter Installation - \(String(format: "%.0f", quoteDraft.gutterFeet))ft gutter, \
-                \(String(format: "%.0f", quoteDraft.downspoutFeet))ft downspout, \
-                \(quoteDraft.elbowsCount) elbows, \(quoteDraft.endCapPairs) end caps
-                """
+                gutterDescription = "Complete Gutter Installation - \(String(format: "%.0f", quoteDraft.gutterFeet))ft gutter, \(String(format: "%.0f", quoteDraft.downspoutFeet))ft \(quoteDraft.isRoundDownspout ? "round" : "standard") downspout"
 
-                print("Complete gutter line item: \(gutterPrice.toCurrency())")
+                print("Complete gutter line item: $\(String(format: "%.2f", gutterPrice))")
             }
 
             lineItems.append([
@@ -1314,7 +1306,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                 "saveToProductsAndServices": false
             ])
 
-            print("Gutter guard line item: \(gutterGuardPrice.toCurrency())")
+            print("Gutter guard line item: $\(String(format: "%.2f", gutterGuardPrice))")
         }
 
         // Add any additional labor items
@@ -1326,13 +1318,87 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                 "unitCost": item.amount,
                 "saveToProductsAndServices": false
             ])
-            print("Additional item: \(item.title) - \(item.amount.toCurrency())")
+            print("Additional item: \(item.title) - $\(String(format: "%.2f", item.amount))")
+        }
+
+        // Build custom fields based on the quote data
+        var customFields: [[String: Any]] = []
+
+        // Add Color custom field (Text Type)
+        customFields.append([
+            "customFieldConfigurationId": "Z2lkOi8vSm9iYmVyL0N1c3RvbUZpZWxkQ29uZmlndXJhdGlvblRleHQvMTA1ODc1Ng==",
+            "valueText": quoteDraft.gutterColor
+        ])
+
+        // Add Gutter footage custom field (Numeric Type)
+        if quoteDraft.gutterFeet > 0 {
+            customFields.append([
+                "customFieldConfigurationId": "Z2lkOi8vSm9iYmVyL0N1c3RvbUZpZWxkQ29uZmlndXJhdGlvbk51bWVyaWMvMTA1ODc2NQ==",
+                "valueNumeric": quoteDraft.gutterFeet
+            ])
+        }
+
+        // Add Down Spout footage custom field (Numeric Type)
+        if quoteDraft.downspoutFeet > 0 {
+            customFields.append([
+                "customFieldConfigurationId": "Z2lkOi8vSm9iYmVyL0N1c3RvbUZpZWxkQ29uZmlndXJhdGlvbk51bWVyaWMvMTA1ODc3NA==",
+                "valueNumeric": quoteDraft.downspoutFeet
+            ])
+        }
+
+        // Add A Elbows custom field (Numeric Type)
+        if quoteDraft.aElbows > 0 {
+            customFields.append([
+                "customFieldConfigurationId": "Z2lkOi8vSm9iYmVyL0N1c3RvbUZpZWxkQ29uZmlndXJhdGlvbk51bWVyaWMvMTA1ODc3OA==",
+                "valueNumeric": quoteDraft.aElbows
+            ])
+        }
+
+        // Add B Elbows custom field (Numeric Type)
+        if quoteDraft.bElbows > 0 {
+            customFields.append([
+                "customFieldConfigurationId": "Z2lkOi8vSm9iYmVyL0N1c3RvbUZpZWxkQ29uZmlndXJhdGlvbk51bWVyaWMvMTA1ODc4Mg==",
+                "valueNumeric": quoteDraft.bElbows
+            ])
+        }
+
+        // Add 2 Crimp custom field (Numeric Type)
+        if quoteDraft.twoCrimp > 0 {
+            customFields.append([
+                "customFieldConfigurationId": "Z2lkOi8vSm9iYmVyL0N1c3RvbUZpZWxkQ29uZmlndXJhdGlvbk51bWVyaWMvMTA1ODc4Ng==",
+                "valueNumeric": quoteDraft.twoCrimp
+            ])
+        }
+
+        // Add 4 Crimp custom field (Numeric Type)
+        if quoteDraft.fourCrimp > 0 {
+            customFields.append([
+                "customFieldConfigurationId": "Z2lkOi8vSm9iYmVyL0N1c3RvbUZpZWxkQ29uZmlndXJhdGlvbk51bWVyaWMvMTA1ODc5MA==",
+                "valueNumeric": quoteDraft.fourCrimp
+            ])
+        }
+
+        // Add End Caps custom field (Numeric Type)
+        if quoteDraft.endCapPairs > 0 {
+            customFields.append([
+                "customFieldConfigurationId": "Z2lkOi8vSm9iYmVyL0N1c3RvbUZpZWxkQ29uZmlndXJhdGlvbk51bWVyaWMvMTA1ODc5NA==",
+                "valueNumeric": quoteDraft.endCapPairs
+            ])
+        }
+
+        // Add Gutter Guard (Rigid Flow) custom field (Numeric Type)
+        if quoteDraft.includeGutterGuard && quoteDraft.gutterGuardFeet > 0 {
+            customFields.append([
+                "customFieldConfigurationId": "Z2lkOi8vSm9iYmVyL0N1c3RvbUZpZWxkQ29uZmlndXJhdGlvbk51bWVyaWMvMTA1ODc2OQ==",
+                "valueNumeric": quoteDraft.gutterGuardFeet
+            ])
         }
 
         // Build the input dictionary
         var inputDict: [String: Any] = [
             "title": "Gutter Installation Quote - \(job.clientName)",
-            "lineItems": lineItems
+            "lineItems": lineItems,
+            "customFields": customFields
         ]
 
         // Debug the job data first
@@ -1383,6 +1449,24 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
               client {
                 id
                 name
+              }
+              customFields {
+                ... on CustomFieldText {
+                  id
+                  valueText
+                  customFieldConfiguration {
+                    id
+                    name
+                  }
+                }
+                ... on CustomFieldNumeric {
+                  id
+                  valueNumeric
+                  customFieldConfiguration {
+                    id
+                    name
+                  }
+                }
               }
             }
             userErrors {
@@ -1502,13 +1586,17 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         // Materials
         message += "MATERIAL\n"
         message += "Gutter: \(String(format: "%.0f", quote.gutterFeet))ft\n"
-        message += "Downspout: \(String(format: "%.0f", quote.downspoutFeet))ft\n"
+        message += "Downspout: \(String(format: "%.0f", quote.downspoutFeet))ft \(quote.isRoundDownspout ? "(Round)" : "(Standard)")\n"
 
         // Calculate gutter guard footage (assuming it matches gutter footage)
         let gutterGuardFeet = quote.gutterFeet
         message += "Gutter Guard: \(String(format: "%.0f", gutterGuardFeet))ft\n"
-        message += "Elbows: \(quote.elbowsCount)\n"
-        message += "End Caps: \(quote.endCapPairs) Pair\n\n"
+        message += "A Elbows: \(quote.aElbows)\n"
+        message += "B Elbows: \(quote.bElbows)\n"
+        message += "2\" Crimp: \(quote.twoCrimp)\n"
+        message += "4\" Crimp: \(quote.fourCrimp)\n"
+        message += "End Caps: \(quote.endCapPairs) Pair\n"
+        message += "Color: \(quote.gutterColor)\n\n"
 
         // Additional Labor Items
         if !quote.additionalLaborItems.isEmpty {

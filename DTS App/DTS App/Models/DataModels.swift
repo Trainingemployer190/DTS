@@ -16,7 +16,9 @@ final class AppSettings {
     // Gutter-specific material costs
     var materialCostPerFootGutter: Double = 3.50
     var materialCostPerFootDownspout: Double = 4.00
+    var materialCostPerFootRoundDownspout: Double = 5.50  // New round downspout cost
     var costPerElbow: Double = 8.00
+    var costPerRoundElbow: Double = 12.00  // New round elbow cost (higher price)
     var costPerHanger: Double = 2.50
     var hangerSpacingFeet: Double = 3.0
     var gutterGuardMaterialPerFoot: Double = 6.00
@@ -84,8 +86,18 @@ final class QuoteDraft: ObservableObject {
     var clientName: String = ""
     var gutterFeet: Double = 0
     var downspoutFeet: Double = 0
-    var elbowsCount: Int = 0
+    var isRoundDownspout: Bool = false  // Round downspout toggle
+
+    // Individual elbow and crimp types
+    var aElbows: Int = 0
+    var bElbows: Int = 0
+    var twoCrimp: Int = 0
+    var fourCrimp: Int = 0
     var endCapPairs: Int = 0
+
+    // Color selection
+    var gutterColor: String = "White"
+
     var includeGutterGuard: Bool = false
     var gutterGuardFeet: Double = 0
     var markupPercent: Double = 0.35  // Renamed from marginPercent

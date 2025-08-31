@@ -45,11 +45,18 @@ struct PricingEngine {
     static func calculatePrice(quote: QuoteDraft, settings: AppSettings) -> PriceBreakdown {
         // Calculate materials cost
         let gutterMaterialsCost = quote.gutterFeet * settings.materialCostPerFootGutter
-        let downspoutMaterialsCost = quote.downspoutFeet * settings.materialCostPerFootDownspout
+
+        // Use different downspout cost based on round downspout toggle
+        let downspoutMaterialsCost = quote.downspoutFeet * (quote.isRoundDownspout ?
+            settings.materialCostPerFootRoundDownspout : settings.materialCostPerFootDownspout)
+
         let gutterGuardCost = quote.gutterGuardFeet * settings.gutterGuardMaterialPerFoot
 
-        // Calculate costs for elbows and hangers
-        let elbowsCost = Double(quote.elbowsCount) * settings.costPerElbow
+        // Calculate costs for individual elbows, crimps and hangers
+        // Use different elbow cost based on round downspout toggle
+        let totalElbows = quote.aElbows + quote.bElbows + quote.twoCrimp + quote.fourCrimp
+        let elbowsCost = Double(totalElbows) * (quote.isRoundDownspout ?
+            settings.costPerRoundElbow : settings.costPerElbow)
         let hangersCost = Double(quote.hangersCount) * settings.costPerHanger
 
         // Additional items cost
@@ -57,8 +64,12 @@ struct PricingEngine {
 
         let materialsCost = gutterMaterialsCost + downspoutMaterialsCost + gutterGuardCost + elbowsCost + hangersCost
 
-        // Calculate labor cost
-        let gutterLaborCost = quote.gutterFeet * settings.laborPerFootGutter
+        // Calculate composite feet (includes gutter, downspout, and elbows for labor calculation)
+        let totalElbowsAndCrimps = Double(quote.aElbows + quote.bElbows + quote.twoCrimp + quote.fourCrimp)
+        let compositeFeet = quote.gutterFeet + quote.downspoutFeet + totalElbowsAndCrimps
+
+        // Calculate labor cost based on composite feet
+        let gutterLaborCost = compositeFeet * settings.laborPerFootGutter
         let gutterGuardLaborCost = quote.gutterGuardFeet * settings.gutterGuardLaborPerFoot
         let laborCost = gutterLaborCost + gutterGuardLaborCost
 
@@ -90,7 +101,7 @@ struct PricingEngine {
             downspoutMaterialsCost: downspoutMaterialsCost,
             gutterGuardCost: gutterGuardCost,
             additionalItemsCost: additionalItemsCost,
-            compositeFeet: quote.gutterFeet + quote.downspoutFeet
+            compositeFeet: compositeFeet
         )
     }
 

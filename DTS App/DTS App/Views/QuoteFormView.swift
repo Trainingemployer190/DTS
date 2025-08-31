@@ -32,7 +32,10 @@ struct QuoteFormView: View {
     enum CalculatorField {
         case gutterFeet
         case downspoutFeet
-        case elbowsCount
+        case aElbows
+        case bElbows
+        case twoCrimp
+        case fourCrimp
         case endCapPairs
     }
 
@@ -222,18 +225,89 @@ struct QuoteFormView: View {
                 }
 
                 HStack {
-                    Text("Elbows Count")
+                    Text("Round Downspout")
+                    Spacer()
+                    Toggle("", isOn: $quoteDraft.isRoundDownspout)
+                        .labelsHidden()
+                }
+
+                // Individual Elbows and Crimps
+                HStack {
+                    Text("A Elbows")
                     Spacer()
                     HStack(spacing: 8) {
                         Button(action: {
-                            calculatorField = .elbowsCount
+                            calculatorField = .aElbows
                             showingCalculator = true
                         }) {
                             Image(systemName: "plus.square.fill")
                                 .foregroundColor(.blue)
                                 .font(.title2)
                         }
-                        TextField("0", text: clearableIntBinding(for: $quoteDraft.elbowsCount))
+                        TextField("0", text: clearableIntBinding(for: $quoteDraft.aElbows))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                            .keyboardType(.numberPad)
+                            .autocorrectionDisabled()
+                            .textContentType(.none)
+                    }
+                }
+
+                HStack {
+                    Text("B Elbows")
+                    Spacer()
+                    HStack(spacing: 8) {
+                        Button(action: {
+                            calculatorField = .bElbows
+                            showingCalculator = true
+                        }) {
+                            Image(systemName: "plus.square.fill")
+                                .foregroundColor(.blue)
+                                .font(.title2)
+                        }
+                        TextField("0", text: clearableIntBinding(for: $quoteDraft.bElbows))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                            .keyboardType(.numberPad)
+                            .autocorrectionDisabled()
+                            .textContentType(.none)
+                    }
+                }
+
+                HStack {
+                    Text("2\" Crimp")
+                    Spacer()
+                    HStack(spacing: 8) {
+                        Button(action: {
+                            calculatorField = .twoCrimp
+                            showingCalculator = true
+                        }) {
+                            Image(systemName: "plus.square.fill")
+                                .foregroundColor(.blue)
+                                .font(.title2)
+                        }
+                        TextField("0", text: clearableIntBinding(for: $quoteDraft.twoCrimp))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                            .keyboardType(.numberPad)
+                            .autocorrectionDisabled()
+                            .textContentType(.none)
+                    }
+                }
+
+                HStack {
+                    Text("4\" Crimp")
+                    Spacer()
+                    HStack(spacing: 8) {
+                        Button(action: {
+                            calculatorField = .fourCrimp
+                            showingCalculator = true
+                        }) {
+                            Image(systemName: "plus.square.fill")
+                                .foregroundColor(.blue)
+                                .font(.title2)
+                        }
+                        TextField("0", text: clearableIntBinding(for: $quoteDraft.fourCrimp))
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 100)
                             .keyboardType(.numberPad)
@@ -273,8 +347,34 @@ struct QuoteFormView: View {
                 HStack {
                     Text("Total Footage")
                     Spacer()
-                    Text(String(format: "%.1f ft", quoteDraft.gutterFeet + quoteDraft.downspoutFeet + Double(quoteDraft.elbowsCount)))
+                    Text(String(format: "%.1f ft", quoteDraft.gutterFeet + quoteDraft.downspoutFeet + Double(quoteDraft.aElbows + quoteDraft.bElbows + quoteDraft.twoCrimp + quoteDraft.fourCrimp)))
                         .foregroundColor(.secondary)
+                }
+            }
+            .padding()
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal)
+        }
+    }
+
+    @ViewBuilder
+    private var colorSectionContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Color Selection")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top)
+
+            VStack(spacing: 16) {
+                HStack {
+                    Text("Gutter Color")
+                    Spacer()
+                    TextField("Enter color", text: $quoteDraft.gutterColor)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 150)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
                 }
             }
             .padding()
@@ -414,6 +514,7 @@ struct QuoteFormView: View {
     private var formContent: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
+                colorSectionContent
                 measurementsSectionContent
                 gutterGuardSectionContent
                 additionalLaborSectionContent
@@ -887,8 +988,14 @@ struct QuoteFormView: View {
             quoteDraft.gutterFeet = result
         case .downspoutFeet:
             quoteDraft.downspoutFeet = result
-        case .elbowsCount:
-            quoteDraft.elbowsCount = Int(result)
+        case .aElbows:
+            quoteDraft.aElbows = Int(result)
+        case .bElbows:
+            quoteDraft.bElbows = Int(result)
+        case .twoCrimp:
+            quoteDraft.twoCrimp = Int(result)
+        case .fourCrimp:
+            quoteDraft.fourCrimp = Int(result)
         case .endCapPairs:
             quoteDraft.endCapPairs = Int(result)
         }

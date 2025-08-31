@@ -301,14 +301,42 @@ struct PreviewSection: View {
                 HStack {
                     Text("Downspout:")
                     Spacer()
-                    Text("\(quoteDraft.downspoutFeet.twoDecimalFormatted) ft")
+                    Text("\(quoteDraft.downspoutFeet.twoDecimalFormatted) ft \(quoteDraft.isRoundDownspout ? "(Round)" : "(Standard)")")
                         .fontWeight(.medium)
                 }
 
                 HStack {
-                    Text("Elbows:")
+                    Text("A Elbows:")
                     Spacer()
-                    Text("\(quoteDraft.elbowsCount)")
+                    Text("\(quoteDraft.aElbows)")
+                        .fontWeight(.medium)
+                }
+
+                HStack {
+                    Text("B Elbows:")
+                    Spacer()
+                    Text("\(quoteDraft.bElbows)")
+                        .fontWeight(.medium)
+                }
+
+                HStack {
+                    Text("2\" Crimp:")
+                    Spacer()
+                    Text("\(quoteDraft.twoCrimp)")
+                        .fontWeight(.medium)
+                }
+
+                HStack {
+                    Text("4\" Crimp:")
+                    Spacer()
+                    Text("\(quoteDraft.fourCrimp)")
+                        .fontWeight(.medium)
+                }
+
+                HStack {
+                    Text("Color:")
+                    Spacer()
+                    Text(quoteDraft.gutterColor)
                         .fontWeight(.medium)
                 }
 

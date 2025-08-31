@@ -22,6 +22,35 @@ struct SettingsView: View {
     @EnvironmentObject private var jobberAPI: JobberAPI
     @Query private var settingsArray: [AppSettings]
 
+    // Focus states for each field
+    @FocusState private var focusedField: FieldType?
+
+    // Text field states
+    @State private var materialCostGutterText = ""
+    @State private var materialCostDownspoutText = ""
+    @State private var gutterGuardMaterialText = ""
+    @State private var costPerElbowText = ""
+    @State private var costPerHangerText = ""
+    @State private var hangerSpacingText = ""
+    @State private var laborGutterText = ""
+    @State private var gutterGuardLaborText = ""
+    @State private var markupText = ""
+    @State private var profitMarginText = ""
+    @State private var salesCommissionText = ""
+    @State private var gutterGuardMarkupText = ""
+    @State private var gutterGuardProfitMarginText = ""
+    @State private var materialCostRoundDownspoutText = ""
+    @State private var costPerRoundElbowText = ""
+
+    enum FieldType {
+        case materialCostGutter, materialCostDownspout, gutterGuardMaterial
+        case costPerElbow, costPerHanger, hangerSpacing
+        case laborGutter, gutterGuardLabor
+        case markup, profitMargin, salesCommission
+        case gutterGuardMarkup, gutterGuardProfitMargin
+        case materialCostRoundDownspout, costPerRoundElbow
+    }
+
     private var settings: AppSettings {
         if let existingSettings = settingsArray.first {
             return existingSettings
@@ -33,28 +62,113 @@ struct SettingsView: View {
         }
     }
 
-    // Simple decimal binding that actually works with decimals
-    private func decimalBinding(for value: Binding<Double>) -> Binding<String> {
-        Binding<String>(
-            get: {
-                value.wrappedValue == 0 ? "" : String(value.wrappedValue)
-            },
-            set: { newValue in
-                value.wrappedValue = Double(newValue) ?? 0
-            }
-        )
+    private func updateTextFields() {
+        materialCostGutterText = settings.materialCostPerFootGutter == 0 ? "" : String(settings.materialCostPerFootGutter)
+        materialCostDownspoutText = settings.materialCostPerFootDownspout == 0 ? "" : String(settings.materialCostPerFootDownspout)
+        gutterGuardMaterialText = settings.gutterGuardMaterialPerFoot == 0 ? "" : String(settings.gutterGuardMaterialPerFoot)
+        costPerElbowText = settings.costPerElbow == 0 ? "" : String(settings.costPerElbow)
+        costPerHangerText = settings.costPerHanger == 0 ? "" : String(settings.costPerHanger)
+        hangerSpacingText = settings.hangerSpacingFeet == 0 ? "" : String(settings.hangerSpacingFeet)
+        laborGutterText = settings.laborPerFootGutter == 0 ? "" : String(settings.laborPerFootGutter)
+        gutterGuardLaborText = settings.gutterGuardLaborPerFoot == 0 ? "" : String(settings.gutterGuardLaborPerFoot)
+        markupText = settings.defaultMarkupPercent == 0 ? "" : String(Int(settings.defaultMarkupPercent * 100))
+        profitMarginText = settings.defaultProfitMarginPercent == 0 ? "" : String(Int(settings.defaultProfitMarginPercent * 100))
+        salesCommissionText = settings.defaultSalesCommissionPercent == 0 ? "" : String(Int(settings.defaultSalesCommissionPercent * 100))
+        gutterGuardMarkupText = settings.gutterGuardMarkupPercent == 0 ? "" : String(Int(settings.gutterGuardMarkupPercent * 100))
+        gutterGuardProfitMarginText = settings.gutterGuardProfitMarginPercent == 0 ? "" : String(Int(settings.gutterGuardProfitMarginPercent * 100))
+        materialCostRoundDownspoutText = settings.materialCostPerFootRoundDownspout == 0 ? "" : String(settings.materialCostPerFootRoundDownspout)
+        costPerRoundElbowText = settings.costPerRoundElbow == 0 ? "" : String(settings.costPerRoundElbow)
     }
 
-    // Percentage binding (multiply by 100 for display)
-    private func percentBinding(for value: Binding<Double>) -> Binding<String> {
-        Binding<String>(
-            get: {
-                value.wrappedValue == 0 ? "" : String(value.wrappedValue * 100)
-            },
-            set: { newValue in
-                value.wrappedValue = (Double(newValue) ?? 0) / 100
-            }
-        )
+    // Specific save functions for each property
+    private func saveMaterialCostGutter(_ text: String) {
+        let value = text.isEmpty ? 0 : (Double(text) ?? 0)
+        settings.materialCostPerFootGutter = value
+        saveSettings()
+    }
+
+    private func saveMaterialCostDownspout(_ text: String) {
+        let value = text.isEmpty ? 0 : (Double(text) ?? 0)
+        settings.materialCostPerFootDownspout = value
+        saveSettings()
+    }
+
+    private func saveGutterGuardMaterial(_ text: String) {
+        let value = text.isEmpty ? 0 : (Double(text) ?? 0)
+        settings.gutterGuardMaterialPerFoot = value
+        saveSettings()
+    }
+
+    private func saveCostPerElbow(_ text: String) {
+        let value = text.isEmpty ? 0 : (Double(text) ?? 0)
+        settings.costPerElbow = value
+        saveSettings()
+    }
+
+    private func saveCostPerHanger(_ text: String) {
+        let value = text.isEmpty ? 0 : (Double(text) ?? 0)
+        settings.costPerHanger = value
+        saveSettings()
+    }
+
+    private func saveHangerSpacing(_ text: String) {
+        let value = text.isEmpty ? 0 : (Double(text) ?? 0)
+        settings.hangerSpacingFeet = value
+        saveSettings()
+    }
+
+    private func saveLaborGutter(_ text: String) {
+        let value = text.isEmpty ? 0 : (Double(text) ?? 0)
+        settings.laborPerFootGutter = value
+        saveSettings()
+    }
+
+    private func saveGutterGuardLabor(_ text: String) {
+        let value = text.isEmpty ? 0 : (Double(text) ?? 0)
+        settings.gutterGuardLaborPerFoot = value
+        saveSettings()
+    }
+
+    private func saveMarkup(_ text: String) {
+        let value = text.isEmpty ? 0 : ((Double(text) ?? 0) / 100)
+        settings.defaultMarkupPercent = value
+        saveSettings()
+    }
+
+    private func saveProfitMargin(_ text: String) {
+        let value = text.isEmpty ? 0 : ((Double(text) ?? 0) / 100)
+        settings.defaultProfitMarginPercent = value
+        saveSettings()
+    }
+
+    private func saveSalesCommission(_ text: String) {
+        let value = text.isEmpty ? 0 : ((Double(text) ?? 0) / 100)
+        settings.defaultSalesCommissionPercent = value
+        saveSettings()
+    }
+
+    private func saveGutterGuardMarkup(_ text: String) {
+        let value = text.isEmpty ? 0 : ((Double(text) ?? 0) / 100)
+        settings.gutterGuardMarkupPercent = value
+        saveSettings()
+    }
+
+    private func saveGutterGuardProfitMargin(_ text: String) {
+        let value = text.isEmpty ? 0 : ((Double(text) ?? 0) / 100)
+        settings.gutterGuardProfitMarginPercent = value
+        saveSettings()
+    }
+
+    private func saveMaterialCostRoundDownspout(_ text: String) {
+        let value = text.isEmpty ? 0 : (Double(text) ?? 0)
+        settings.materialCostPerFootRoundDownspout = value
+        saveSettings()
+    }
+
+    private func saveCostPerRoundElbow(_ text: String) {
+        let value = text.isEmpty ? 0 : (Double(text) ?? 0)
+        settings.costPerRoundElbow = value
+        saveSettings()
     }
 
     private func saveSettings() {
@@ -71,16 +185,13 @@ struct SettingsView: View {
                     defaultPricingSection
                     gutterGuardPricingSection
                 }
-                .onTapGesture {
-                    // Only dismiss keyboard when tapping outside of interactive elements
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                .onAppear {
+                    updateTextFields()
                 }
-                .simultaneousGesture(
-                    // Allow button taps to work properly
-                    TapGesture().onEnded { _ in }
-                )
+                .onTapGesture {
+                    focusedField = nil
+                }
 
-                // Jobber section outside Form for better button responsiveness
                 jobberSectionStandalone
             }
             .navigationTitle("Settings")
@@ -95,42 +206,80 @@ struct SettingsView: View {
                 Text("Gutter")
                 Spacer()
                 Text("$")
-                TextField("0", text: decimalBinding(for: Binding(
-                    get: { settings.materialCostPerFootGutter },
-                    set: { settings.materialCostPerFootGutter = $0 }
-                )))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 80)
-                .keyboardType(.decimalPad)
-                .onSubmit { saveSettings() }
+                TextField("0", text: $materialCostGutterText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .materialCostGutter)
+                    .onSubmit {
+                        saveMaterialCostGutter(materialCostGutterText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .materialCostGutter {
+                            saveMaterialCostGutter(materialCostGutterText)
+                        }
+                    }
             }
 
             HStack {
                 Text("Downspout")
                 Spacer()
                 Text("$")
-                TextField("0", text: decimalBinding(for: Binding(
-                    get: { settings.materialCostPerFootDownspout },
-                    set: { settings.materialCostPerFootDownspout = $0 }
-                )))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 80)
-                .keyboardType(.decimalPad)
-                .onSubmit { saveSettings() }
+                TextField("0", text: $materialCostDownspoutText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .materialCostDownspout)
+                    .onSubmit {
+                        saveMaterialCostDownspout(materialCostDownspoutText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .materialCostDownspout {
+                            saveMaterialCostDownspout(materialCostDownspoutText)
+                        }
+                    }
+            }
+
+            HStack {
+                Text("Round Downspout")
+                Spacer()
+                Text("$")
+                TextField("0", text: $materialCostRoundDownspoutText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .materialCostRoundDownspout)
+                    .onSubmit {
+                        saveMaterialCostRoundDownspout(materialCostRoundDownspoutText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .materialCostRoundDownspout {
+                            saveMaterialCostRoundDownspout(materialCostRoundDownspoutText)
+                        }
+                    }
             }
 
             HStack {
                 Text("Gutter Guard")
                 Spacer()
                 Text("$")
-                TextField("0", text: decimalBinding(for: Binding(
-                    get: { settings.gutterGuardMaterialPerFoot },
-                    set: { settings.gutterGuardMaterialPerFoot = $0 }
-                )))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 80)
-                .keyboardType(.decimalPad)
-                .onSubmit { saveSettings() }
+                TextField("0", text: $gutterGuardMaterialText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .gutterGuardMaterial)
+                    .onSubmit {
+                        saveGutterGuardMaterial(gutterGuardMaterialText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .gutterGuardMaterial {
+                            saveGutterGuardMaterial(gutterGuardMaterialText)
+                        }
+                    }
             }
         }
     }
@@ -141,41 +290,79 @@ struct SettingsView: View {
                 Text("Elbow")
                 Spacer()
                 Text("$")
-                TextField("0", text: decimalBinding(for: Binding(
-                    get: { settings.costPerElbow },
-                    set: { settings.costPerElbow = $0 }
-                )))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 80)
-                .keyboardType(.decimalPad)
-                .onSubmit { saveSettings() }
+                TextField("0", text: $costPerElbowText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .costPerElbow)
+                    .onSubmit {
+                        saveCostPerElbow(costPerElbowText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .costPerElbow {
+                            saveCostPerElbow(costPerElbowText)
+                        }
+                    }
+            }
+
+            HStack {
+                Text("Round Elbow")
+                Spacer()
+                Text("$")
+                TextField("0", text: $costPerRoundElbowText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .costPerRoundElbow)
+                    .onSubmit {
+                        saveCostPerRoundElbow(costPerRoundElbowText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .costPerRoundElbow {
+                            saveCostPerRoundElbow(costPerRoundElbowText)
+                        }
+                    }
             }
 
             HStack {
                 Text("Hanger")
                 Spacer()
                 Text("$")
-                TextField("0", text: decimalBinding(for: Binding(
-                    get: { settings.costPerHanger },
-                    set: { settings.costPerHanger = $0 }
-                )))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 80)
-                .keyboardType(.decimalPad)
-                .onSubmit { saveSettings() }
+                TextField("0", text: $costPerHangerText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .costPerHanger)
+                    .onSubmit {
+                        saveCostPerHanger(costPerHangerText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .costPerHanger {
+                            saveCostPerHanger(costPerHangerText)
+                        }
+                    }
             }
 
             HStack {
                 Text("Hanger Spacing")
                 Spacer()
-                TextField("0", text: decimalBinding(for: Binding(
-                    get: { settings.hangerSpacingFeet },
-                    set: { settings.hangerSpacingFeet = $0 }
-                )))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 60)
-                .keyboardType(.decimalPad)
-                .onSubmit { saveSettings() }
+                TextField("0", text: $hangerSpacingText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 60)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .hangerSpacing)
+                    .onSubmit {
+                        saveHangerSpacing(hangerSpacingText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .hangerSpacing {
+                            saveHangerSpacing(hangerSpacingText)
+                        }
+                    }
                 Text("ft")
             }
         }
@@ -187,28 +374,40 @@ struct SettingsView: View {
                 Text("Gutter Installation")
                 Spacer()
                 Text("$")
-                TextField("0", text: decimalBinding(for: Binding(
-                    get: { settings.laborPerFootGutter },
-                    set: { settings.laborPerFootGutter = $0 }
-                )))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 80)
-                .keyboardType(.decimalPad)
-                .onSubmit { saveSettings() }
+                TextField("0", text: $laborGutterText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .laborGutter)
+                    .onSubmit {
+                        saveLaborGutter(laborGutterText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .laborGutter {
+                            saveLaborGutter(laborGutterText)
+                        }
+                    }
             }
 
             HStack {
                 Text("Gutter Guard Installation")
                 Spacer()
                 Text("$")
-                TextField("0", text: decimalBinding(for: Binding(
-                    get: { settings.gutterGuardLaborPerFoot },
-                    set: { settings.gutterGuardLaborPerFoot = $0 }
-                )))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 80)
-                .keyboardType(.decimalPad)
-                .onSubmit { saveSettings() }
+                TextField("0", text: $gutterGuardLaborText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .gutterGuardLabor)
+                    .onSubmit {
+                        saveGutterGuardLabor(gutterGuardLaborText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .gutterGuardLabor {
+                            saveGutterGuardLabor(gutterGuardLaborText)
+                        }
+                    }
             }
         }
     }
@@ -218,42 +417,60 @@ struct SettingsView: View {
             HStack {
                 Text("Markup")
                 Spacer()
-                TextField("0", text: percentBinding(for: Binding(
-                    get: { settings.defaultMarkupPercent },
-                    set: { settings.defaultMarkupPercent = $0 }
-                )))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 60)
-                .keyboardType(.decimalPad)
-                .onSubmit { saveSettings() }
+                TextField("0", text: $markupText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 60)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .markup)
+                    .onSubmit {
+                        saveMarkup(markupText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .markup {
+                            saveMarkup(markupText)
+                        }
+                    }
                 Text("%")
             }
 
             HStack {
                 Text("Profit Margin")
                 Spacer()
-                TextField("0", text: percentBinding(for: Binding(
-                    get: { settings.defaultProfitMarginPercent },
-                    set: { settings.defaultProfitMarginPercent = $0 }
-                )))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 60)
-                .keyboardType(.decimalPad)
-                .onSubmit { saveSettings() }
+                TextField("0", text: $profitMarginText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 60)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .profitMargin)
+                    .onSubmit {
+                        saveProfitMargin(profitMarginText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .profitMargin {
+                            saveProfitMargin(profitMarginText)
+                        }
+                    }
                 Text("%")
             }
 
             HStack {
                 Text("Sales Commission")
                 Spacer()
-                TextField("0", text: percentBinding(for: Binding(
-                    get: { settings.defaultSalesCommissionPercent },
-                    set: { settings.defaultSalesCommissionPercent = $0 }
-                )))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 60)
-                .keyboardType(.decimalPad)
-                .onSubmit { saveSettings() }
+                TextField("0", text: $salesCommissionText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 60)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .salesCommission)
+                    .onSubmit {
+                        saveSalesCommission(salesCommissionText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .salesCommission {
+                            saveSalesCommission(salesCommissionText)
+                        }
+                    }
                 Text("%")
             }
         }
@@ -264,28 +481,40 @@ struct SettingsView: View {
             HStack {
                 Text("Markup")
                 Spacer()
-                TextField("0", text: percentBinding(for: Binding(
-                    get: { settings.gutterGuardMarkupPercent },
-                    set: { settings.gutterGuardMarkupPercent = $0 }
-                )))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 60)
-                .keyboardType(.decimalPad)
-                .onSubmit { saveSettings() }
+                TextField("0", text: $gutterGuardMarkupText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 60)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .gutterGuardMarkup)
+                    .onSubmit {
+                        saveGutterGuardMarkup(gutterGuardMarkupText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .gutterGuardMarkup {
+                            saveGutterGuardMarkup(gutterGuardMarkupText)
+                        }
+                    }
                 Text("%")
             }
 
             HStack {
                 Text("Profit Margin")
                 Spacer()
-                TextField("0", text: percentBinding(for: Binding(
-                    get: { settings.gutterGuardProfitMarginPercent },
-                    set: { settings.gutterGuardProfitMarginPercent = $0 }
-                )))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 60)
-                .keyboardType(.decimalPad)
-                .onSubmit { saveSettings() }
+                TextField("0", text: $gutterGuardProfitMarginText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 60)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .gutterGuardProfitMargin)
+                    .onSubmit {
+                        saveGutterGuardProfitMargin(gutterGuardProfitMarginText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .gutterGuardProfitMargin {
+                            saveGutterGuardProfitMargin(gutterGuardProfitMarginText)
+                        }
+                    }
                 Text("%")
             }
         }
