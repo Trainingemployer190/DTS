@@ -18,7 +18,6 @@ struct QuoteFormView: View {
     @State private var showingLineItemEditor = false
     @State private var newLineItemTitle = ""
     @State private var newLineItemAmount: Double = 0
-    @State private var showingSaveToJobberAlert = false
     @State private var isSavingToJobber = false
     @State private var showingJobberSuccess = false
     @State private var jobberSubmissionError: String?
@@ -453,34 +452,6 @@ struct QuoteFormView: View {
                     toolbarContent
                 }
             }
-            .alert("Save to Jobber", isPresented: $showingSaveToJobberAlert) {
-                alertButtons
-            } message: {
-                Text("Would you like to save this quote locally only or submit it to Jobber?\n\nJobber submission will:\n• Add quote details as a note with photos\n• Create an official quote with proper line items")
-            }
-            .fullScreenCover(isPresented: $photoCaptureManager.showingCamera) {
-                CameraView(isPresented: $photoCaptureManager.showingCamera, captureCount: $photoCaptureManager.captureCount) { image in
-                    photoCaptureManager.processImage(image, quoteDraftId: quoteDraft.localId)
-                }
-            }
-            .sheet(isPresented: $photoCaptureManager.showingPhotoLibrary) {
-                PhotoLibraryPicker(isPresented: $photoCaptureManager.showingPhotoLibrary) { image in
-                    photoCaptureManager.processImage(image, quoteDraftId: quoteDraft.localId)
-                }
-            }
-            .sheet(isPresented: $showingPhotoGallery) {
-                PhotoGalleryView(photos: photoCaptureManager.capturedImages)
-            }
-            .alert("PDF Generated", isPresented: $showingPDFAlert) {
-                Button("View & Share PDF") {
-                    if generatedPDFURL != nil {
-                        showingShareSheet = true
-                    }
-                }
-                Button("OK") { }
-            } message: {
-                Text("Quote PDF has been generated successfully. You can view and share it with your client.")
-            }
             .alert("Quote Submitted Successfully!", isPresented: $showingJobberSuccess) {
                 Button("OK") { }
             } message: {
@@ -897,43 +868,22 @@ struct QuoteFormView: View {
                     .disabled(quoteDraft.gutterFeet == 0)
                 }
             } else {
-                // New quote mode - full options
+                // New quote mode - simplified options
                 if jobberAPI.isAuthenticated && job != nil {
-                    Button(isSavingToJobber ? "Saving..." : "Save to Jobber") {
-                        showingSaveToJobberAlert = true
+                    Button(isSavingToJobber ? "Saving to Jobber..." : "Save to Jobber") {
+                        saveQuoteToJobber()
                     }
                     .disabled(quoteDraft.gutterFeet == 0 || isSavingToJobber)
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Button("Complete Quote") {
+                        saveQuoteAsCompleted()
+                    }
+                    .disabled(quoteDraft.gutterFeet == 0)
+                    .buttonStyle(.borderedProminent)
                 }
-
-                Button("Save Draft") {
-                    saveQuote()
-                }
-
-                Button("Complete Quote") {
-                    saveQuoteAsCompleted()
-                }
-                .disabled(quoteDraft.gutterFeet == 0)
-                .buttonStyle(.borderedProminent)
             }
         }
-    }
-
-    @ViewBuilder
-    private var alertButtons: some View {
-        Button("Save Draft Only") {
-            saveQuote()
-        }
-
-        Button("Complete & Save to History") {
-            saveQuoteAsCompleted()
-        }
-
-        Button(isSavingToJobber ? "Saving..." : "Save to Jobber") {
-            saveQuoteToJobber()
-        }
-        .disabled(isSavingToJobber)
-
-        Button("Cancel", role: .cancel) { }
     }
 
     private func saveQuote() {
@@ -977,8 +927,19 @@ struct QuoteFormView: View {
     private func saveQuoteToJobber() {
         isSavingToJobber = true
 
-        // First save locally
-        saveQuote()
+        // First save and complete the quote locally (same as saveQuoteAsCompleted)
+        let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
+        PricingEngine.updateQuoteWithCalculatedTotals(quote: quoteDraft, breakdown: breakdown)
+        
+        // Mark as completed and add to history
+        quoteDraft.quoteStatus = .completed
+        quoteDraft.completedAt = Date()
+        if let job = job { quoteDraft.clientAddress = job.address }
+        if existingQuote == nil { modelContext.insert(quoteDraft) }
+        try? modelContext.save()
+        
+        // Generate PDF
+        generateQuotePDF(breakdown: breakdown)
 
         // Then submit to Jobber as note AND create a quote
         Task {
@@ -995,9 +956,6 @@ struct QuoteFormView: View {
                 }
 
                 print("📤 Submitting quote to Jobber with requestId: \(requestId)")
-
-                // Calculate current breakdown
-                let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
 
                 // Get captured photos
                 let photos = photoCaptureManager.capturedImages.map { $0.image }
@@ -1047,6 +1005,12 @@ struct QuoteFormView: View {
                         // Provide haptic feedback
                         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                         impactFeedback.impactOccurred()
+                        
+                        // Navigate to Home after successful submission
+                        DispatchQueue.main.async {
+                            router.selectedTab = 0
+                            dismiss()
+                        }
                     }
 
                     isSavingToJobber = false
