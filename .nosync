@@ -1,0 +1,2 @@
+# This file tells iCloud not to sync this folder
+# Keep this file to prevent Git objects from syncing to iCloud

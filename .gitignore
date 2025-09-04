@@ -64,3 +64,25 @@ LEGACY_FILES/
 **/LEGACY_FILES/
 *.backup/
 **/*.backup/
+
+# Prevent iCloud sync of Git objects
+.git/objects/
+.git/refs/
+.git/logs/
+.git/packed-refs
+.git/config
+.git/HEAD
+.git/index
+.git/hooks/
+
+# Prevent iCloud sync of build artifacts
+build/
+DerivedData/
+*.xcarchive
+*.ipa
+
+# Prevent iCloud sync of system files
+.DS_Store
+*.swp
+*.tmp
+*~
