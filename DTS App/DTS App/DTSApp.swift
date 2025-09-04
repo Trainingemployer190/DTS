@@ -46,6 +46,7 @@ struct DTSApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var showLoadingScreen = true
     @StateObject private var jobberAPI = JobberAPI()
+    @StateObject private var router = AppRouter()
 
     var body: some Scene {
         WindowGroup {
@@ -62,6 +63,7 @@ struct DTSApp: App {
                 MainContentView()
                     .modelContainer(for: [AppSettings.self, QuoteDraft.self, PhotoRecord.self, LineItem.self, OutboxOperation.self])
                     .environmentObject(jobberAPI)
+                    .environmentObject(router)
                     .onOpenURL { url in
                         handleIncomingURL(url)
                     }

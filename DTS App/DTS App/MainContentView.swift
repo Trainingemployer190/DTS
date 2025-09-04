@@ -4,10 +4,10 @@ import SwiftData
 struct MainContentView: View {
     @EnvironmentObject private var jobberAPI: JobberAPI
     @Environment(\.modelContext) private var modelContext
-    @State private var selectedTab = 0
+    @EnvironmentObject var router: AppRouter
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: $router.selectedTab) {
             NavigationView {
                 HomeView()
             }
@@ -27,13 +27,22 @@ struct MainContentView: View {
             .tag(1)
 
             NavigationView {
+                QuoteHistoryView()
+            }
+            .tabItem {
+                Image(systemName: "clock")
+                Text("History")
+            }
+            .tag(2)
+
+            NavigationView {
                 SettingsView()
             }
             .tabItem {
                 Image(systemName: "gear")
                 Text("Settings")
             }
-            .tag(2)
+            .tag(3)
         }
         .onAppear {
             setupJobberAPI()
@@ -50,5 +59,6 @@ struct MainContentView: View {
 
 #Preview {
     MainContentView()
+        .environmentObject(AppRouter())
         .modelContainer(for: [AppSettings.self, QuoteDraft.self, LineItem.self, PhotoRecord.self, OutboxOperation.self])
 }

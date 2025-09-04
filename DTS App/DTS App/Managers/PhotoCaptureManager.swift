@@ -126,21 +126,29 @@ class PhotoCaptureManager: NSObject, ObservableObject {
     }
 
     private func requestCurrentLocation() {
-        guard isLocationAuthorized else {
+        // Check cached authorization status first
+        switch cachedAuthorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            // Check if location services are enabled
+            guard CLLocationManager.locationServicesEnabled() else {
+                print("Location services not enabled on device")
+                locationError = "Location services are disabled on this device. Enable them in Settings > Privacy & Security > Location Services."
+                return
+            }
+
+            print("Requesting current location...")
+            // Use requestLocation for one-time location request instead of continuous updates
+            locationManager.requestLocation()
+        case .denied, .restricted:
             print("Location not authorized - cannot request location")
             locationError = "Location access not granted"
-            return
+        case .notDetermined:
+            print("Location permission not determined")
+            locationError = "Location permission pending"
+        @unknown default:
+            print("Unknown location authorization status")
+            locationError = "Location access status unknown"
         }
-
-        guard CLLocationManager.locationServicesEnabled() else {
-            print("Location services not enabled on device")
-            locationError = "Location services are disabled on this device. Enable them in Settings > Privacy & Security > Location Services."
-            return
-        }
-
-        print("Requesting current location...")
-        // Use requestLocation for one-time location request instead of continuous updates
-        locationManager.requestLocation()
     }
 
     private func checkPhotosPermission() {
@@ -362,18 +370,18 @@ class PhotoCaptureManager: NSObject, ObservableObject {
     }
 
     func formatLocationStatus() -> String {
-        // Check if location services are enabled first
-        if !CLLocationManager.locationServicesEnabled() {
-            return "Location services disabled"
-        }
-
-        // Check cached authorization status to avoid main thread warnings
+        // Check cached authorization status first to avoid main thread warnings
         switch cachedAuthorizationStatus {
         case .denied, .restricted:
             return "Location access denied"
         case .notDetermined:
             return "Location permission pending"
         case .authorizedWhenInUse, .authorizedAlways:
+            // Only check location services if we have permission
+            if !CLLocationManager.locationServicesEnabled() {
+                return "Location services disabled"
+            }
+
             if let error = locationError {
                 return error
             } else if let address = currentAddress, !address.isEmpty {
@@ -392,35 +400,35 @@ class PhotoCaptureManager: NSObject, ObservableObject {
     }
 
     private func formatLocationText() -> String {
-        // Check if location services are enabled first
-        if !CLLocationManager.locationServicesEnabled() {
-            return "📍 Location services disabled"
-        }
-
-        // Check cached authorization status to avoid main thread warnings
+        // Check cached authorization status first to avoid main thread warnings
         switch cachedAuthorizationStatus {
         case .denied, .restricted:
             return "📍 Location access denied. Enable in Settings > Privacy & Security > Location Services"
         case .notDetermined:
             return "📍 Location permission pending"
-        default:
-            break
-        }
+        case .authorizedWhenInUse, .authorizedAlways:
+            // Only check location services if we have permission
+            if !CLLocationManager.locationServicesEnabled() {
+                return "📍 Location services disabled"
+            }
 
-        // Show any current location error
-        if let error = locationError {
-            return "📍 \(error)"
-        }
+            // Show any current location error
+            if let error = locationError {
+                return "📍 \(error)"
+            }
 
-        // Use address if available, otherwise fall back to coordinates
-        if let address = currentAddress, !address.isEmpty {
-            return "📍 \(address)"
-        } else if let location = currentLocation {
-            let latitude = String(format: "%.6f", location.coordinate.latitude)
-            let longitude = String(format: "%.6f", location.coordinate.longitude)
-            return "📍 \(latitude), \(longitude)"
-        } else {
-            return "📍 Getting location..."
+            // Use address if available, otherwise fall back to coordinates
+            if let address = currentAddress, !address.isEmpty {
+                return "📍 \(address)"
+            } else if let location = currentLocation {
+                let latitude = String(format: "%.6f", location.coordinate.latitude)
+                let longitude = String(format: "%.6f", location.coordinate.longitude)
+                return "📍 \(latitude), \(longitude)"
+            } else {
+                return "📍 Getting location..."
+            }
+        @unknown default:
+            return "📍 Location status unknown"
         }
     }
 }

@@ -6,9 +6,12 @@ import SwiftData
 struct QuoteFormView: View {
     let job: JobberJob?
     let prefilledQuoteDraft: QuoteDraft?
+    let existingQuote: QuoteDraft? // For editing existing quotes
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss // Add dismiss for editing mode
     @EnvironmentObject private var jobberAPI: JobberAPI
+    @EnvironmentObject var router: AppRouter
     @Query private var settingsArray: [AppSettings]
     @State private var quoteDraft = QuoteDraft()
     @State private var showingPreview = false
@@ -43,11 +46,20 @@ struct QuoteFormView: View {
     init(job: JobberJob?) {
         self.job = job
         self.prefilledQuoteDraft = nil
+        self.existingQuote = nil
     }
 
     init(job: JobberJob?, prefilledQuoteDraft: QuoteDraft?) {
         self.job = job
         self.prefilledQuoteDraft = prefilledQuoteDraft
+        self.existingQuote = nil
+    }
+
+    // New initializer for editing existing quotes
+    init(existingQuote: QuoteDraft) {
+        self.job = nil
+        self.prefilledQuoteDraft = nil
+        self.existingQuote = existingQuote
     }
 
     // Common labor items for quick selection
@@ -428,8 +440,15 @@ struct QuoteFormView: View {
     var body: some View {
         NavigationStack {
             formContent
-            .navigationTitle(job != nil ? "Create Quote" : "Standalone Quote")
+            .navigationTitle(existingQuote != nil ? "Edit Quote" : (job != nil ? "Create Quote" : "Standalone Quote"))
             .toolbar {
+                if existingQuote != nil {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancel") {
+                            dismiss()
+                        }
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     toolbarContent
                 }
@@ -486,10 +505,25 @@ struct QuoteFormView: View {
             }
         }
         .onAppear {
+            // If we have an existing quote (editing mode), use it
+            if let existingQuote = existingQuote {
+                quoteDraft = existingQuote
+                print("Editing existing quote for client: \(existingQuote.clientName)")
+                return
+            }
+
             // If we have a pre-filled quote draft, use it
             if let prefilledQuoteDraft = prefilledQuoteDraft {
                 quoteDraft = prefilledQuoteDraft
                 print("Using pre-filled quote draft for client: \(prefilledQuoteDraft.clientName)")
+            }
+
+            // Populate client information from job if available
+            if let job = job {
+                quoteDraft.clientName = job.clientName
+                quoteDraft.clientAddress = job.address
+                quoteDraft.clientId = job.clientId
+                print("Populated client info from job: \(job.clientName) at \(job.address)")
             }
 
             // Initialize with default values from settings
@@ -523,6 +557,7 @@ struct QuoteFormView: View {
     private var formContent: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
+                clientInfoSectionContent
                 colorSectionContent
                 measurementsSectionContent
                 gutterGuardSectionContent
@@ -564,6 +599,38 @@ struct QuoteFormView: View {
             // Dismiss keyboard when tapping anywhere
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         }
+    }
+
+    @ViewBuilder
+    private var clientInfoSectionContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Client Information")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top)
+
+            VStack(spacing: 16) {
+                HStack {
+                    Text("Client Name")
+                    Spacer()
+                    TextField("Enter client name", text: $quoteDraft.clientName)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 200)
+                }
+                .padding(.horizontal)
+
+                HStack {
+                    Text("Address")
+                    Spacer()
+                    TextField("Enter address", text: $quoteDraft.clientAddress)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 200)
+                }
+                .padding(.horizontal)
+            }
+            .padding(.bottom)
+        }
+        .background(Color(.systemBackground))
     }
 
     @ViewBuilder
@@ -816,24 +883,49 @@ struct QuoteFormView: View {
     @ViewBuilder
     private var toolbarContent: some View {
         HStack {
-            if jobberAPI.isAuthenticated && job != nil {
-                Button(isSavingToJobber ? "Saving..." : "Save to Jobber") {
-                    showingSaveToJobberAlert = true
+            if existingQuote != nil {
+                // Editing mode - simpler options
+                Button("Save Changes") {
+                    saveQuote()
                 }
-                .disabled(quoteDraft.gutterFeet == 0 || isSavingToJobber)
-            }
+                .buttonStyle(.borderedProminent)
 
-            Button("Save Quote") {
-                saveQuote()
+                if existingQuote?.quoteStatus != .completed {
+                    Button("Complete Quote") {
+                        saveQuoteAsCompleted()
+                    }
+                    .disabled(quoteDraft.gutterFeet == 0)
+                }
+            } else {
+                // New quote mode - full options
+                if jobberAPI.isAuthenticated && job != nil {
+                    Button(isSavingToJobber ? "Saving..." : "Save to Jobber") {
+                        showingSaveToJobberAlert = true
+                    }
+                    .disabled(quoteDraft.gutterFeet == 0 || isSavingToJobber)
+                }
+
+                Button("Save Draft") {
+                    saveQuote()
+                }
+
+                Button("Complete Quote") {
+                    saveQuoteAsCompleted()
+                }
+                .disabled(quoteDraft.gutterFeet == 0)
+                .buttonStyle(.borderedProminent)
             }
-            .disabled(false)
         }
     }
 
     @ViewBuilder
     private var alertButtons: some View {
-        Button("Save Local Only") {
+        Button("Save Draft Only") {
             saveQuote()
+        }
+
+        Button("Complete & Save to History") {
+            saveQuoteAsCompleted()
         }
 
         Button(isSavingToJobber ? "Saving..." : "Save to Jobber") {
@@ -848,12 +940,38 @@ struct QuoteFormView: View {
         let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
         PricingEngine.updateQuoteWithCalculatedTotals(quote: quoteDraft, breakdown: breakdown)
 
-        // Save quote to database
-        modelContext.insert(quoteDraft)
+        // Only insert if it's a new quote (not editing existing)
+        if existingQuote == nil {
+            modelContext.insert(quoteDraft)
+        }
+
         try? modelContext.save()
 
         // Generate PDF
         generateQuotePDF(breakdown: breakdown)
+
+        // If editing, dismiss the view
+        if existingQuote != nil {
+            dismiss()
+        }
+    }
+
+    private func saveQuoteAsCompleted() {
+        let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
+        PricingEngine.updateQuoteWithCalculatedTotals(quote: quoteDraft, breakdown: breakdown)
+        // Mark as completed and add to history
+        quoteDraft.quoteStatus = .completed
+        quoteDraft.completedAt = Date()
+        if let job = job { quoteDraft.clientAddress = job.address }
+        if existingQuote == nil { modelContext.insert(quoteDraft) }
+        try? modelContext.save()
+        // Generate PDF
+        generateQuotePDF(breakdown: breakdown)
+        // Navigate to Home after completion
+        DispatchQueue.main.async {
+            router.selectedTab = 0
+            dismiss()
+        }
     }
 
     private func saveQuoteToJobber() {
@@ -944,14 +1062,16 @@ struct QuoteFormView: View {
 
     private func generateQuotePDF(breakdown: PricingEngine.PriceBreakdown) {
         // Get photos for this quote (currently unused but available for future features)
-        let _ = photoCaptureManager.capturedImages
+        let images = photoCaptureManager.capturedImages.map { $0.image }
 
-        // Generate PDF
+        // Enhanced PDF with all details
+        #if canImport(UIKit)
         if let pdfData = PDFGenerator.shared.generateQuotePDF(
+            quote: quoteDraft,
+            settings: settings,
             breakdown: breakdown,
-            customerName: "Customer" // TODO: Add customer name field to QuoteDraft
+            photos: images
         ) {
-            // Save to temporary URL for sharing
             let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("quote_\(quoteDraft.localId.uuidString).pdf")
             do {
                 try pdfData.write(to: tempURL)
@@ -961,6 +1081,18 @@ struct QuoteFormView: View {
                 print("Error saving PDF: \(error)")
             }
         }
+        #else
+        // Fallback to basic PDF if UIKit not available
+        if let pdfData = PDFGenerator.shared.generateQuotePDF(
+            breakdown: breakdown,
+            customerName: quoteDraft.clientName.isEmpty ? "Customer" : quoteDraft.clientName
+        ) {
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("quote_\(quoteDraft.localId.uuidString).pdf")
+            try? pdfData.write(to: tempURL)
+            generatedPDFURL = tempURL
+            showingPDFAlert = true
+        }
+        #endif
     }
 
     // MARK: - Additional Labor Item Management

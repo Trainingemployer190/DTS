@@ -78,12 +78,19 @@ enum SyncState: String, Codable, CaseIterable {
     case failed
 }
 
+enum QuoteStatus: String, Codable, CaseIterable {
+    case draft = "draft"
+    case completed = "completed"
+    case archived = "archived"
+}
+
 @Model
 final class QuoteDraft: ObservableObject {
     var localId: UUID = UUID()
     var jobId: String?
     var clientId: String?
     var clientName: String = ""
+    var clientAddress: String = "" // Add address for history display
     var gutterFeet: Double = 0
     var downspoutFeet: Double = 0
     var isRoundDownspout: Bool = false  // Round downspout toggle
@@ -105,7 +112,9 @@ final class QuoteDraft: ObservableObject {
     var salesCommissionPercent: Double = 0  // Initialize to 0, will be set from settings
     var notes: String = ""
     var syncStateRaw: String = SyncState.pending.rawValue
+    var quoteStatusRaw: String = QuoteStatus.draft.rawValue
     var createdAt: Date = Date()
+    var completedAt: Date? // Track when quote was completed
 
     // Computed totals (stored for audit)
     var materialsTotal: Double = 0
@@ -151,6 +160,16 @@ final class QuoteDraft: ObservableObject {
     var syncState: SyncState {
         get { SyncState(rawValue: syncStateRaw) ?? .pending }
         set { syncStateRaw = newValue.rawValue }
+    }
+
+    var quoteStatus: QuoteStatus {
+        get { QuoteStatus(rawValue: quoteStatusRaw) ?? .draft }
+        set {
+            quoteStatusRaw = newValue.rawValue
+            if newValue == .completed && completedAt == nil {
+                completedAt = Date()
+            }
+        }
     }
 
     var hangersCount: Int {

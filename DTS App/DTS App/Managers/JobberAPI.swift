@@ -957,7 +957,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
             Task {
                 await performGraphQLRequest(query: query, variables: variables) { [weak self] (result: Result<ProductDetailsResponse, Error>) in
                     Task { @MainActor in
-                        guard let self = self else {
+                        guard self != nil else {
                             continuation.resume(returning: .failure(APIError.invalidResponse))
                             return
                         }
