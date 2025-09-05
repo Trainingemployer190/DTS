@@ -178,15 +178,12 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             VStack {
-                Form {
+                SwiftUI.Form {
                     materialCostsSection
                     componentCostsSection
                     laborCostsSection
                     defaultPricingSection
                     gutterGuardPricingSection
-                }
-                .onAppear {
-                    updateTextFields()
                 }
                 .onTapGesture {
                     focusedField = nil
@@ -195,6 +192,9 @@ struct SettingsView: View {
                 jobberSectionStandalone
             }
             .navigationTitle("Settings")
+            .onAppear {
+                updateTextFields()
+            }
         }
     }
 

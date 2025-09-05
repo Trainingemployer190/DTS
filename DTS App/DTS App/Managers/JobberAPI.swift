@@ -629,6 +629,13 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                   requestStatus
                   source
                   title
+                  notes {
+                    nodes {
+                      ... on RequestNote {
+                        message
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -708,6 +715,15 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                         }
 
                         // Create JobberJob
+                        // This correctly retrieves the service information from the notes
+                        let serviceInformation = assessment.request?.notes?.nodes?
+                            .compactMap { $0.message }
+                            .joined(separator: "\n") ?? ""
+
+                        print("🔍 Debug - Service Information from notes: '\(serviceInformation)'")
+                        print("🔍 Debug - Request title: '\(assessment.request?.title ?? "nil")'")
+                        print("🔍 Debug - Instructions: '\(assessment.instructions ?? "nil")'")
+
                         let jobberJob = JobberJob(
                             jobId: assessment.id,
                             requestId: assessment.request?.id,
@@ -717,7 +733,11 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                             clientPhone: clientPhone,
                             address: address,
                             scheduledAt: startAt,
-                            status: status
+                            status: status,
+                            serviceTitle: assessment.request?.title,
+                            instructions: assessment.instructions,
+                            serviceInformation: serviceInformation,
+                            serviceSpecifications: serviceInformation  // Use serviceInformation for both
                         )
 
                         print("Created JobberJob with requestId: \(String(describing: jobberJob.requestId))")
@@ -843,6 +863,13 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                   requestStatus
                   source
                   title
+                  notes {
+                    nodes {
+                      ... on RequestNote {
+                        message
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -911,6 +938,14 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                             status = "scheduled"
                         }
 
+                        // This correctly retrieves the service information from the notes
+                        let serviceInformation = assessment.request?.notes?.nodes?
+                            .compactMap { $0.message }
+                            .joined(separator: "\n") ?? ""
+
+                        // Debug logging to confirm the data is being parsed correctly
+                        print("🔍 Debug - Service Information from notes: '\(serviceInformation)'")
+
                         let jobberJob = JobberJob(
                             jobId: assessment.id,
                             requestId: assessment.request?.id,
@@ -920,7 +955,11 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                             clientPhone: clientPhone,
                             address: address,
                             scheduledAt: startAt,
-                            status: status
+                            status: status,
+                            serviceTitle: assessment.request?.title,
+                            instructions: assessment.instructions,
+                            serviceInformation: serviceInformation,
+                            serviceSpecifications: serviceInformation  // Use serviceInformation for both
                         )
 
                         fetchedJobs.append(jobberJob)
@@ -2137,6 +2176,21 @@ struct RequestNode: Codable {
     let requestStatus: String?
     let source: String?
     let title: String?
+    let notes: NotesConnection?
+}
+
+
+
+struct NotesConnection: Codable {
+    let nodes: [RequestNoteUnion]?
+}
+
+struct RequestNoteUnion: Codable {
+    let message: String?
+}
+
+struct NoteNode: Codable {
+    let body: String?
 }
 
 struct ClientNode: Codable {

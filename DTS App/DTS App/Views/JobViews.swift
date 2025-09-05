@@ -22,6 +22,14 @@ struct JobRowView: View {
                         .font(.headline)
                         .foregroundColor(.primary)
 
+                    // Add service information if available
+                    if let serviceTitle = job.serviceTitle, !serviceTitle.isEmpty {
+                        Text(serviceTitle)
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                            .lineLimit(1)
+                    }
+
                     Button(action: {
                         let addressForURL = job.address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
                         let mapURL = URL(string: "http://maps.apple.com/?q=\(addressForURL)")
@@ -73,6 +81,7 @@ struct JobDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 JobInfoSection(job: job)
+                ServiceInfoSection(job: job)
                 PhotosSection(photoCaptureManager: photoCaptureManager, showingPhotoGallery: $showingPhotoGallery)
                 ActionButtonsSection(job: job, photoCaptureManager: photoCaptureManager)
                 Spacer()
@@ -563,6 +572,95 @@ struct JobInfoSection: View {
         .padding()
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+struct ServiceInfoSection: View {
+    let job: JobberJob
+
+    var body: some View {
+        if let serviceTitle = job.serviceTitle, !serviceTitle.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Job Instructions")
+                    .font(.title2)
+                    .fontWeight(.bold)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(serviceTitle, systemImage: "wrench.and.screwdriver.fill")
+                        .font(.body)
+                        .foregroundColor(.primary)
+
+                    if let instructions = job.instructions, !instructions.isEmpty {
+                        Text("Instructions:")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.secondary)
+                            .padding(.top, 4)
+
+                        Text(instructions)
+                            .font(.body)
+                            .foregroundColor(.primary)
+                            .multilineTextAlignment(.leading)
+
+                        // Add service information under instructions
+                        if let serviceSpecifications = job.serviceSpecifications, !serviceSpecifications.isEmpty {
+                            Text("Notes:")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.secondary)
+                                .padding(.top, 8)
+
+                            Text(serviceSpecifications)
+                                .font(.body)
+                                .foregroundColor(.primary)
+                                .multilineTextAlignment(.leading)
+                                .padding(.top, 2)
+                        } else if let serviceInformation = job.serviceInformation, !serviceInformation.isEmpty {
+                            Text("Notes:")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.secondary)
+                                .padding(.top, 8)
+
+                            Text(serviceInformation)
+                                .font(.body)
+                                .foregroundColor(.primary)
+                                .multilineTextAlignment(.leading)
+                                .padding(.top, 2)
+                        }
+                    } else {
+                        // If no instructions, still show service information
+                        if let serviceSpecifications = job.serviceSpecifications, !serviceSpecifications.isEmpty {
+                            Text("Notes:")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.secondary)
+                                .padding(.top, 4)
+
+                            Text(serviceSpecifications)
+                                .font(.body)
+                                .foregroundColor(.primary)
+                                .multilineTextAlignment(.leading)
+                        } else if let serviceInformation = job.serviceInformation, !serviceInformation.isEmpty {
+                            Text("Notes:")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.secondary)
+                                .padding(.top, 4)
+
+                            Text(serviceInformation)
+                                .font(.body)
+                                .foregroundColor(.primary)
+                                .multilineTextAlignment(.leading)
+                        }
+                    }
+                }
+                .font(.subheadline)
+            }
+            .padding()
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
     }
 }
 

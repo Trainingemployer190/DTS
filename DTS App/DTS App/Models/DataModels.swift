@@ -65,6 +65,10 @@ final class JobberJob: Identifiable {
     var address: String
     var scheduledAt: Date
     var status: String
+    var serviceTitle: String? // Service information from request title
+    var instructions: String? // Assessment instructions with additional service details
+    var serviceInformation: String? // Service information from request notes
+    var serviceSpecifications: String? // Parsed service specifications from notes
 
     // Helper function to extract numeric ID from Base64 encoded Jobber GraphQL ID
     private func extractNumericId(from encodedId: String) -> String? {
@@ -117,7 +121,7 @@ final class JobberJob: Identifiable {
         return nil
     }
 
-    init(jobId: String, requestId: String? = nil, clientId: String, propertyId: String? = nil, clientName: String, clientPhone: String?, address: String, scheduledAt: Date, status: String) {
+    init(jobId: String, requestId: String? = nil, clientId: String, propertyId: String? = nil, clientName: String, clientPhone: String?, address: String, scheduledAt: Date, status: String, serviceTitle: String? = nil, instructions: String? = nil, serviceInformation: String? = nil, serviceSpecifications: String? = nil) {
         self.jobId = jobId
         self.requestId = requestId
         self.clientId = clientId
@@ -127,6 +131,10 @@ final class JobberJob: Identifiable {
         self.address = address
         self.scheduledAt = scheduledAt
         self.status = status
+        self.serviceTitle = serviceTitle
+        self.instructions = instructions
+        self.serviceInformation = serviceInformation
+        self.serviceSpecifications = serviceSpecifications
     }
 }
 
@@ -321,19 +329,23 @@ struct QuoteDraftLineItem {
 
 // MARK: - Photo Capture Models
 
-#if canImport(UIKit)
-import UIKit
-
 struct CapturedPhoto: Identifiable {
     let id = UUID()
+    #if canImport(UIKit)
     let image: UIImage
+    #endif
     let timestamp: Date
     let location: String?
 
+    #if canImport(UIKit)
     init(image: UIImage, location: String? = nil) {
         self.image = image
         self.timestamp = Date()
         self.location = location
     }
+    #endif
 }
+
+#if canImport(UIKit)
+import UIKit
 #endif

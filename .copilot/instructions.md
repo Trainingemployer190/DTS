@@ -25,7 +25,7 @@ When working with GraphQL code in this project:
 
 ### Verification Steps
 - [ ] Check schema for field existence
-- [ ] Validate field types and relationships  
+- [ ] Validate field types and relationships
 - [ ] Ensure proper ID handling
 - [ ] Test with existing patterns
 - [ ] Add appropriate logging
