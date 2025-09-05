@@ -930,14 +930,14 @@ struct QuoteFormView: View {
         // First save and complete the quote locally (same as saveQuoteAsCompleted)
         let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
         PricingEngine.updateQuoteWithCalculatedTotals(quote: quoteDraft, breakdown: breakdown)
-        
+
         // Mark as completed and add to history
         quoteDraft.quoteStatus = .completed
         quoteDraft.completedAt = Date()
         if let job = job { quoteDraft.clientAddress = job.address }
         if existingQuote == nil { modelContext.insert(quoteDraft) }
         try? modelContext.save()
-        
+
         // Generate PDF
         generateQuotePDF(breakdown: breakdown)
 
@@ -1005,7 +1005,7 @@ struct QuoteFormView: View {
                         // Provide haptic feedback
                         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                         impactFeedback.impactOccurred()
-                        
+
                         // Navigate to Home after successful submission
                         DispatchQueue.main.async {
                             router.selectedTab = 0

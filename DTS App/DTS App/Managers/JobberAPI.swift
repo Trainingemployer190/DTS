@@ -2140,26 +2140,18 @@ struct PropertyAddress: Codable {
     let province: String?
 }
 
-// MARK: - Missing Response Models
+// MARK: - Missing Response Models (fixed)
 struct TokenResponse: Codable {
     let access_token: String
     let refresh_token: String
     let expires_in: Int?
 }
 
-struct AccountResponse: Codable {
-    let data: AccountData
-}
+struct AccountResponse: Codable { let data: AccountData }
+struct AccountData: Codable { let account: Account }
+struct Account: Codable { let id: String; let name: String }
 
-struct AccountData: Codable {
-    let account: Account
-}
-
-struct Account: Codable {
-    let id: String
-    let name: String
-}
-
+// Scheduled Assessments (query) models
 struct ScheduledAssessmentsResponse: Codable {
     let data: ScheduledAssessmentsData
 }
@@ -2177,6 +2169,7 @@ struct ScheduledItemsConnection: Codable {
 struct AssessmentNode: Codable {
     let id: String
     let title: String?
+
     let startAt: String
     let endAt: String?
     let completedAt: String?
@@ -2187,65 +2180,24 @@ struct AssessmentNode: Codable {
     let request: RequestNode?
 }
 
-struct AssignedUsersConnection: Codable {
-    let nodes: [AssignedUser]
-}
+struct AssignedUsersConnection: Codable { let nodes: [AssignedUser] }
+struct AssignedUser: Codable { let name: UserName }
+struct UserName: Codable { let full: String }
+struct PageInfo: Codable { let hasNextPage: Bool; let endCursor: String? }
 
-struct AssignedUser: Codable {
-    let name: UserName
-}
+// Quote creation (mutations)
+struct QuoteCreateResponse: Codable { let data: QuoteCreateData }
+struct QuoteCreateData: Codable { let quoteCreate: QuoteCreateResult }
+struct QuoteCreateResult: Codable { let quote: Quote?; let userErrors: [UserError]? }
+struct Quote: Codable { let id: String; let title: String; let createdAt: String?; let client: QuoteClient? }
+struct QuoteClient: Codable { let id: String; let name: String }
+struct UserError: Codable { let message: String; let path: [String]? }
 
-struct UserName: Codable {
-    let full: String
-}
-
-struct PageInfo: Codable {
-    let hasNextPage: Bool
-    let endCursor: String?
-}
-
-struct QuoteCreateResponse: Codable {
-    let data: QuoteCreateData
-}
-
-struct QuoteCreateData: Codable {
-    let quoteCreate: QuoteCreateResult
-}
-
-struct QuoteCreateResult: Codable {
-    let quote: Quote?
-    let userErrors: [UserError]?
-}
-
-struct Quote: Codable {
-    let id: String
-    let title: String
-    let createdAt: String?
-    let client: QuoteClient?
-}
-
-struct QuoteClient: Codable {
-    let id: String
-    let name: String
-}
-
-struct UserError: Codable {
-    let message: String
-    let path: [String]?
-}
-
-struct Phone: Codable {
-    let number: String
-    let primary: Bool
-}
-
-struct Email: Codable {
-    let address: String
-    let primary: Bool
-}
+// Basic contact info used in some nodes
+struct Phone: Codable { let number: String; let primary: Bool }
+struct Email: Codable { let address: String; let primary: Bool }
 
 // MARK: - Note Creation Types
-
 struct RequestCreateNoteInput {
     let message: String
     let attachments: [NoteAttachmentAttributes]?
@@ -2259,11 +2211,7 @@ struct NoteAttachmentAttributes {
     let contentType: String
 }
 
-struct RequestNoteLinkInput {
-    let jobIds: [String]?
-    let quoteIds: [String]?
-    let invoiceIds: [String]?
-}
+struct RequestNoteLinkInput { let jobIds: [String]?; let quoteIds: [String]?; let invoiceIds: [String]? }
 
 struct RequestNote: Codable {
     let id: String
@@ -2272,36 +2220,17 @@ struct RequestNote: Codable {
     let createdBy: RequestNoteCreator?
 }
 
-struct RequestNoteCreator: Codable {
-    let first: String?
-    let last: String?
-}
+struct RequestNoteCreator: Codable { let first: String?; let last: String? }
 
-struct RequestCreateNoteResponse {
+struct RequestCreateNoteResponse { // mapped from raw GraphQL response
     let requestNote: RequestNote?
     let userErrors: [GraphQLError]
 }
 
-struct GraphQLError {
-    let message: String
-    let path: [String]
-}
+struct GraphQLError { let message: String; let path: [String] }
 
-// MARK: - Raw Response Types for GraphQL
-struct RequestCreateNoteRawResponse: Codable {
-    let data: RequestCreateNoteDataResponse
-}
-
-struct RequestCreateNoteDataResponse: Codable {
-    let requestCreateNote: RequestCreateNotePayload
-}
-
-struct RequestCreateNotePayload: Codable {
-    let requestNote: RequestNote?
-    let userErrors: [RequestNoteUserError]?
-}
-
-struct RequestNoteUserError: Codable {
-    let message: String
-    let path: [String]?
-}
+// Raw GraphQL response types for note creation
+struct RequestCreateNoteRawResponse: Codable { let data: RequestCreateNoteDataResponse }
+struct RequestCreateNoteDataResponse: Codable { let requestCreateNote: RequestCreateNotePayload }
+struct RequestCreateNotePayload: Codable { let requestNote: RequestNote?; let userErrors: [RequestNoteUserError]? }
+struct RequestNoteUserError: Codable { let message: String; let path: [String]? }

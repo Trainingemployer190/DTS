@@ -506,6 +506,54 @@ struct JobInfoSection: View {
                         .foregroundColor(.blue)
                 }
 
+                // Add Jobber link - using computed URL with ID extraction
+                Button(action: {
+                    print("🔗 Attempting to open Jobber")
+                    print("🔗 Raw Client ID: '\(job.clientId)'")
+                    print("🔗 Raw Request ID: '\(job.requestId ?? "none")'")
+
+                    // Try to decode the IDs to show the extracted numeric values
+                    if let requestId = job.requestId,
+                       let data = Data(base64Encoded: requestId),
+                       let decoded = String(data: data, encoding: .utf8) {
+                        print("🔗 Decoded Request ID: '\(decoded)'")
+                    }
+
+                    if let data = Data(base64Encoded: job.clientId),
+                       let decoded = String(data: data, encoding: .utf8) {
+                        print("🔗 Decoded Client ID: '\(decoded)'")
+                    }
+
+                    guard let jobberURL = job.assessmentURL else {
+                        print("❌ No valid Jobber URL available")
+                        return
+                    }
+
+                    print("✅ Opening Jobber URL: \(jobberURL)")
+
+                    if let url = URL(string: jobberURL) {
+                        #if canImport(UIKit)
+                        UIApplication.shared.open(url)
+                        #endif
+                    } else {
+                        print("❌ Failed to create URL from string: \(jobberURL)")
+                    }
+                }) {
+                    Label("View in Jobber", systemImage: "link")
+                        .foregroundColor(.blue)
+                }
+
+                // Debug info for development
+                if job.requestId != nil {
+                    Text("Request ID: \(job.requestId!)")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
+
+                Text("Client ID: \(job.clientId)")
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+
                 Label(job.scheduledAt.formatted(date: .abbreviated, time: .shortened),
                       systemImage: "calendar")
                 Label(job.status.capitalized, systemImage: "info.circle")

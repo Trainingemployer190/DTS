@@ -58,6 +58,57 @@ final class JobberJob: Identifiable {
     var scheduledAt: Date
     var status: String
 
+    // Helper function to extract numeric ID from Base64 encoded Jobber GraphQL ID
+    private func extractNumericId(from encodedId: String) -> String? {
+        guard let data = Data(base64Encoded: encodedId),
+              let decodedString = String(data: data, encoding: .utf8) else {
+            print("❌ Failed to decode Base64 ID: \(encodedId)")
+            return nil
+        }
+
+        print("🔍 Decoded ID: \(decodedString)")
+
+        // Extract numeric part from format like "gid://Jobber/Client/80044538" or "gid://Jobber/Request/23776604"
+        let components = decodedString.components(separatedBy: "/")
+        guard let numericId = components.last, !numericId.isEmpty else {
+            print("❌ Could not extract numeric ID from: \(decodedString)")
+            return nil
+        }
+
+        print("✅ Extracted numeric ID: \(numericId)")
+        return numericId
+    }
+
+    // Computed property for the best Jobber URL to use
+    var assessmentURL: String? {
+        // Priority 1: Use numeric client ID for client page (matches working Zapier format)
+        if !clientId.isEmpty && clientId != "unknown",
+           let numericClientId = extractNumericId(from: clientId) {
+            let url = "https://secure.getjobber.com/clients/\(numericClientId)"
+            print("🔗 Using client URL: \(url)")
+            return url
+        }
+
+        // Priority 2: Use numeric request ID for work orders page
+        if let requestId = requestId, !requestId.isEmpty,
+           let numericRequestId = extractNumericId(from: requestId) {
+            let url = "https://secure.getjobber.com/app/work_orders/\(numericRequestId)"
+            print("🔗 Using work order URL: \(url)")
+            return url
+        }
+
+        // Priority 3: Use numeric request ID for requests page
+        if let requestId = requestId, !requestId.isEmpty,
+           let numericRequestId = extractNumericId(from: requestId) {
+            let url = "https://secure.getjobber.com/requests/\(numericRequestId)"
+            print("🔗 Using requests URL: \(url)")
+            return url
+        }
+
+        print("❌ No valid IDs available for Jobber URL")
+        return nil
+    }
+
     init(jobId: String, requestId: String? = nil, clientId: String, propertyId: String? = nil, clientName: String, clientPhone: String?, address: String, scheduledAt: Date, status: String) {
         self.jobId = jobId
         self.requestId = requestId
