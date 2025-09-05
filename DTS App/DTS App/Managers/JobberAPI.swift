@@ -4,6 +4,22 @@
 //
 //  Jobber API integration with OAuth authentication and GraphQL
 //
+//  COPILOT INSTRUCTIONS:
+//  When modifying this file, ALWAYS reference the GraphQL documentation:
+//  - Schema: DTS App/DTS App/Docs/GraphQL/jobber_schema.graphql.txt (60,218+ lines)
+//  - API Reference: DTS App/DTS App/Docs/GraphQL/JOBBER_API_REFERENCE.md
+//  - Technical Guide: DTS App/DTS App/Docs/GraphQL/The Jobber GraphQL API_*.pdf
+//
+//  Key Rules:
+//  1. Validate ALL field names against jobber_schema.graphql.txt before suggesting changes
+//  2. GraphQL IDs are Base64-encoded (e.g. Z2lkOi8vSm9iYmVyL0NsaWVudC84MDA0NDUzOA==)
+//  3. Web URLs require numeric IDs only - use extractNumericId() from DataModels.swift
+//  4. Follow existing query patterns and error handling
+//  5. Include debug logging for troubleshooting ID transformations
+//
+//  Schema Validation: Before adding/modifying any GraphQL query, search the schema
+//  file to confirm field existence, types, and nested relationships.
+//
 
 import Foundation
 import SwiftUI

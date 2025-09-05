@@ -4,6 +4,14 @@
 //
 //  Created by Chandler Staton on 8/13/25.
 //
+//  COPILOT INSTRUCTIONS for GraphQL Integration:
+//  When modifying JobberJob class or GraphQL-related models:
+//  1. ALWAYS reference: DTS App/DTS App/Docs/GraphQL/jobber_schema.graphql.txt
+//  2. JobberJob fields must match GraphQL response structure
+//  3. Base64 IDs from GraphQL need extractNumericId() for web URLs
+//  4. Schema validation required before adding new fields
+//  5. Web URL construction follows: https://secure.getjobber.com/clients/{numericId}
+//
 
 import SwiftUI
 import SwiftData
