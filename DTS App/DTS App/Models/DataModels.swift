@@ -22,25 +22,25 @@ import Foundation
 @Model
 final class AppSettings {
     // Gutter-specific material costs
-    var materialCostPerFootGutter: Double = 3.50
-    var materialCostPerFootDownspout: Double = 4.00
+    var materialCostPerFootGutter: Double = 1.62
+    var materialCostPerFootDownspout: Double = 1.85
     var materialCostPerFootRoundDownspout: Double = 5.50  // New round downspout cost
-    var costPerElbow: Double = 8.00
+    var costPerElbow: Double = 2.03
     var costPerRoundElbow: Double = 12.00  // New round elbow cost (higher price)
-    var costPerHanger: Double = 2.50
+    var costPerHanger: Double = 0.38
     var hangerSpacingFeet: Double = 3.0
-    var gutterGuardMaterialPerFoot: Double = 6.00
-    var gutterGuardLaborPerFoot: Double = 3.00
+    var gutterGuardMaterialPerFoot: Double = 2.00
+    var gutterGuardLaborPerFoot: Double = 2.25
 
     // Labor rates
-    var laborPerFootGutter: Double = 5.00
+    var laborPerFootGutter: Double = 2.25
 
     // Markup and profit margins
-    var defaultMarkupPercent: Double = 0.35
-    var defaultProfitMarginPercent: Double = 0.20
+    var defaultMarkupPercent: Double = 0.613
+    var defaultProfitMarginPercent: Double = 0.35
     var defaultSalesCommissionPercent: Double = 0.03
-    var gutterGuardMarkupPercent: Double = 0.40
-    var gutterGuardProfitMarginPercent: Double = 0.25
+    var gutterGuardMarkupPercent: Double = 0.613
+    var gutterGuardProfitMarginPercent: Double = 0.35
 
     // Tax and currency
     var taxRate: Double = 0.08
