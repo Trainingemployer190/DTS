@@ -50,7 +50,7 @@ struct PricingEngine {
         let downspoutMaterialsCost = quote.downspoutFeet * (quote.isRoundDownspout ?
             settings.materialCostPerFootRoundDownspout : settings.materialCostPerFootDownspout)
 
-        let gutterGuardCost = quote.gutterGuardFeet * settings.gutterGuardMaterialPerFoot
+        let gutterGuardCost = quote.includeGutterGuard ? quote.gutterGuardFeet * settings.gutterGuardMaterialPerFoot : 0
 
         // Calculate costs for individual elbows, crimps and hangers
         // Use different elbow cost based on round downspout toggle
@@ -70,7 +70,7 @@ struct PricingEngine {
 
         // Calculate labor cost based on composite feet
         let gutterLaborCost = compositeFeet * settings.laborPerFootGutter
-        let gutterGuardLaborCost = quote.gutterGuardFeet * settings.gutterGuardLaborPerFoot
+        let gutterGuardLaborCost = quote.includeGutterGuard ? quote.gutterGuardFeet * settings.gutterGuardLaborPerFoot : 0
         let laborCost = gutterLaborCost + gutterGuardLaborCost
 
         let subtotal = materialsCost + laborCost + additionalItemsCost

@@ -427,6 +427,8 @@ struct QuoteFormView: View {
         .onChange(of: quoteDraft.includeGutterGuard) { _, newValue in
             if newValue && quoteDraft.gutterGuardFeet == 0 {
                 quoteDraft.gutterGuardFeet = quoteDraft.gutterFeet
+            } else if !newValue {
+                quoteDraft.gutterGuardFeet = 0
             }
         }
     }
