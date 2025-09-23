@@ -375,19 +375,80 @@ struct PreviewSection: View {
                     .font(.headline)
                     .foregroundColor(.secondary)
 
-                HStack {
-                    Text("Price per Foot:")
-                    Spacer()
-                    Text(breakdown.pricePerFoot.toCurrency() + "/ft")
-                        .fontWeight(.bold)
-                        .foregroundColor(.blue)
-                        .font(.title3)
-                }
+                if quoteDraft.includeGutterGuard && quoteDraft.gutterGuardFeet > 0 {
+                    // Show separate price per foot for gutters and gutter guard
+                    let gutterFeet = quoteDraft.gutterFeet + quoteDraft.downspoutFeet
+                    let guardFeet = quoteDraft.gutterGuardFeet
 
-                Text("Based on \(breakdown.compositeFeet.twoDecimalFormatted) composite feet")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.top, 2)
+                    // Material costs (already available in breakdown)
+                    let gutterMaterialsCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost
+                    let guardMaterialsCost = breakdown.gutterGuardCost
+
+                    // Estimate labor costs based on standard rates
+                    // Note: breakdown.laborCost includes both gutter and guard labor
+                    // We'll estimate the proportions based on typical rates
+                    let gutterLaborCost = breakdown.compositeFeet * 2.25 // typical gutter labor rate
+                    let guardLaborCost = guardFeet * 2.25 // typical guard labor rate
+                    let totalEstimatedLabor = gutterLaborCost + guardLaborCost
+
+                    // Use the actual total labor cost from breakdown and distribute proportionally
+                    let actualGutterLabor = totalEstimatedLabor > 0 ? breakdown.laborCost * (gutterLaborCost / totalEstimatedLabor) : 0
+                    let actualGuardLabor = breakdown.laborCost - actualGutterLabor
+
+                    // Calculate base costs (materials + labor) for each component
+                    let gutterBaseCost = gutterMaterialsCost + actualGutterLabor
+                    let guardBaseCost = guardMaterialsCost + actualGuardLabor
+                    let totalBaseCost = gutterBaseCost + guardBaseCost
+
+                    // Calculate proportional share of additional items (excluding additional labor items)
+                    let additionalCosts = breakdown.markupAmount + breakdown.commissionAmount + breakdown.taxAmount
+                    let gutterProportion = totalBaseCost > 0 ? gutterBaseCost / totalBaseCost : 0.5
+                    let guardProportion = 1.0 - gutterProportion
+
+                    let gutterTotalCost = gutterBaseCost + (additionalCosts * gutterProportion)
+                    let guardTotalCost = guardBaseCost + (additionalCosts * guardProportion)
+
+                    let gutterPricePerFoot = gutterFeet > 0 ? gutterTotalCost / gutterFeet : 0
+                    let guardPricePerFoot = guardFeet > 0 ? guardTotalCost / guardFeet : 0
+
+                    HStack {
+                        Text("Gutters Price/ft:")
+                        Spacer()
+                        Text(gutterPricePerFoot.toCurrency() + "/ft")
+                            .fontWeight(.bold)
+                            .foregroundColor(.blue)
+                            .font(.title3)
+                    }
+
+                    HStack {
+                        Text("Guard Price/ft:")
+                        Spacer()
+                        Text(guardPricePerFoot.toCurrency() + "/ft")
+                            .fontWeight(.bold)
+                            .foregroundColor(.green)
+                            .font(.title3)
+                    }
+
+                    Text("Based on \(gutterFeet.twoDecimalFormatted) ft gutters and \(guardFeet.twoDecimalFormatted) ft guard")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 2)
+                } else {
+                    // Show single price per foot (original behavior)
+                    HStack {
+                        Text("Price per Foot:")
+                        Spacer()
+                        Text(breakdown.pricePerFoot.toCurrency() + "/ft")
+                            .fontWeight(.bold)
+                            .foregroundColor(.blue)
+                            .font(.title3)
+                    }
+
+                    Text("Based on \(breakdown.compositeFeet.twoDecimalFormatted) composite feet")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 2)
+                }
             }
 
             Divider()

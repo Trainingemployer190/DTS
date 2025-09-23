@@ -65,6 +65,7 @@ struct QuoteHistoryView: View {
             }
             .onAppear {
                 cleanupOldQuotes()
+                fixQuotesWithZeroTotals()
             }
         }
     }
@@ -191,6 +192,34 @@ struct QuoteHistoryView: View {
                 try modelContext.save()
             } catch {
                 print("Failed to cleanup old quotes: \(error)")
+            }
+        }
+    }
+
+    private func fixQuotesWithZeroTotals() {
+        let quotesWithZeroTotal = allQuotes
+            .filter { $0.quoteStatus == .completed && $0.finalTotal == 0 }
+
+        guard !quotesWithZeroTotal.isEmpty else { return }
+
+        // Get default settings for calculation
+        let defaultSettings = AppSettings()
+        var hasChanges = false
+
+        for quote in quotesWithZeroTotal {
+            let breakdown = PricingEngine.calculatePrice(quote: quote, settings: defaultSettings)
+            if breakdown.totalPrice > 0 {
+                PricingEngine.updateQuoteWithCalculatedTotals(quote: quote, breakdown: breakdown)
+                hasChanges = true
+            }
+        }
+
+        if hasChanges {
+            do {
+                try modelContext.save()
+                print("Fixed \(quotesWithZeroTotal.count) quotes with zero totals")
+            } catch {
+                print("Failed to fix quotes with zero totals: \(error)")
             }
         }
     }

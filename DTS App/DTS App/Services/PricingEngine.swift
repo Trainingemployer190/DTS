@@ -108,7 +108,11 @@ struct PricingEngine {
     // MARK: - Update Quote With Calculated Totals
 
     static func updateQuoteWithCalculatedTotals(quote: QuoteDraft, breakdown: PriceBreakdown) {
-        // Note: In a real implementation, you might want to store calculated totals
-        // For now, we'll keep the quote model simple and calculate on-demand
+        // Store calculated totals in the quote for audit/history purposes
+        quote.materialsTotal = breakdown.materialsCost
+        quote.laborTotal = breakdown.laborCost
+        quote.markupAmount = breakdown.markupAmount
+        quote.commissionAmount = breakdown.commissionAmount
+        quote.finalTotal = breakdown.totalPrice
     }
 }
