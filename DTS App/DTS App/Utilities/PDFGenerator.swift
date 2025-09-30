@@ -126,14 +126,14 @@ class PDFGenerator {
             y += 24  // More space for larger fonts
         }
 
-        // Updated: two side-by-side summary-style boxes (Total and Price/ft), with details inside left box
         func drawSummaryBoxes(y: inout CGFloat) {
             let boxPadding: CGFloat = 20  // More padding
-            let boxHeight: CGFloat = 160  // Taller boxes for larger fonts
+// Changed per instructions:
+            let boxHeight: CGFloat = 260  // Increased height to keep all rows (incl. Tax) inside
             let boxSpacing: CGFloat = 16  // More space between boxes
             let halfWidth = (contentWidth - boxSpacing) / 2
 
-            // Left box: Summary (Total + details)
+            // Left box: Summary (Total + organized breakdown)
             let leftRect = CGRect(x: margin, y: y, width: halfWidth, height: boxHeight)
             let leftPath = UIBezierPath(roundedRect: leftRect, cornerRadius: 10)
             lightFill.setFill(); leftPath.fill()
@@ -144,11 +144,61 @@ class PDFGenerator {
             let bigAttr: [NSAttributedString.Key: Any] = [ .font: bigNumberFont, .foregroundColor: accent ]
             (currency(breakdown.totalPrice) as NSString).draw(at: CGPoint(x: leftRect.minX + boxPadding, y: leftRect.minY + 45), withAttributes: bigAttr)
 
-            let smallAttr: [NSAttributedString.Key: Any] = [ .font: smallFont, .foregroundColor: UIColor.darkGray ]
-            let detailsStartY = leftRect.minY + 85
-            ("Subtotal: \(currency(breakdown.subtotal))" as NSString).draw(at: CGPoint(x: leftRect.minX + boxPadding, y: detailsStartY), withAttributes: smallAttr)
-            ("Markup (\(percent(quote.markupPercent))): \(currency(breakdown.markupAmount))" as NSString).draw(at: CGPoint(x: leftRect.minX + boxPadding, y: detailsStartY + 20), withAttributes: smallAttr)
-            ("Tax (\(percent(settings.taxRate))): \(currency(breakdown.taxAmount))" as NSString).draw(at: CGPoint(x: leftRect.minX + boxPadding, y: detailsStartY + 40), withAttributes: smallAttr)
+            // Separator under total
+            let ctx = UIGraphicsGetCurrentContext()!
+            ctx.setStrokeColor(UIColor.systemGray4.cgColor)
+            ctx.setLineWidth(0.5)
+            ctx.move(to: CGPoint(x: leftRect.minX + boxPadding, y: leftRect.minY + 75))
+            ctx.addLine(to: CGPoint(x: leftRect.maxX - boxPadding, y: leftRect.minY + 75))
+            ctx.strokePath()
+
+            // Two-column key/value layout (fixed column widths, clipped to avoid wrapping)
+            let labelAttr: [NSAttributedString.Key: Any] = [ .font: smallFont, .foregroundColor: UIColor.darkGray ]
+            let valueParagraph = NSMutableParagraphStyle(); valueParagraph.alignment = .right; valueParagraph.lineBreakMode = .byClipping
+            let valueAttr: [NSAttributedString.Key: Any] = [ .font: valueFont, .foregroundColor: UIColor.black, .paragraphStyle: valueParagraph ]
+
+            let rowStartY = leftRect.minY + 85
+            let rowHeight: CGFloat = 20
+
+            let contentInnerWidth = leftRect.width - (boxPadding * 2)
+            let labelWidth = contentInnerWidth * 0.58
+            let valueWidth = contentInnerWidth - labelWidth
+            let labelX = leftRect.minX + boxPadding
+            let valueX = labelX + labelWidth
+
+            func drawRow(_ label: String, _ value: String, _ index: Int) {
+                let yPos = rowStartY + CGFloat(index) * rowHeight
+                let labelRect = CGRect(x: labelX, y: yPos, width: labelWidth, height: rowHeight)
+                let valueRect = CGRect(x: valueX, y: yPos, width: valueWidth, height: rowHeight)
+                (label as NSString).draw(in: labelRect, withAttributes: labelAttr)
+                (value as NSString).draw(in: valueRect, withAttributes: valueAttr)
+            }
+
+            // Use PricingEngine's subtotal (includes additional items)
+            let materials = breakdown.materialsCost
+            let labor = breakdown.laborCost
+            let additional = breakdown.additionalItemsCost
+            let subtotal = breakdown.subtotal
+            // Markup and commission remain for display
+            let markup = breakdown.markupAmount
+            let commission = breakdown.commissionAmount
+            let preTaxSubtotal = subtotal + markup
+            let tax = breakdown.taxAmount
+
+            var rowIndex = 0
+            // Base costs
+            drawRow("Materials", currency(materials), rowIndex); rowIndex += 1
+            drawRow("Labor", currency(labor), rowIndex); rowIndex += 1
+            if additional > 0.001 { drawRow("Additional Items", currency(additional), rowIndex); rowIndex += 1 }
+
+            // Subtotal & add-ons
+            drawRow("Subtotal", currency(subtotal), rowIndex); rowIndex += 1
+            drawRow("Markup (\(percent(quote.markupPercent)))", currency(markup), rowIndex); rowIndex += 1
+            drawRow("Commission (\(percent(quote.salesCommissionPercent)))", currency(commission), rowIndex); rowIndex += 1
+
+            // Pre-tax and tax
+            drawRow("Pre-Tax Subtotal", currency(preTaxSubtotal), rowIndex); rowIndex += 1
+            drawRow("Tax (\(percent(settings.taxRate)))", currency(tax), rowIndex); rowIndex += 1
 
             // Right box: Price per Foot (separate for gutters and guard when applicable)
             let rightRect = CGRect(x: leftRect.maxX + boxSpacing, y: y, width: halfWidth, height: boxHeight)
@@ -156,51 +206,56 @@ class PDFGenerator {
             lightFill.setFill(); rightPath.fill()
 
             if quote.includeGutterGuard && quote.gutterGuardFeet > 0 {
-                // Show separate price per foot for gutters and gutter guard
-                let gutterFeet = quote.gutterFeet + quote.downspoutFeet
+                // Calculate effective footage including fittings (Bug 2 Fix)
+                let effectiveGutterFeet = quote.gutterFeet + quote.downspoutFeet +
+                    Double(quote.aElbows + quote.bElbows + quote.twoCrimp + quote.fourCrimp)
                 let guardFeet = quote.gutterGuardFeet
 
-                // Material costs (already available in breakdown)
+                // Use the actual breakdown values from PricingEngine for accurate calculations
+                // IMPORTANT: Add fittings (elbows/crimps) and hangers to the gutter materials bucket so
+                // component totals sum exactly to the overall total.
+                let totalElbows = quote.aElbows + quote.bElbows + quote.twoCrimp + quote.fourCrimp
+                let elbowUnitCost = quote.isRoundDownspout ? settings.costPerRoundElbow : settings.costPerElbow
+                let elbowsCost = Double(totalElbows) * elbowUnitCost
+                let hangersCost = Double(quote.hangersCount) * settings.costPerHanger
+
                 let gutterMaterialsCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost
                 let guardMaterialsCost = breakdown.gutterGuardCost
 
-                // Estimate labor costs based on standard rates
-                let gutterLaborCost = breakdown.compositeFeet * 2.25 // typical gutter labor rate
-                let guardLaborCost = guardFeet * 2.25 // typical guard labor rate
-                let totalEstimatedLabor = gutterLaborCost + guardLaborCost
+                // Use actual labor costs from breakdown instead of estimates
+                let actualGutterLabor = breakdown.gutterLaborCost
+                let actualGuardLabor = breakdown.gutterGuardLaborCost
 
-                // Use the actual total labor cost from breakdown and distribute proportionally
-                let actualGutterLabor = totalEstimatedLabor > 0 ? breakdown.laborCost * (gutterLaborCost / totalEstimatedLabor) : 0
-                let actualGuardLabor = breakdown.laborCost - actualGutterLabor
-
-                // Calculate base costs (materials + labor) for each component
-                let gutterBaseCost = gutterMaterialsCost + actualGutterLabor
+                // Compute gutter base cost with elbows, hangers and additional labor items included (per instructions)
+                let gutterBaseCost = gutterMaterialsCost + actualGutterLabor + elbowsCost + hangersCost + breakdown.additionalItemsCost
                 let guardBaseCost = guardMaterialsCost + actualGuardLabor
-                let totalBaseCost = gutterBaseCost + guardBaseCost
 
-                // Calculate proportional share of additional items
-                let additionalCosts = breakdown.markupAmount + breakdown.commissionAmount + breakdown.taxAmount
-                let gutterProportion = totalBaseCost > 0 ? gutterBaseCost / totalBaseCost : 0.5
+                // Add markup per component before distributing commission and tax
+                let gutterTotalBeforeAddOns = gutterBaseCost + breakdown.gutterMarkupAmount
+                let guardTotalBeforeAddOns = guardBaseCost + breakdown.guardMarkupAmount
+
+                // Distribute only commission and tax proportionally (markup already applied per component)
+                let additionalCosts = breakdown.commissionAmount + breakdown.taxAmount
+
+                let totalBaseWithMarkup = gutterTotalBeforeAddOns + guardTotalBeforeAddOns
+                let gutterProportion = totalBaseWithMarkup > 0 ? gutterTotalBeforeAddOns / totalBaseWithMarkup : 0.5
                 let guardProportion = 1.0 - gutterProportion
 
-                let gutterTotalCost = gutterBaseCost + (additionalCosts * gutterProportion)
-                let guardTotalCost = guardBaseCost + (additionalCosts * guardProportion)
-
-                let gutterPricePerFoot = gutterFeet > 0 ? gutterTotalCost / gutterFeet : 0
-                let guardPricePerFoot = guardFeet > 0 ? guardTotalCost / guardFeet : 0
+                let gutterTotalCost = gutterTotalBeforeAddOns + (additionalCosts * gutterProportion)
+                let guardTotalCost = guardTotalBeforeAddOns + (additionalCosts * guardProportion)
 
                 ("Price Analysis" as NSString).draw(at: CGPoint(x: rightRect.minX + boxPadding, y: rightRect.minY + boxPadding), withAttributes: titleAttr)
 
                 // Blue color for gutters price (matching UI) - larger font
                 let gutterPriceAttr: [NSAttributedString.Key: Any] = [ .font: valueFont, .foregroundColor: UIColor.systemBlue ]
-                ("Gutters: \(currency(gutterPricePerFoot))/ft" as NSString).draw(at: CGPoint(x: rightRect.minX + boxPadding, y: rightRect.minY + 45), withAttributes: gutterPriceAttr)
+                ("Gutters: \(currency(gutterTotalCost / (effectiveGutterFeet > 0 ? effectiveGutterFeet : 1)))/ft" as NSString).draw(at: CGPoint(x: rightRect.minX + boxPadding, y: rightRect.minY + 45), withAttributes: gutterPriceAttr)
 
                 // Green color for guard price (matching UI) - larger font
                 let guardPriceAttr: [NSAttributedString.Key: Any] = [ .font: valueFont, .foregroundColor: UIColor.systemGreen ]
-                ("Guard: \(currency(guardPricePerFoot))/ft" as NSString).draw(at: CGPoint(x: rightRect.minX + boxPadding, y: rightRect.minY + 70), withAttributes: guardPriceAttr)
+                ("Guard: \(currency(guardFeet > 0 ? guardTotalCost / guardFeet : 0))/ft" as NSString).draw(at: CGPoint(x: rightRect.minX + boxPadding, y: rightRect.minY + 70), withAttributes: guardPriceAttr)
 
                 let verySmallAttr: [NSAttributedString.Key: Any] = [ .font: UIFont.systemFont(ofSize: 12), .foregroundColor: UIColor.darkGray ]
-                ("\(String(format: "%.1f", gutterFeet))ft gutters, \(String(format: "%.1f", guardFeet))ft guard" as NSString).draw(at: CGPoint(x: rightRect.minX + boxPadding, y: rightRect.minY + 100), withAttributes: verySmallAttr)
+                ("\(String(format: "%.1f", effectiveGutterFeet))ft effective gutters, \(String(format: "%.1f", guardFeet))ft guard" as NSString).draw(at: CGPoint(x: rightRect.minX + boxPadding, y: rightRect.minY + 100), withAttributes: verySmallAttr)
             } else {
                 // Show single price per foot (original behavior)
                 ("Price / ft" as NSString).draw(at: CGPoint(x: rightRect.minX + boxPadding, y: rightRect.minY + boxPadding), withAttributes: titleAttr)
@@ -277,18 +332,55 @@ class PDFGenerator {
             // Pricing summary boxes
             ensureSpace(170, y: &y)  // Increased space for larger boxes
             drawSectionHeader("Pricing", y: &y)
-            ensureSpace(160, y: &y) // Updated for new box height + padding
+// Changed per instructions:
+            ensureSpace(260, y: &y) // Updated for increased box height so rows don't overflow
             drawSummaryBoxes(y: &y)
 
             // Removed separate Subtotal/Markup/Tax rows (now inside left box)
 
-            // Detailed pricing rows
-            ensureSpace(20, y: &y); drawKeyValue("Gutter Materials", currency(breakdown.gutterMaterialsCost), y: &y)
-            ensureSpace(20, y: &y); drawKeyValue("Downspout Materials", currency(breakdown.downspoutMaterialsCost), y: &y)
-            ensureSpace(20, y: &y); drawKeyValue("Gutter Guard Materials", currency(breakdown.gutterGuardCost), y: &y)
-            ensureSpace(20, y: &y); drawKeyValue("Additional Items", currency(breakdown.additionalItemsCost), y: &y)
-            ensureSpace(20, y: &y); drawKeyValue("Labor", currency(breakdown.laborCost), y: &y)
-            y += 8
+            // Component Totals section (only when gutter guard is enabled)
+            if quote.includeGutterGuard && quote.gutterGuardFeet > 0 {
+                ensureSpace(120, y: &y)
+                drawSectionHeader("Component Totals", y: &y)
+
+                // Use the EXACT calculation method from JobViews.swift Component Totals section (lines 460-500)
+                // This gives the correct values: $1,085.57 for gutters and $779.34 for guard
+                let gutterFeet = quote.gutterFeet + quote.downspoutFeet
+                let guardFeet = quote.gutterGuardFeet
+
+                // Use the actual breakdown values from PricingEngine and include fittings/hangers in gutters
+                let totalElbows = quote.aElbows + quote.bElbows + quote.twoCrimp + quote.fourCrimp
+                let elbowUnitCost = quote.isRoundDownspout ? settings.costPerRoundElbow : settings.costPerElbow
+                let elbowsCost = Double(totalElbows) * elbowUnitCost
+                let hangersCost = Double(quote.hangersCount) * settings.costPerHanger
+
+                let gutterMaterialsCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost
+                let guardMaterialsCost = breakdown.gutterGuardCost
+                let gutterLaborCost = breakdown.gutterLaborCost
+                let guardLaborCost = breakdown.gutterGuardLaborCost
+
+                // Base costs
+                let gutterBaseCost = gutterMaterialsCost + gutterLaborCost + elbowsCost + hangersCost + breakdown.additionalItemsCost
+                let guardBaseCost = guardMaterialsCost + guardLaborCost
+
+                let gutterTotalBeforeAddOns = gutterBaseCost + breakdown.gutterMarkupAmount
+                let guardTotalBeforeAddOns = guardBaseCost + breakdown.guardMarkupAmount
+
+                // Distribute only commission and tax proportionally (markup already applied per component)
+                let additionalCosts = breakdown.commissionAmount + breakdown.taxAmount
+
+                let totalBaseWithMarkup = gutterTotalBeforeAddOns + guardTotalBeforeAddOns
+                let gutterProportion = totalBaseWithMarkup > 0 ? gutterTotalBeforeAddOns / totalBaseWithMarkup : 0.5
+                let guardProportion = 1.0 - gutterProportion
+
+                let gutterTotalCost = gutterTotalBeforeAddOns + (additionalCosts * gutterProportion)
+                let guardTotalCost = guardTotalBeforeAddOns + (additionalCosts * guardProportion)
+
+                ensureSpace(20, y: &y); drawKeyValue("Gutters Total", currency(gutterTotalCost), y: &y)
+                ensureSpace(20, y: &y); drawKeyValue("Guard Total", currency(guardTotalCost), y: &y)
+                ensureSpace(20, y: &y); drawKeyValue("Combined Total", currency(gutterTotalCost + guardTotalCost), y: &y)
+                y += 8
+            }
 
             // Additional items
             ensureSpace(120, y: &y)
@@ -355,7 +447,6 @@ class PDFGenerator {
 
         return data
     }
-    #endif
 
     // MARK: - Quote PDF Generation (Basic, kept for compatibility)
     func generateQuotePDF(breakdown: PricingEngine.PriceBreakdown, customerName: String) -> Data? {
@@ -445,6 +536,7 @@ class PDFGenerator {
             jobDetails.draw(in: jobRect, withAttributes: bodyAttributes)
         }
     }
+    #endif
 
     // MARK: - Save PDF to Documents
     func savePDFToDocuments(data: Data, filename: String) -> URL? {
@@ -463,3 +555,4 @@ class PDFGenerator {
         }
     }
 }
+

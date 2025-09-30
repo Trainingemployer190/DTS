@@ -286,6 +286,9 @@ struct NewLaborItemView: View {
 struct PreviewSection: View {
     @ObservedObject var quoteDraft: QuoteDraft
     let breakdown: PricingEngine.PriceBreakdown
+    let appSettings: AppSettings
+
+    @EnvironmentObject var settings: SettingsStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -376,40 +379,35 @@ struct PreviewSection: View {
                     .foregroundColor(.secondary)
 
                 if quoteDraft.includeGutterGuard && quoteDraft.gutterGuardFeet > 0 {
-                    // Show separate price per foot for gutters and gutter guard
-                    let gutterFeet = quoteDraft.gutterFeet + quoteDraft.downspoutFeet
-                    let guardFeet = quoteDraft.gutterGuardFeet
+                    // Updated segmented approach for gutters and gutter guard price per foot
+                    let totalElbows = quoteDraft.aElbows + quoteDraft.bElbows + quoteDraft.twoCrimp + quoteDraft.fourCrimp
+                    let elbowUnitCost = quoteDraft.isRoundDownspout ? appSettings.costPerRoundElbow : appSettings.costPerElbow
+                    let elbowsCost = Double(totalElbows) * elbowUnitCost
+                    let hangersCost = Double(quoteDraft.hangersCount) * appSettings.costPerHanger
 
-                    // Material costs (already available in breakdown)
-                    let gutterMaterialsCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost
+                    let gutterMaterialsCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost + elbowsCost + hangersCost
                     let guardMaterialsCost = breakdown.gutterGuardCost
+                    let gutterLaborCost = breakdown.gutterLaborCost
+                    let guardLaborCost = breakdown.gutterGuardLaborCost
 
-                    // Estimate labor costs based on standard rates
-                    // Note: breakdown.laborCost includes both gutter and guard labor
-                    // We'll estimate the proportions based on typical rates
-                    let gutterLaborCost = breakdown.compositeFeet * 2.25 // typical gutter labor rate
-                    let guardLaborCost = guardFeet * 2.25 // typical guard labor rate
-                    let totalEstimatedLabor = gutterLaborCost + guardLaborCost
+                    let gutterBaseCost = gutterMaterialsCost + gutterLaborCost + breakdown.additionalItemsCost
+                    let guardBaseCost = guardMaterialsCost + guardLaborCost
 
-                    // Use the actual total labor cost from breakdown and distribute proportionally
-                    let actualGutterLabor = totalEstimatedLabor > 0 ? breakdown.laborCost * (gutterLaborCost / totalEstimatedLabor) : 0
-                    let actualGuardLabor = breakdown.laborCost - actualGutterLabor
+                    let gutterTotalBeforeAddOns = gutterBaseCost + breakdown.gutterMarkupAmount
+                    let guardTotalBeforeAddOns  = guardBaseCost + breakdown.guardMarkupAmount
 
-                    // Calculate base costs (materials + labor) for each component
-                    let gutterBaseCost = gutterMaterialsCost + actualGutterLabor
-                    let guardBaseCost = guardMaterialsCost + actualGuardLabor
-                    let totalBaseCost = gutterBaseCost + guardBaseCost
+                    let additionalCosts = breakdown.commissionAmount + breakdown.taxAmount
+                    let totalBeforeAddOns = gutterTotalBeforeAddOns + guardTotalBeforeAddOns
+                    let gutterShare = totalBeforeAddOns > 0 ? gutterTotalBeforeAddOns / totalBeforeAddOns : 0.5
+                    let guardShare  = 1.0 - gutterShare
 
-                    // Calculate proportional share of additional items (excluding additional labor items)
-                    let additionalCosts = breakdown.markupAmount + breakdown.commissionAmount + breakdown.taxAmount
-                    let gutterProportion = totalBaseCost > 0 ? gutterBaseCost / totalBaseCost : 0.5
-                    let guardProportion = 1.0 - gutterProportion
+                    let gutterTotalCost = gutterTotalBeforeAddOns + additionalCosts * gutterShare
+                    let guardTotalCost  = guardTotalBeforeAddOns + additionalCosts * guardShare
 
-                    let gutterTotalCost = gutterBaseCost + (additionalCosts * gutterProportion)
-                    let guardTotalCost = guardBaseCost + (additionalCosts * guardProportion)
+                    let effectiveGutterFeet = quoteDraft.gutterFeet + quoteDraft.downspoutFeet + Double(totalElbows)
 
-                    let gutterPricePerFoot = gutterFeet > 0 ? gutterTotalCost / gutterFeet : 0
-                    let guardPricePerFoot = guardFeet > 0 ? guardTotalCost / guardFeet : 0
+                    let gutterPricePerFoot = effectiveGutterFeet > 0 ? gutterTotalCost / effectiveGutterFeet : 0
+                    let guardPricePerFoot = quoteDraft.gutterGuardFeet > 0 ? guardTotalCost / quoteDraft.gutterGuardFeet : 0
 
                     HStack {
                         Text("Gutters Price/ft:")
@@ -429,7 +427,7 @@ struct PreviewSection: View {
                             .font(.title3)
                     }
 
-                    Text("Based on \(gutterFeet.twoDecimalFormatted) ft gutters and \(guardFeet.twoDecimalFormatted) ft guard")
+                    Text("Based on \(effectiveGutterFeet.twoDecimalFormatted)ft effective gutters and \(quoteDraft.gutterGuardFeet.twoDecimalFormatted)ft guard")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.top, 2)
@@ -452,6 +450,88 @@ struct PreviewSection: View {
             }
 
             Divider()
+
+            // Component totals section (only when gutter guard is enabled)
+            if quoteDraft.includeGutterGuard {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Component Totals")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+
+                    // Updated segmented approach for component totals
+                    let gutterFeet = quoteDraft.gutterFeet + quoteDraft.downspoutFeet
+                    let guardFeet = quoteDraft.gutterGuardFeet
+
+                    let totalElbows = quoteDraft.aElbows + quoteDraft.bElbows + quoteDraft.twoCrimp + quoteDraft.fourCrimp
+                    let elbowUnitCost = quoteDraft.isRoundDownspout ? appSettings.costPerRoundElbow : appSettings.costPerElbow
+                    let elbowsCost = Double(totalElbows) * elbowUnitCost
+                    let hangersCost = Double(quoteDraft.hangersCount) * appSettings.costPerHanger
+
+                    let gutterMaterialsCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost + elbowsCost + hangersCost
+                    let guardMaterialsCost = breakdown.gutterGuardCost
+                    let gutterLaborCost = breakdown.gutterLaborCost
+                    let guardLaborCost = breakdown.gutterGuardLaborCost
+
+                    let gutterBaseCost = gutterMaterialsCost + gutterLaborCost + breakdown.additionalItemsCost
+                    let guardBaseCost = guardMaterialsCost + guardLaborCost
+
+                    let gutterTotalBeforeAddOns = gutterBaseCost + breakdown.gutterMarkupAmount
+                    let guardTotalBeforeAddOns  = guardBaseCost + breakdown.guardMarkupAmount
+
+                    let additionalCosts = breakdown.commissionAmount + breakdown.taxAmount
+                    let totalBeforeAddOns = gutterTotalBeforeAddOns + guardTotalBeforeAddOns
+                    let gutterShare = totalBeforeAddOns > 0 ? gutterTotalBeforeAddOns / totalBeforeAddOns : 0.5
+                    let guardShare  = 1.0 - gutterShare
+
+                    let gutterTotalCost = gutterTotalBeforeAddOns + additionalCosts * gutterShare
+                    let guardTotalCost  = guardTotalBeforeAddOns + additionalCosts * guardShare
+
+                    HStack {
+                        Text("Gutters Total:")
+                        Spacer()
+                        Text(gutterTotalCost.toCurrency())
+                            .fontWeight(.bold)
+                            .foregroundColor(.blue)
+                    }
+
+                    HStack {
+                        Text("Guard Total:")
+                        Spacer()
+                        Text(guardTotalCost.toCurrency())
+                            .fontWeight(.bold)
+                            .foregroundColor(.green)
+                    }
+
+                    Divider()
+                        .padding(.vertical, 2)
+
+                    HStack {
+                        Text("Combined Total:")
+                        Spacer()
+                        Text((gutterTotalCost + guardTotalCost).toCurrency())
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
+                            .font(.title3)
+                    }
+
+                    // Verification that Component Totals = Grand Total (Bug 1 Fix)
+                    let combinedTotal = gutterTotalCost + guardTotalCost
+                    let difference = abs(combinedTotal - breakdown.totalPrice)
+                    if difference > 0.01 {
+                        Text("⚠️ Total mismatch: \(difference.toCurrency())")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .padding(.top, 2)
+                    } else {
+                        Text("✅ Component totals verified")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                            .padding(.top, 2)
+                    }
+                }
+
+                Divider()
+            }
 
             // Pricing summary
             VStack(alignment: .leading, spacing: 4) {
@@ -876,3 +956,4 @@ struct LocationStatusView: View {
         }
     }
 }
+

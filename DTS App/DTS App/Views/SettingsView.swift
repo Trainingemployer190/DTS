@@ -37,6 +37,7 @@ struct SettingsView: View {
     @State private var markupText = ""
     @State private var profitMarginText = ""
     @State private var salesCommissionText = ""
+    @State private var taxRateText = ""
     @State private var gutterGuardMarkupText = ""
     @State private var gutterGuardProfitMarginText = ""
     @State private var materialCostRoundDownspoutText = ""
@@ -47,6 +48,7 @@ struct SettingsView: View {
         case costPerElbow, costPerHanger, hangerSpacing
         case laborGutter, gutterGuardLabor
         case markup, profitMargin, salesCommission
+        case taxRate
         case gutterGuardMarkup, gutterGuardProfitMargin
         case materialCostRoundDownspout, costPerRoundElbow
     }
@@ -74,6 +76,7 @@ struct SettingsView: View {
         markupText = settings.defaultMarkupPercent == 0 ? "" : String(Int(settings.defaultMarkupPercent * 100))
         profitMarginText = settings.defaultProfitMarginPercent == 0 ? "" : String(Int(settings.defaultProfitMarginPercent * 100))
         salesCommissionText = settings.defaultSalesCommissionPercent == 0 ? "" : String(Int(settings.defaultSalesCommissionPercent * 100))
+        taxRateText = settings.taxRate == 0 ? "" : String(Int(settings.taxRate * 100))
         gutterGuardMarkupText = settings.gutterGuardMarkupPercent == 0 ? "" : String(Int(settings.gutterGuardMarkupPercent * 100))
         gutterGuardProfitMarginText = settings.gutterGuardProfitMarginPercent == 0 ? "" : String(Int(settings.gutterGuardProfitMarginPercent * 100))
         materialCostRoundDownspoutText = settings.materialCostPerFootRoundDownspout == 0 ? "" : String(settings.materialCostPerFootRoundDownspout)
@@ -136,14 +139,25 @@ struct SettingsView: View {
     }
 
     private func saveProfitMargin(_ text: String) {
-        let value = text.isEmpty ? 0 : ((Double(text) ?? 0) / 100)
-        settings.defaultProfitMarginPercent = value
+        let m = text.isEmpty ? 0 : ((Double(text) ?? 0) / 100)
+        settings.defaultProfitMarginPercent = m
+        // Auto-calc markup from margin: k = m / (1 - m)
+        let k = m >= 1 ? 0 : (m / max(1 - m, 0.000001))
+        settings.defaultMarkupPercent = k
+        // Update UI mirror for markup so it reflects the computed value
+        markupText = k == 0 ? "" : String(Int((k * 100).rounded()))
         saveSettings()
     }
 
     private func saveSalesCommission(_ text: String) {
         let value = text.isEmpty ? 0 : ((Double(text) ?? 0) / 100)
         settings.defaultSalesCommissionPercent = value
+        saveSettings()
+    }
+
+    private func saveTaxRate(_ text: String) {
+        let value = text.isEmpty ? 0 : ((Double(text) ?? 0) / 100)
+        settings.taxRate = value
         saveSettings()
     }
 
@@ -154,8 +168,13 @@ struct SettingsView: View {
     }
 
     private func saveGutterGuardProfitMargin(_ text: String) {
-        let value = text.isEmpty ? 0 : ((Double(text) ?? 0) / 100)
-        settings.gutterGuardProfitMarginPercent = value
+        let m = text.isEmpty ? 0 : ((Double(text) ?? 0) / 100)
+        settings.gutterGuardProfitMarginPercent = m
+        // Auto-calc markup from margin: k = m / (1 - m)
+        let k = m >= 1 ? 0 : (m / max(1 - m, 0.000001))
+        settings.gutterGuardMarkupPercent = k
+        // Update UI mirror for markup so it reflects the computed value
+        gutterGuardMarkupText = k == 0 ? "" : String(Int((k * 100).rounded()))
         saveSettings()
     }
 
@@ -473,6 +492,26 @@ struct SettingsView: View {
                     }
                 Text("%")
             }
+            
+            HStack {
+                Text("Tax")
+                Spacer()
+                TextField("0", text: $taxRateText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 60)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .taxRate)
+                    .onSubmit {
+                        saveTaxRate(taxRateText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .taxRate {
+                            saveTaxRate(taxRateText)
+                        }
+                    }
+                Text("%")
+            }
         }
     }
 
@@ -685,3 +724,4 @@ struct SettingsView: View {
     SettingsView()
         .environmentObject(JobberAPI())
 }
+

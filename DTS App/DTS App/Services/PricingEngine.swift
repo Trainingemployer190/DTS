@@ -19,6 +19,8 @@ struct PricingEngine {
         let laborCost: Double
         let subtotal: Double
         let markupAmount: Double
+        let gutterMarkupAmount: Double
+        let guardMarkupAmount: Double
         let discountAmount: Double
         let commissionAmount: Double
         let taxAmount: Double
@@ -29,6 +31,10 @@ struct PricingEngine {
         let downspoutMaterialsCost: Double
         let gutterGuardCost: Double
         let additionalItemsCost: Double
+
+        // Labor breakdown
+        let gutterLaborCost: Double
+        let gutterGuardLaborCost: Double
 
         // Measurement details
         let compositeFeet: Double
@@ -73,26 +79,48 @@ struct PricingEngine {
         let gutterGuardLaborCost = quote.includeGutterGuard ? quote.gutterGuardFeet * settings.gutterGuardLaborPerFoot : 0
         let laborCost = gutterLaborCost + gutterGuardLaborCost
 
-        let subtotal = materialsCost + laborCost + additionalItemsCost
+        // Segment base costs by component
+        let gutterBaseCost = (gutterMaterialsCost + downspoutMaterialsCost + elbowsCost + hangersCost) + gutterLaborCost + additionalItemsCost
+        let guardBaseCost = gutterGuardCost + gutterGuardLaborCost
 
-        // Apply markup using the quote's markup percentage (not settings default)
-        let markupAmount = subtotal * quote.markupPercent
+        // Apply independent markups
+        let gutterMarkupK = quote.markupPercent
+        let guardMarkupK: Double = {
+            if quote.guardMarkupPercent > 0 { return quote.guardMarkupPercent }
+            let m = quote.guardProfitMarginPercent
+            return m > 0 ? (m / max(1 - m, 0.000001)) : 0
+        }()
+
+        let gutterMarkupAmount = gutterBaseCost * gutterMarkupK
+        let guardMarkupAmount  = guardBaseCost * guardMarkupK
+
+        let subtotalPreCommission = gutterBaseCost + guardBaseCost + gutterMarkupAmount + guardMarkupAmount
         let discountAmount = 0.0 // No discount field in QuoteDraft
+        let subtotalAfterMarkupDiscount = subtotalPreCommission - discountAmount
 
-        let subtotalAfterMarkupDiscount = subtotal + markupAmount - discountAmount
+        // Aggregate totals for compatibility
+        let subtotal = materialsCost + laborCost + additionalItemsCost
+        let markupAmount = gutterMarkupAmount + guardMarkupAmount
 
-        // Calculate commission based on quote's commission percentage
-        // Commission is calculated on the subtotal after markup, but comes out of profit
+        // Calculate commission based on quote's commission percentage (added to customer total)
         let commissionAmount = subtotalAfterMarkupDiscount * quote.salesCommissionPercent
 
-        let taxAmount = subtotalAfterMarkupDiscount * settings.taxRate
-        let totalPrice = subtotalAfterMarkupDiscount + taxAmount
+        // Pre-tax subtotal must include commission
+        let preTaxSubtotal = subtotalAfterMarkupDiscount + commissionAmount
+
+        // Tax is calculated on the final pre-tax subtotal (which includes commission)
+        let taxAmount = preTaxSubtotal * settings.taxRate
+
+        // Final total: pre-tax subtotal + tax
+        let totalPrice = preTaxSubtotal + taxAmount
 
         return PriceBreakdown(
             materialsCost: materialsCost,
             laborCost: laborCost,
             subtotal: subtotal,
             markupAmount: markupAmount,
+            gutterMarkupAmount: gutterMarkupAmount,
+            guardMarkupAmount: guardMarkupAmount,
             discountAmount: discountAmount,
             commissionAmount: commissionAmount,
             taxAmount: taxAmount,
@@ -101,6 +129,8 @@ struct PricingEngine {
             downspoutMaterialsCost: downspoutMaterialsCost,
             gutterGuardCost: gutterGuardCost,
             additionalItemsCost: additionalItemsCost,
+            gutterLaborCost: gutterLaborCost,
+            gutterGuardLaborCost: gutterGuardLaborCost,
             compositeFeet: compositeFeet
         )
     }
@@ -116,3 +146,4 @@ struct PricingEngine {
         quote.finalTotal = breakdown.totalPrice
     }
 }
+

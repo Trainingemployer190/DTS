@@ -90,7 +90,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     private let clientId = "bc74e0a3-3f65-4373-b758-a512536ded90"
     private let clientSecret = "c4cc587785949060e4dd052e598a702d0ed8e91410302ceed2702d30413a6c03"
     private let redirectURI = "https://trainingemployer190.github.io/dtsapp-oauth-redirect/"
-    private let scopes = "read_clients write_clients read_requests write_requests read_quotes write_quotes read_jobs write_jobs read_scheduled_items write_scheduled_items read_invoices write_invoices read_jobber_payments read_users write_users write_tax_rates read_expenses write_expenses read_custom_field_configurations write_custom_field_configurations read_time_sheets"
+    private let scopes = "read_clients write_clients read_requests write_requests read_quotes write_quotes read_jobs write_jobs read_scheduled_items write_scheduled_items"
 
     // API Endpoints
     private let authURL = "https://api.getjobber.com/api/oauth/authorize"
@@ -171,14 +171,27 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     }
 
     func authenticate() {
+        print("🔐 Starting fresh OAuth authentication flow")
         // Start fresh OAuth flow
         clearStoredTokens()
+
+        // Reset authentication state
+        Task { @MainActor in
+            self.isAuthenticated = false
+            self.errorMessage = nil
+            self.isLoading = false
+            self.connectedEmail = nil
+        }
+
         startOAuthFlow()
     }
 
     private func startOAuthFlow() {
+        print("🚀 Starting OAuth flow")
+
         // Generate random state for security
         storedState = UUID().uuidString
+        print("📝 Generated state: \(storedState ?? "nil")")
 
         var urlComponents = URLComponents(string: authURL)!
         urlComponents.queryItems = [
@@ -189,21 +202,30 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
             URLQueryItem(name: "state", value: storedState)
         ]
 
-        guard let authURL = urlComponents.url else {
+        guard let finalAuthURL = urlComponents.url else {
+            print("❌ Failed to create authorization URL")
+            print("❌ Base URL: \(authURL)")
+            print("❌ Client ID: \(clientId)")
+            print("❌ Redirect URI: \(redirectURI)")
+            print("❌ Scopes: \(scopes)")
+            print("❌ State: \(storedState ?? "nil")")
             self.errorMessage = "Invalid authorization URL."
             return
         }
 
-        // Extract scheme from redirect URI
-        let callbackScheme: String
-        if let url = URL(string: redirectURI) {
-            callbackScheme = url.scheme ?? "https"
-        } else {
-            callbackScheme = "https"
+        print("🔗 Final Authorization URL: \(finalAuthURL.absoluteString)")
+        print("🔗 URL Length: \(finalAuthURL.absoluteString.count)")
+
+        // Validate URL before proceeding
+        if finalAuthURL.absoluteString.count > 2048 {
+            print("⚠️ Warning: URL is very long (\(finalAuthURL.absoluteString.count) characters)")
         }
 
+        // Use custom URL scheme for OAuth callbacks
+        let callbackScheme = "dtsapp"
+
         let authSession = ASWebAuthenticationSession(
-            url: authURL,
+            url: finalAuthURL,
             callbackURLScheme: callbackScheme
         ) { [weak self] callbackURL, error in
             guard let self = self else { return }
@@ -241,7 +263,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         self.authSession = authSession
 
         print("Starting authentication session with:")
-        print("- Auth URL: \(authURL.absoluteString)")
+        print("- Auth URL: \(finalAuthURL.absoluteString)")
         print("- Redirect URI: \(redirectURI)")
 
         let started = authSession.start()
@@ -389,6 +411,8 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                 // Fetch account info to verify connection
                 Task {
                     await self.fetchAccountInfo()
+                    // After fetching account info, also fetch jobs
+                    await self.fetchScheduledAssessments()
                 }
             }
         } catch {
@@ -1363,7 +1387,8 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     func createQuoteFromJobWithMeasurements(
         job: JobberJob,
         quoteDraft: QuoteDraft,
-        breakdown: PricingEngine.PriceBreakdown
+        breakdown: PricingEngine.PriceBreakdown,
+        settings: AppSettings
     ) async -> Result<String, Error> {
         guard await ensureValidAccessToken() else {
             await MainActor.run {
@@ -1418,40 +1443,66 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
 
         // Calculate the total price for the main work (gutters + guard), excluding additional items
         let additionalItemsTotal = quoteDraft.additionalLaborItems.reduce(0, { $0 + $1.amount })
-        let mainWorkTotalPrice = breakdown.totalPrice - additionalItemsTotal
 
         print("📊 PRICING DEBUG:")
-        print("  Total breakdown price: $\(String(format: "%.2f", breakdown.totalPrice))")
+        print("  App's final total (breakdown.totalPrice): $\(String(format: "%.2f", breakdown.totalPrice))")
         print("  Additional items total: $\(String(format: "%.2f", additionalItemsTotal))")
-        print("  Main work total price: $\(String(format: "%.2f", mainWorkTotalPrice))")
 
         if quoteDraft.includeGutterGuard && quoteDraft.gutterGuardFeet > 0, let guardDetails = gutterGuardDetails {
             // SCENARIO 1: WITH Gutter Guard - Distribute final price proportionally
 
             // Calculate the base cost of each component to find their proportion of the total
-            let gutterBaseCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost + breakdown.laborCost
-            let guardBaseCost = breakdown.gutterGuardCost // Base cost for guard
+            // Use the exact same calculation as the app's JobViews.swift
+            let totalElbows = quoteDraft.aElbows + quoteDraft.bElbows + quoteDraft.twoCrimp + quoteDraft.fourCrimp
+            let elbowUnitCost = quoteDraft.isRoundDownspout ? settings.costPerRoundElbow : settings.costPerElbow
+            let elbowsCost = Double(totalElbows) * elbowUnitCost
+            let hangersCost = Double(quoteDraft.hangersCount) * settings.costPerHanger
+
+            let gutterMaterialsCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost + elbowsCost + hangersCost
+            let guardMaterialsCost = breakdown.gutterGuardCost
+
+            // Use breakdown's accurate labor calculations instead of estimated rates
+            let gutterLaborCost = breakdown.gutterLaborCost
+            let guardLaborCost = breakdown.gutterGuardLaborCost
+
+            let gutterBaseCost = gutterMaterialsCost + gutterLaborCost
+            let guardBaseCost = guardMaterialsCost + guardLaborCost
             let totalBaseCost = gutterBaseCost + guardBaseCost
 
+            print("  Gutter materials: $\(String(format: "%.2f", gutterMaterialsCost))")
+            print("  Gutter labor: $\(String(format: "%.2f", gutterLaborCost))")
             print("  Gutter base cost: $\(String(format: "%.2f", gutterBaseCost))")
+            print("  Guard materials: $\(String(format: "%.2f", guardMaterialsCost))")
+            print("  Guard labor: $\(String(format: "%.2f", guardLaborCost))")
             print("  Guard base cost: $\(String(format: "%.2f", guardBaseCost))")
             print("  Total base cost: $\(String(format: "%.2f", totalBaseCost))")
 
-            // Calculate the final, marked-up price for each line item proportionally
-            let gutterFinalPrice: Double
-            let guardFinalPrice: Double
+            // Calculate proportions for distributing the EXACT app total
+            var gutterProportionValue = 0.5
+            var guardProportionValue = 0.5
 
-            if totalBaseCost > 0 {
-                gutterFinalPrice = mainWorkTotalPrice * (gutterBaseCost / totalBaseCost)
-                guardFinalPrice = mainWorkTotalPrice * (guardBaseCost / totalBaseCost)
-            } else {
-                gutterFinalPrice = 0.0
-                guardFinalPrice = 0.0
+            if totalBaseCost > 0.0 {
+                gutterProportionValue = gutterBaseCost.magnitude / totalBaseCost.magnitude
+                guardProportionValue = 1.0 - gutterProportionValue
             }
+
+            print("  Gutter proportion: \(String(format: "%.4f", gutterProportionValue))")
+            print("  Guard proportion: \(String(format: "%.4f", guardProportionValue))")
+
+            // Distribute the app's exact total amount (including all additional labor items)
+            let appTotal = breakdown.totalPrice
+            let gutterFinalPrice = appTotal * gutterProportionValue
+            let guardFinalPrice = appTotal * guardProportionValue
 
             print("  Gutter final price (proportional): $\(String(format: "%.2f", gutterFinalPrice))")
             print("  Guard final price (proportional): $\(String(format: "%.2f", guardFinalPrice))")
             print("  Verification total: $\(String(format: "%.2f", gutterFinalPrice + guardFinalPrice))")
+            print("  🔍 App's breakdown.totalPrice: $\(String(format: "%.2f", breakdown.totalPrice))")
+
+            let jobberTotal = gutterFinalPrice + guardFinalPrice
+            let difference = jobberTotal - appTotal
+            print("  ✅ Jobber total: $\(String(format: "%.2f", jobberTotal))")
+            print("  ✅ Difference (should be ~0): $\(String(format: "%.2f", difference))")
 
             // 1. Gutter line item with final calculated price (includes markup/commission)
             lineItems.append([
@@ -1477,33 +1528,35 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
 
         } else {
             // SCENARIO 2: WITHOUT Gutter Guard - All final price goes to gutter
+            let appTotal = breakdown.totalPrice
 
-            print("  Single gutter line item gets full price: $\(String(format: "%.2f", mainWorkTotalPrice))")
+            print("  Single gutter line item gets full price: $\(String(format: "%.2f", appTotal))")
 
             lineItems.append([
                 "productOrServiceId": gutterProductId,
                 "name": gutterDetails.name,
                 "description": gutterDetails.description,
                 "quantity": 1,
-                "unitPrice": mainWorkTotalPrice,
+                "unitPrice": appTotal,
                 "saveToProductsAndServices": false
             ])
-            print("✅ Complete gutter line item (with markup): $\(String(format: "%.2f", mainWorkTotalPrice))")
+            print("✅ Complete gutter line item (with markup): $\(String(format: "%.2f", appTotal))")
         }
 
-        // Add any additional labor items
-        for item in quoteDraft.additionalLaborItems {
-            lineItems.append([
-                "name": item.title,
-                "quantity": 1,
-                "unitPrice": item.amount,
-                "saveToProductsAndServices": false
-            ])
-            print("Additional item: \(item.title) - $\(String(format: "%.2f", item.amount))")
-        }
+        // Additional labor items are already included in the proportional distribution above
+        // Do NOT add them separately to avoid double-counting
 
         // Debug: Print constructed line items
-        print("Constructed Line Items:", lineItems)
+        print("📋 Constructed Line Items:")
+        for (index, item) in lineItems.enumerated() {
+            if let name = item["name"] as? String, let price = item["unitPrice"] as? Double {
+                print("  \(index + 1). \(name): $\(String(format: "%.2f", price))")
+            }
+        }
+
+        let totalLineItems = lineItems.compactMap { $0["unitPrice"] as? Double }.reduce(0, +)
+        print("📊 Total line items: $\(String(format: "%.2f", totalLineItems))")
+        print("📊 Should match app total: $\(String(format: "%.2f", breakdown.totalPrice))")
 
         // Build custom fields based on the quote data
         var customFields: [[String: Any]] = []
@@ -2304,3 +2357,4 @@ struct RequestCreateNoteRawResponse: Codable { let data: RequestCreateNoteDataRe
 struct RequestCreateNoteDataResponse: Codable { let requestCreateNote: RequestCreateNotePayload }
 struct RequestCreateNotePayload: Codable { let requestNote: RequestNote?; let userErrors: [RequestNoteUserError]? }
 struct RequestNoteUserError: Codable { let message: String; let path: [String]? }
+

@@ -176,12 +176,15 @@ final class QuoteDraft: ObservableObject {
     var gutterGuardFeet: Double = 0
     var markupPercent: Double = 0  // Initialize to 0, will be set from settings
     var profitMarginPercent: Double = 0  // Initialize to 0, will be set from settings
+    var guardProfitMarginPercent: Double = 0  // Independent profit margin for gutter guard
+    var guardMarkupPercent: Double = 0  // Auto-calculated from guardProfitMarginPercent
     var salesCommissionPercent: Double = 0  // Initialize to 0, will be set from settings
     var notes: String = ""
     var syncStateRaw: String = SyncState.pending.rawValue
     var quoteStatusRaw: String = QuoteStatus.draft.rawValue
     var createdAt: Date = Date()
     var completedAt: Date? // Track when quote was completed
+    var savedToJobber: Bool = false // Track if quote was saved to Jobber
 
     // Computed totals (stored for audit)
     var materialsTotal: Double = 0
@@ -255,6 +258,14 @@ final class QuoteDraft: ObservableObject {
         }
         if self.salesCommissionPercent == 0 {
             self.salesCommissionPercent = settings.defaultSalesCommissionPercent
+        }
+        if self.guardProfitMarginPercent == 0 {
+            self.guardProfitMarginPercent = settings.gutterGuardProfitMarginPercent
+        }
+        if self.guardMarkupPercent == 0 {
+            // Calculate from margin: k = m / (1 - m)
+            let m = self.guardProfitMarginPercent
+            self.guardMarkupPercent = m >= 1 ? 0 : (m / max(1 - m, 0.000001))
         }
     }
 }
@@ -349,3 +360,4 @@ struct CapturedPhoto: Identifiable {
 #if canImport(UIKit)
 import UIKit
 #endif
+

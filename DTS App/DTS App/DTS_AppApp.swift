@@ -45,8 +45,8 @@ struct DTS_AppApp: App {
         print("Path: \(url.path)")
         print("Query: \(url.query ?? "none")")
 
-        guard url.scheme == "dtsapp" else {
-            print("URL scheme is not 'dtsapp', ignoring")
+        guard url.scheme == "dts-app" else {
+            print("URL scheme is not 'dts-app', ignoring")
             return
         }
 

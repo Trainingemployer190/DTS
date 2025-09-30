@@ -1,25 +1,5 @@
 {
     "version": "2.0.0",
-    "inputs": [
-        {
-            "id": "projectPath",
-            "description": "Path to the Xcode project",
-            "default": "DTS App/DTS App.xcodeproj",
-            "type": "promptString"
-        },
-        {
-            "id": "schemeName",
-            "description": "Xcode scheme name",
-            "default": "DTS App",
-            "type": "promptString"
-        },
-        {
-            "id": "simulatorName",
-            "description": "iOS Simulator name",
-            "default": "iPhone 16 Pro",
-            "type": "promptString"
-        }
-    ],
     "tasks": [
         {
             "label": "Build iOS Simulator",
@@ -27,11 +7,11 @@
             "command": "xcodebuild",
             "args": [
                 "-project",
-                "${input:projectPath}",
+                "DTS App/DTS App.xcodeproj",
                 "-scheme",
-                "${input:schemeName}",
+                "DTS App",
                 "-destination",
-                "platform=iOS Simulator,name=${input:simulatorName}",
+                "platform=iOS Simulator,name=iPhone 16 Pro",
                 "-derivedDataPath",
                 "build",
                 "CODE_SIGN_IDENTITY=",
@@ -62,7 +42,7 @@
             "command": "bash",
             "args": [
                 "-c",
-                "set -e; echo 'Opening Simulator...'; open -a Simulator; echo 'Booting simulator if needed...'; xcrun simctl boot '${input:simulatorName}' 2>/dev/null || echo 'Simulator already booted or boot attempted'; sleep 3; APP_PATH=\"build/Build/Products/Debug-iphonesimulator/DTS App.app\"; if [ ! -d \"$APP_PATH\" ]; then echo 'Error: App not found at expected path. Please build first.'; exit 1; fi; echo 'Installing app...'; xcrun simctl install '${input:simulatorName}' \"$APP_PATH\"; BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' \"$APP_PATH/Info.plist\" 2>/dev/null || echo 'DTS.DTS-App'); echo \"Launching app with bundle ID: $BUNDLE_ID\"; xcrun simctl launch '${input:simulatorName}' \"$BUNDLE_ID\""
+                "set -e; echo 'Opening Simulator...'; open -a Simulator; echo 'Booting simulator if needed...'; xcrun simctl boot 'iPhone 16 Pro' 2>/dev/null || echo 'Simulator already booted or boot attempted'; sleep 3; APP_PATH=\"build/Build/Products/Debug-iphonesimulator/DTS App.app\"; if [ ! -d \"$APP_PATH\" ]; then echo 'Error: App not found at expected path. Please build first.'; exit 1; fi; echo 'Installing app...'; xcrun simctl install 'iPhone 16 Pro' \"$APP_PATH\"; BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' \"$APP_PATH/Info.plist\" 2>/dev/null || echo 'DTS.DTS-App'); echo \"Launching app with bundle ID: $BUNDLE_ID\"; xcrun simctl launch 'iPhone 16 Pro' \"$BUNDLE_ID\""
             ],
             "group": "test",
             "presentation": {
@@ -83,7 +63,7 @@
             "command": "bash",
             "args": [
                 "-c",
-                "echo '=== Available Schemes ==='; xcodebuild -list -project '${input:projectPath}' 2>/dev/null | grep -A 100 'Schemes:' | grep -v 'Schemes:' | head -20 || echo 'Could not list schemes'; echo ''; echo '=== Available Simulators ==='; xcrun simctl list devices | grep -E '(iPhone|iPad)' | grep -v 'unavailable' | head -10 || echo 'Could not list simulators'"
+                "echo '=== Available Schemes ==='; xcodebuild -list -project 'DTS App/DTS App.xcodeproj' 2>/dev/null | grep -A 100 'Schemes:' | grep -v 'Schemes:' | head -20 || echo 'Could not list schemes'; echo ''; echo '=== Available Simulators ==='; xcrun simctl list devices | grep -E '(iPhone|iPad)' | grep -v 'unavailable' | head -10 || echo 'Could not list simulators'"
             ],
             "group": "build",
             "presentation": {

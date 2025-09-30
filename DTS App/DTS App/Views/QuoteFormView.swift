@@ -31,6 +31,10 @@ struct QuoteFormView: View {
     @State private var showingCalculator = false
     @State private var calculatorField: CalculatorField?
 
+    // Added focus state for sales commission field
+    @FocusState private var isSalesCommissionFocused: Bool
+    @FocusState private var isProfitMarginFocused: Bool
+
     enum CalculatorField {
         case gutterFeet
         case downspoutFeet
@@ -430,6 +434,19 @@ struct QuoteFormView: View {
             } else if !newValue {
                 quoteDraft.gutterGuardFeet = 0
             }
+
+            // Apply independent pricing when toggling guard
+            if newValue {
+                // When guard is enabled, use the quote's guard-specific margin/markup
+                if quoteDraft.guardProfitMarginPercent == 0 {
+                    quoteDraft.guardProfitMarginPercent = settings.gutterGuardProfitMarginPercent
+                }
+                // Ensure guard markup matches guard margin
+                let m = quoteDraft.guardProfitMarginPercent
+                quoteDraft.guardMarkupPercent = m >= 1 ? 0 : (m / max(1 - m, 0.000001))
+            } else {
+                // When guard is disabled, keep regular gutter pricing intact; do not modify
+            }
         }
     }
 
@@ -449,9 +466,6 @@ struct QuoteFormView: View {
                             dismiss()
                         }
                     }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    toolbarContent
                 }
             }
             .alert("Quote Submitted Successfully!", isPresented: $showingJobberSuccess) {
@@ -475,6 +489,12 @@ struct QuoteFormView: View {
                 CalculatorView(isPresented: $showingCalculator, onComplete: { result in
                     handleCalculatorResult(result)
                 })
+            }
+            .safeAreaInset(edge: .top) {
+                topActionButtonsBar
+            }
+            .safeAreaInset(edge: .bottom) {
+                actionButtonsBar
             }
         }
         .onAppear {
@@ -519,6 +539,14 @@ struct QuoteFormView: View {
                 }
             }
 
+            if quoteDraft.includeGutterGuard {
+                if quoteDraft.guardProfitMarginPercent == 0 {
+                    quoteDraft.guardProfitMarginPercent = settings.gutterGuardProfitMarginPercent
+                }
+                let m = quoteDraft.guardProfitMarginPercent
+                quoteDraft.guardMarkupPercent = m >= 1 ? 0 : (m / max(1 - m, 0.000001))
+            }
+
             // Set job ID if available
             if let jobId = job?.jobId {
                 quoteDraft.jobId = jobId
@@ -556,7 +584,7 @@ struct QuoteFormView: View {
                         .padding(.top)
 
                     VStack {
-                        PreviewSection(quoteDraft: quoteDraft, breakdown: breakdown)
+                        PreviewSection(quoteDraft: quoteDraft, breakdown: breakdown, appSettings: settings)
                     }
                     .padding()
                     .background(.ultraThinMaterial)
@@ -566,7 +594,7 @@ struct QuoteFormView: View {
 
                 photosSectionContent
             }
-            .padding(.bottom, 50)
+            .padding(.bottom, 16)
         }
         .onTapGesture {
             // Dismiss keyboard when tapping anywhere
@@ -701,20 +729,9 @@ struct QuoteFormView: View {
                     TextField("20", text: clearablePercentFieldBinding(
                         get: { quoteDraft.profitMarginPercent },
                         set: { newProfitMarginPercent in
-                            let m = newProfitMarginPercent  // profit margin as decimal
-                            let s = quoteDraft.salesCommissionPercent  // commission as decimal
-
-                            // Validate that m + s < 1 (mathematically required)
-                            guard m >= 0 && (m + s) < 1 else {
-                                return  // Don't update if invalid
-                            }
-
+                            let m = newProfitMarginPercent  // decimal 0..1
+                            guard m >= 0 && m < 1 else { return }
                             quoteDraft.profitMarginPercent = m
-
-                            // Auto-calculate markup from profit margin using commission-aware formula
-                            // Formula: k = (m + s) / (1 - m - s)
-                            let calculatedMarkup = (m + s) / (1 - m - s)
-                            quoteDraft.markupPercent = calculatedMarkup
                         }
                     ))
                     .textFieldStyle(.roundedBorder)
@@ -722,28 +739,36 @@ struct QuoteFormView: View {
                     .keyboardType(.decimalPad)
                     .autocorrectionDisabled()
                     .textContentType(.none)
+                    .focused($isProfitMarginFocused)
+                    .onSubmit {
+                        let m = quoteDraft.profitMarginPercent
+                        let calculatedMarkup = m / (1 - m)
+                        quoteDraft.markupPercent = calculatedMarkup
+                    }
+                    .onChange(of: isProfitMarginFocused) { _, focused in
+                        if !focused {
+                            let m = quoteDraft.profitMarginPercent
+                            let calculatedMarkup = m / (1 - m)
+                            quoteDraft.markupPercent = calculatedMarkup
+                        }
+                    }
                     Text("%")
                 }
 
                 HStack {
-                    Text("Sales Commission %")
+                    VStack(alignment: .leading) {
+                        Text("Sales Commission %")
+                            .fontWeight(.medium)
+                        Text("(added to total)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                     Spacer()
                     TextField("3", text: clearablePercentFieldBinding(
                         get: { quoteDraft.salesCommissionPercent },
                         set: { newCommissionPercent in
+                            // Update commission only; do not recalculate markup here
                             quoteDraft.salesCommissionPercent = newCommissionPercent
-
-                            // When commission changes, recalculate markup from current profit margin
-                            // to maintain the mathematical relationship
-                            let m = quoteDraft.profitMarginPercent  // current profit margin
-                            let s = newCommissionPercent  // new commission as decimal
-
-                            // Ensure the calculated relationship is valid
-                            if m >= 0 && (m + s) < 1 {
-                                // Recalculate markup: k = (m + s) / (1 - m - s)
-                                let calculatedMarkup = (m + s) / (1 - m - s)
-                                quoteDraft.markupPercent = calculatedMarkup
-                            }
                         }
                     ))
                     .textFieldStyle(.roundedBorder)
@@ -751,7 +776,58 @@ struct QuoteFormView: View {
                     .keyboardType(.decimalPad)
                     .autocorrectionDisabled()
                     .textContentType(.none)
+                    .focused($isSalesCommissionFocused)
                     Text("%")
+                }
+
+                if quoteDraft.includeGutterGuard {
+                    Divider().padding(.vertical, 4)
+                    // Guard-specific pricing controls
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text("Guard Markup %")
+                                .fontWeight(.medium)
+                            Text("(calculated from guard margin)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Text(String(format: "%.1f", quoteDraft.guardMarkupPercent * 100))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(6)
+                            .foregroundColor(.secondary)
+                        Text("%")
+                    }
+
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text("Guard Profit Margin %")
+                                .fontWeight(.medium)
+                            Text("(based on price)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        TextField("20", text: clearablePercentFieldBinding(
+                            get: { quoteDraft.guardProfitMarginPercent },
+                            set: { newMargin in
+                                let m = newMargin
+                                guard m >= 0 && m < 1 else { return }
+                                quoteDraft.guardProfitMarginPercent = m
+                                // Auto-calc guard markup from guard margin
+                                let k = m / max(1 - m, 0.000001)
+                                quoteDraft.guardMarkupPercent = k
+                            }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                        .keyboardType(.decimalPad)
+                        .autocorrectionDisabled()
+                        .textContentType(.none)
+                        Text("%")
+                    }
                 }
             }
             .padding()
@@ -854,37 +930,106 @@ struct QuoteFormView: View {
     }
 
     @ViewBuilder
-    private var toolbarContent: some View {
-        HStack {
+    private var actionButtonsBar: some View {
+        Group {
             if existingQuote != nil {
-                // Editing mode - simpler options
-                Button("Save Changes") {
-                    saveQuote()
+                VStack(spacing: 8) {
+                    HStack(spacing: 12) {
+                        Button("Save Changes") {
+                            saveQuote()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .frame(maxWidth: .infinity)
+
+                        if existingQuote?.quoteStatus != .completed {
+                            Button("Complete Quote") {
+                                saveQuoteAsCompleted()
+                            }
+                            .disabled(quoteDraft.gutterFeet == 0)
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+
+                    // Add "Save to Jobber" option for existing quotes that haven't been saved to Jobber yet
+                    if jobberAPI.isAuthenticated && !quoteDraft.savedToJobber && quoteDraft.jobId != nil {
+                        Button(action: {
+                            saveEditedQuoteToJobber()
+                        }) {
+                            HStack {
+                                if isSavingToJobber {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                        .foregroundColor(.white)
+                                    Text("Saving to Jobber...")
+                                } else {
+                                    Image(systemName: "square.and.arrow.up")
+                                    Text("Save to Jobber")
+                                }
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .cornerRadius(12)
+                        }
+                        .disabled(quoteDraft.gutterFeet == 0 || isSavingToJobber)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial)
+            } else if jobberAPI.isAuthenticated && job != nil {
+                EmptyView()
+            } else {
+                HStack {
+                    Button("Complete Quote") {
+                        saveQuoteAsCompleted()
+                    }
+                    .disabled(quoteDraft.gutterFeet == 0)
+                    .buttonStyle(.borderedProminent)
+                    .frame(maxWidth: .infinity)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var topActionButtonsBar: some View {
+        if existingQuote == nil && jobberAPI.isAuthenticated && job != nil {
+            HStack(spacing: 8) {
+                Button(action: {
+                    saveQuoteToJobber()
+                }) {
+                    Text(isSavingToJobber ? "Saving to Jobber…" : "Save to Jobber")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 150)
+                        .padding(.vertical, 8)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.blue)
+                .disabled(quoteDraft.gutterFeet == 0 || isSavingToJobber)
 
-                if existingQuote?.quoteStatus != .completed {
-                    Button("Complete Quote") {
-                        saveQuoteAsCompleted()
-                    }
-                    .disabled(quoteDraft.gutterFeet == 0)
+                Button(action: {
+                    saveQuoteAsDraft()
+                }) {
+                    Text("Save as Draft")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 150)
+                        .padding(.vertical, 8)
                 }
-            } else {
-                // New quote mode - simplified options
-                if jobberAPI.isAuthenticated && job != nil {
-                    Button(isSavingToJobber ? "Saving to Jobber..." : "Save to Jobber") {
-                        saveQuoteToJobber()
-                    }
-                    .disabled(quoteDraft.gutterFeet == 0 || isSavingToJobber)
-                    .buttonStyle(.borderedProminent)
-                } else {
-                    Button("Complete Quote") {
-                        saveQuoteAsCompleted()
-                    }
-                    .disabled(quoteDraft.gutterFeet == 0)
-                    .buttonStyle(.borderedProminent)
-                }
+                .buttonStyle(.bordered)
+                .tint(.blue)
+                .disabled(quoteDraft.gutterFeet == 0)
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.horizontal)
+            .padding(.vertical, 4)
+        } else {
+            EmptyView()
         }
     }
 
@@ -920,6 +1065,33 @@ struct QuoteFormView: View {
         // Generate PDF
         generateQuotePDF(breakdown: breakdown)
         // Navigate to Home after completion
+        DispatchQueue.main.async {
+            router.selectedTab = 0
+            dismiss()
+        }
+    }
+
+    private func saveQuoteAsDraft() {
+        let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
+        PricingEngine.updateQuoteWithCalculatedTotals(quote: quoteDraft, breakdown: breakdown)
+
+        // Mark as draft and add to history
+        quoteDraft.quoteStatus = .draft
+        quoteDraft.createdAt = Date()
+        if let job = job {
+            quoteDraft.clientAddress = job.address
+            quoteDraft.clientName = job.clientName
+        }
+
+        if existingQuote == nil {
+            modelContext.insert(quoteDraft)
+        }
+        try? modelContext.save()
+
+        // Generate PDF
+        generateQuotePDF(breakdown: breakdown)
+
+        // Navigate to Home after saving draft
         DispatchQueue.main.async {
             router.selectedTab = 0
             dismiss()
@@ -974,7 +1146,8 @@ struct QuoteFormView: View {
                 let quoteResult = await jobberAPI.createQuoteFromJobWithMeasurements(
                     job: job,
                     quoteDraft: quoteDraft,
-                    breakdown: breakdown
+                    breakdown: breakdown,
+                    settings: settings
                 )
 
                 await MainActor.run {
@@ -1002,6 +1175,9 @@ struct QuoteFormView: View {
                     if hasError {
                         jobberSubmissionError = errorMessages.joined(separator: "\n")
                     } else {
+                        // Mark as saved to Jobber when successful
+                        quoteDraft.savedToJobber = true
+
                         // Show success message
                         showingJobberSuccess = true
                         // Provide haptic feedback
@@ -1013,6 +1189,108 @@ struct QuoteFormView: View {
                             router.selectedTab = 0
                             dismiss()
                         }
+                    }
+
+                    isSavingToJobber = false
+                }
+            } catch {
+                await MainActor.run {
+                    jobberSubmissionError = error.localizedDescription
+                    isSavingToJobber = false
+                }
+            }
+        }
+    }
+
+    private func saveEditedQuoteToJobber() {
+        isSavingToJobber = true
+
+        // First save the quote locally with any changes
+        let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
+        PricingEngine.updateQuoteWithCalculatedTotals(quote: quoteDraft, breakdown: breakdown)
+
+        // Mark as completed if it wasn't already
+        if quoteDraft.quoteStatus != .completed {
+            quoteDraft.quoteStatus = .completed
+            quoteDraft.completedAt = Date()
+        }
+
+        try? modelContext.save()
+
+        // Generate PDF
+        generateQuotePDF(breakdown: breakdown)
+
+        // Submit to Jobber
+        Task {
+            do {
+                // Find the job from jobId since we're editing an existing quote
+                guard let jobId = quoteDraft.jobId,
+                      let job = jobberAPI.jobs.first(where: { $0.jobId == jobId }) else {
+                    throw JobberAPIError.invalidRequest("Cannot find the associated Jobber assessment. The assessment may have been updated or removed.")
+                }
+
+                guard let requestId = job.requestId else {
+                    throw JobberAPIError.invalidRequest("No request ID available for this assessment - this assessment might not be linked to a request")
+                }
+
+                print("📤 Submitting edited quote to Jobber with requestId: \(requestId)")
+
+                // Get any existing photos for this quote
+                let photos = quoteDraft.photos.compactMap { photoRecord in
+                    UIImage(contentsOfFile: photoRecord.fileURL)
+                }
+
+                // Step 1: Submit quote as note to Jobber
+                let noteResult = await jobberAPI.submitQuoteAsNote(
+                    requestId: requestId,
+                    quote: quoteDraft,
+                    breakdown: breakdown,
+                    photos: photos
+                )
+
+                // Step 2: Create actual quote in Jobber with proper line items
+                let quoteResult = await jobberAPI.createQuoteFromJobWithMeasurements(
+                    job: job,
+                    quoteDraft: quoteDraft,
+                    breakdown: breakdown,
+                    settings: settings
+                )
+
+                await MainActor.run {
+                    var hasError = false
+                    var errorMessages: [String] = []
+
+                    // Check note creation result
+                    switch noteResult {
+                    case .success(_):
+                        print("✅ Note created successfully")
+                    case .failure(let error):
+                        hasError = true
+                        errorMessages.append("Note creation failed: \(error.localizedDescription)")
+                    }
+
+                    // Check quote creation result
+                    switch quoteResult {
+                    case .success(let quoteId):
+                        print("✅ Quote created successfully with ID: \(quoteId)")
+                    case .failure(let error):
+                        hasError = true
+                        errorMessages.append("Quote creation failed: \(error.localizedDescription)")
+                    }
+
+                    if hasError {
+                        jobberSubmissionError = errorMessages.joined(separator: "\n")
+                    } else {
+                        // Mark as saved to Jobber when successful
+                        quoteDraft.savedToJobber = true
+                        try? modelContext.save()
+
+                        // Show success message
+                        showingJobberSuccess = true
+
+                        // Provide haptic feedback
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                        impactFeedback.impactOccurred()
                     }
 
                     isSavingToJobber = false
@@ -1116,3 +1394,4 @@ struct QuoteFormView: View {
         newLineItemAmount = 0
     }
 }
+
