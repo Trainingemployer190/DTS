@@ -1849,13 +1849,12 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
 
         // Pricing Breakdown
         let totalMaterialCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost + breakdown.gutterGuardCost
-        let commission = breakdown.markupAmount // Assuming markup is commission
 
         message += "PRICING BREAKDOWN\n"
         message += "Material: \(totalMaterialCost.toCurrency())\n"
         message += "Labor: \(breakdown.laborCost.toCurrency())\n"
-        message += "Profit: \(commission.toCurrency())\n"
-        message += "Commission: \(commission.toCurrency())\n\n"
+        message += "Profit: \(breakdown.markupAmount.toCurrency())\n"
+        message += "Commission: \(breakdown.commissionAmount.toCurrency())\n\n"
 
         // Calculate price per foot (total price divided by total linear feet)
         let totalLinearFeet = quote.gutterFeet + quote.downspoutFeet
