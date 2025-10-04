@@ -577,6 +577,8 @@ struct QuoteFormView: View {
 
                 pricingSectionContent
 
+                notesSectionContent
+
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Preview")
                         .font(.headline)
@@ -937,6 +939,41 @@ struct QuoteFormView: View {
                         .font(.caption)
                         .foregroundColor(.orange)
                 }
+            }
+            .padding()
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal)
+        }
+    }
+
+    @ViewBuilder
+    private var notesSectionContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Notes")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top)
+
+            VStack(spacing: 16) {
+                TextEditor(text: $quoteDraft.notes)
+                    .frame(minHeight: 100)
+                    .padding(8)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color(.systemGray4), lineWidth: 1)
+                    )
+                    .overlay(alignment: .topLeading) {
+                        if quoteDraft.notes.isEmpty {
+                            Text("Add notes about this job...")
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 16)
+                                .allowsHitTesting(false)
+                        }
+                    }
             }
             .padding()
             .background(.ultraThinMaterial)
