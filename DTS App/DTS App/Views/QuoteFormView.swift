@@ -490,6 +490,23 @@ struct QuoteFormView: View {
                     handleCalculatorResult(result)
                 })
             }
+            .sheet(isPresented: $photoCaptureManager.showingCamera) {
+                ImagePicker(sourceType: .camera) { image in
+                    photoCaptureManager.processImage(image, quoteDraftId: quoteDraft.localId)
+                }
+            }
+            .sheet(isPresented: $photoCaptureManager.showingPhotoLibrary) {
+                MultiImagePicker { images in
+                    for image in images {
+                        photoCaptureManager.processImage(image, quoteDraftId: quoteDraft.localId)
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $showingPhotoGallery) {
+                if !quoteDraftPhotos.isEmpty {
+                    PhotoGalleryView(photos: quoteDraftPhotos, initialIndex: 0)
+                }
+            }
             .safeAreaInset(edge: .top) {
                 topActionButtonsBar
             }
@@ -502,6 +519,7 @@ struct QuoteFormView: View {
             if let existingQuote = existingQuote {
                 quoteDraft = existingQuote
                 print("Editing existing quote for client: \(existingQuote.clientName)")
+                loadExistingPhotos()
                 return
             }
 
@@ -509,6 +527,7 @@ struct QuoteFormView: View {
             if let prefilledQuoteDraft = prefilledQuoteDraft {
                 quoteDraft = prefilledQuoteDraft
                 print("Using pre-filled quote draft for client: \(prefilledQuoteDraft.clientName)")
+                loadExistingPhotos()
             }
 
             // Populate client information from job if available
@@ -857,20 +876,42 @@ struct QuoteFormView: View {
 
     // Computed property for filtered photos
     private var quoteDraftPhotos: [CapturedPhoto] {
-        return photoCaptureManager.capturedImages
+        return photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId }
     }
 
     @ViewBuilder
     private var photosButtonSection: some View {
         HStack {
+            // Camera button
             Button(action: {
-                photoCaptureManager.capturePhoto(quoteDraftId: quoteDraft.localId)
+                photoCaptureManager.showingCamera = true
             }) {
                 HStack {
                     Image(systemName: "camera.fill")
-                    Text("Capture Photo")
+                    Text("Take Photo")
                 }
-                .foregroundColor(.blue)
+                .font(.subheadline)
+                .foregroundColor(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.blue)
+                .cornerRadius(8)
+            }
+
+            // Photo library button
+            Button(action: {
+                photoCaptureManager.showingPhotoLibrary = true
+            }) {
+                HStack {
+                    Image(systemName: "photo.on.rectangle")
+                    Text("From Library")
+                }
+                .font(.subheadline)
+                .foregroundColor(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.green)
+                .cornerRadius(8)
             }
 
             Spacer()
@@ -892,26 +933,38 @@ struct QuoteFormView: View {
                 HStack(spacing: 10) {
                     ForEach(0..<min(quoteDraftPhotos.count, 3), id: \.self) { index in
                         let image = quoteDraftPhotos[index].image
-                        Image(uiImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 80, height: 80)
-                            .clipped()
-                            .cornerRadius(8)
+                        Button(action: {
+                            showingPhotoGallery = true
+                        }) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 80, height: 80)
+                                .clipped()
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.blue.opacity(0.5), lineWidth: 2)
+                                )
+                        }
                     }
 
                     if quoteDraftPhotos.count > 3 {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(width: 80, height: 80)
+                        Button(action: {
+                            showingPhotoGallery = true
+                        }) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.gray.opacity(0.3))
+                                    .frame(width: 80, height: 80)
 
-                            VStack {
-                                Image(systemName: "photo.stack")
-                                    .foregroundColor(.gray)
-                                Text("+\(quoteDraftPhotos.count - 3)")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
+                                VStack {
+                                    Image(systemName: "photo.stack")
+                                        .foregroundColor(.gray)
+                                    Text("+\(quoteDraftPhotos.count - 3)")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
                             }
                         }
                     }
@@ -1090,6 +1143,9 @@ struct QuoteFormView: View {
         let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
         PricingEngine.updateQuoteWithCalculatedTotals(quote: quoteDraft, breakdown: breakdown)
 
+        // Save photos to PhotoRecord objects
+        savePhotosToQuote()
+
         // Only insert if it's a new quote (not editing existing)
         if existingQuote == nil {
             modelContext.insert(quoteDraft)
@@ -1109,6 +1165,10 @@ struct QuoteFormView: View {
     private func saveQuoteAsCompleted() {
         let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
         PricingEngine.updateQuoteWithCalculatedTotals(quote: quoteDraft, breakdown: breakdown)
+
+        // Save photos to PhotoRecord objects
+        savePhotosToQuote()
+
         // Mark as completed and add to history
         quoteDraft.quoteStatus = .completed
         quoteDraft.completedAt = Date()
@@ -1127,6 +1187,9 @@ struct QuoteFormView: View {
     private func saveQuoteAsDraft() {
         let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
         PricingEngine.updateQuoteWithCalculatedTotals(quote: quoteDraft, breakdown: breakdown)
+
+        // Save photos to PhotoRecord objects
+        savePhotosToQuote()
 
         // Mark as draft and add to history
         quoteDraft.quoteStatus = .draft
@@ -1153,6 +1216,9 @@ struct QuoteFormView: View {
 
     private func saveQuoteToJobber() {
         isSavingToJobber = true
+
+        // Save photos to disk first
+        savePhotosToQuote()
 
         // First save and complete the quote locally (same as saveQuoteAsCompleted)
         let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
@@ -1184,10 +1250,13 @@ struct QuoteFormView: View {
 
                 print("📤 Submitting quote to Jobber with requestId: \(requestId)")
 
-                // Get captured photos
-                let photos = photoCaptureManager.capturedImages.map { $0.image }
+                // Get photos from the persisted PhotoRecord array (saved to disk)
+                let photos = quoteDraft.photos.compactMap { photoRecord in
+                    UIImage(contentsOfFile: photoRecord.fileURL)
+                }
+                print("📸 Loaded \(photos.count) photos from PhotoRecord array for Jobber upload")
 
-                // Step 1: Submit quote as note to Jobber (existing functionality)
+                // Step 1: Submit quote as note to Jobber (with photo attachments)
                 let noteResult = await jobberAPI.submitQuoteAsNote(
                     requestId: requestId,
                     quote: quoteDraft,
@@ -1358,8 +1427,9 @@ struct QuoteFormView: View {
     }
 
     private func generateQuotePDF(breakdown: PricingEngine.PriceBreakdown) {
-        // Get photos for this quote (currently unused but available for future features)
-        let images = photoCaptureManager.capturedImages.map { $0.image }
+        // Get photos for this quote from quoteDraftPhotos
+        let images = quoteDraftPhotos.map { $0.image }
+        print("📸 Generating PDF with \(images.count) photos")
 
         // Enhanced PDF with all details
         #if canImport(UIKit)
@@ -1445,6 +1515,104 @@ struct QuoteFormView: View {
         showingLineItemEditor = false
         newLineItemTitle = ""
         newLineItemAmount = 0
+    }
+
+    // MARK: - Photo Management
+
+    private func savePhotosToQuote() {
+        #if canImport(UIKit)
+        // Get the current photos from PhotoCaptureManager
+        let currentPhotos = quoteDraftPhotos
+
+        print("📸 savePhotosToQuote called for quote: \(quoteDraft.localId)")
+        print("📸 PhotoCaptureManager has \(photoCaptureManager.capturedImages.count) total photos")
+        print("📸 Filtered photos for this quote: \(currentPhotos.count)")
+        print("📸 Existing PhotoRecords: \(quoteDraft.photos.count)")
+
+        // Debug: Print all photo IDs in PhotoCaptureManager
+        for (index, photo) in photoCaptureManager.capturedImages.enumerated() {
+            print("📸 Photo \(index): quoteDraftId = \(photo.quoteDraftId?.uuidString ?? "nil")")
+        }
+
+        // Clear existing photos if we're updating
+        quoteDraft.photos.removeAll()
+
+        // Save each photo to disk and create PhotoRecord
+        for (index, capturedPhoto) in currentPhotos.enumerated() {
+            // Create unique filename for this photo
+            let filename = "\(quoteDraft.localId.uuidString)_photo_\(index)_\(Date().timeIntervalSince1970).jpg"
+            let fileURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("DTS_Photos")
+                .appendingPathComponent(filename)
+
+            // Create directory if needed
+            try? FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+
+            // Save image to disk
+            if let imageData = capturedPhoto.image.jpegData(compressionQuality: 0.8) {
+                do {
+                    try imageData.write(to: fileURL)
+
+                    // Create PhotoRecord
+                    let photoRecord = PhotoRecord(
+                        fileURL: fileURL.path,
+                        jobId: job?.jobId,
+                        quoteDraftId: quoteDraft.localId
+                    )
+                    photoRecord.createdAt = capturedPhoto.timestamp
+
+                    // Add to quote's photos array
+                    quoteDraft.photos.append(photoRecord)
+
+                    // Insert into model context
+                    modelContext.insert(photoRecord)
+
+                    print("📸 Saved photo \(index + 1) to: \(fileURL.path)")
+                } catch {
+                    print("❌ Error saving photo \(index + 1): \(error)")
+                }
+            }
+        }
+
+        print("📸 Quote now has \(quoteDraft.photos.count) photos")
+        #endif
+    }
+
+    private func loadExistingPhotos() {
+        #if canImport(UIKit)
+        print("📸 Loading \(quoteDraft.photos.count) existing photos for quote \(quoteDraft.localId)")
+
+        // Clear any existing photos for this quote from PhotoCaptureManager
+        photoCaptureManager.capturedImages.removeAll { $0.quoteDraftId == quoteDraft.localId }
+
+        // Load photos from PhotoRecord array
+        for photoRecord in quoteDraft.photos {
+            if let image = UIImage(contentsOfFile: photoRecord.fileURL) {
+                // Reconstruct location string if coordinates exist
+                let locationString: String?
+                if let lat = photoRecord.latitude, let lon = photoRecord.longitude {
+                    locationString = "\(lat),\(lon)"
+                } else {
+                    locationString = nil
+                }
+
+                let capturedPhoto = CapturedPhoto(
+                    image: image,
+                    location: locationString,
+                    quoteDraftId: quoteDraft.localId
+                )
+                photoCaptureManager.capturedImages.append(capturedPhoto)
+                print("📸 Loaded photo from: \(photoRecord.fileURL)")
+            } else {
+                print("❌ Failed to load photo from: \(photoRecord.fileURL)")
+            }
+        }
+
+        print("📸 PhotoCaptureManager now has \(photoCaptureManager.capturedImages.count) total photos")
+        #endif
     }
 }
 

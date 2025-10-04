@@ -88,7 +88,7 @@ struct PricingEngine {
 
         // Apply markup to the SUBTOTAL (standard business practice)
         let gutterMarkupK = quote.markupPercent
-        let guardMarkupK: Double = {
+        let _ = { // guardMarkupK not currently used
             if quote.guardMarkupPercent > 0 { return quote.guardMarkupPercent }
             let m = quote.guardProfitMarginPercent
             return m > 0 ? (m / max(1 - m, 0.000001)) : 0

@@ -1814,8 +1814,13 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     // MARK: - Quote to Note Conversion
 
     /// Creates a formatted note message from quote data
-    func formatQuoteForNote(quote: QuoteDraft, breakdown: PricingEngine.PriceBreakdown) -> String {
+    func formatQuoteForNote(quote: QuoteDraft, breakdown: PricingEngine.PriceBreakdown, photoCount: Int = 0) -> String {
         var message = "DTS APP QUOTE SUMMARY\n\n"
+
+        // Photo note if photos exist
+        if photoCount > 0 {
+            message += "📸 \(photoCount) photo\(photoCount == 1 ? "" : "s") saved in DTS App\n\n"
+        }
 
         // Notes section if available
         if !quote.notes.isEmpty {
@@ -1897,13 +1902,13 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     ) async -> Result<RequestNote, APIError> {
 
         print("📝 submitQuoteAsNote called with requestId: \(requestId)")
+        print("📸 Note will reference \(photos.count) photo(s) saved in app")
 
-        let message = formatQuoteForNote(quote: quote, breakdown: breakdown)
-        let attachments = createNoteAttachments(from: photos)
+        let message = formatQuoteForNote(quote: quote, breakdown: breakdown, photoCount: photos.count)
 
         let input = RequestCreateNoteInput(
             message: message,
-            attachments: attachments.isEmpty ? nil : attachments,
+            attachments: nil, // Jobber API doesn't support direct file uploads
             pinned: true, // Pin important quotes
             linkedTo: nil // Could link to related jobs if needed
         )

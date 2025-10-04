@@ -232,7 +232,8 @@ class PhotoCaptureManager: NSObject, ObservableObject {
 
                 let capturedPhoto = CapturedPhoto(
                     image: uiImage,
-                    location: locationString
+                    location: locationString,
+                    quoteDraftId: quoteDraftId
                 )
 
                 capturedImages.append(capturedPhoto)

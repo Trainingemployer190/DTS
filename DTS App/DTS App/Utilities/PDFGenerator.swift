@@ -345,8 +345,8 @@ class PDFGenerator {
 
                 // Use the EXACT calculation method from JobViews.swift Component Totals section (lines 460-500)
                 // This gives the correct values: $1,085.57 for gutters and $779.34 for guard
-                let gutterFeet = quote.gutterFeet + quote.downspoutFeet
-                let guardFeet = quote.gutterGuardFeet
+                let _ = quote.gutterFeet + quote.downspoutFeet // gutterFeet not used
+                let _ = quote.gutterGuardFeet // guardFeet not used
 
                 // Use the actual breakdown values from PricingEngine and include fittings/hangers in gutters
                 let totalElbows = quote.aElbows + quote.bElbows + quote.twoCrimp + quote.fourCrimp
@@ -403,37 +403,6 @@ class PDFGenerator {
                 y = notesRect.maxY + 12
             }
 
-            // Photos
-            if let photos, !photos.isEmpty, settings.includePhotosInQuote {
-                ensureSpace(24 + 130, y: &y)
-                drawSectionHeader("Photos", y: &y)
-                let thumbSize: CGFloat = 130
-                let spacing: CGFloat = 10
-                let cols = Int(floor((contentWidth + spacing) / (thumbSize + spacing)))
-                var col = 0
-                var rowY = y
-                for (idx, img) in photos.enumerated() {
-                    if col == cols {
-                        col = 0
-                        rowY += thumbSize + 22
-                        if rowY > bottomLimit - thumbSize { newPage(context, &rowY) }
-                    }
-                    let x = margin + CGFloat(col) * (thumbSize + spacing)
-                    let rect = CGRect(x: x, y: rowY, width: thumbSize, height: thumbSize)
-                    let aspect = AVMakeRect(aspectRatio: img.size, insideRect: rect)
-                    // Border
-                    let path = UIBezierPath(roundedRect: rect, cornerRadius: 8)
-                    UIColor.white.setFill(); path.fill()
-                    UIColor.systemGray4.setStroke(); path.lineWidth = 0.5; path.stroke()
-                    img.draw(in: aspect)
-                    // Caption
-                    let capAttr: [NSAttributedString.Key: Any] = [ .font: smallFont, .foregroundColor: UIColor.darkGray ]
-                    ("Photo \(idx + 1)" as NSString).draw(at: CGPoint(x: rect.minX, y: rect.maxY + 4), withAttributes: capAttr)
-                    col += 1
-                }
-                y = rowY + thumbSize + 10
-            }
-
             // Terms & Signature
             ensureSpace(100, y: &y)
             drawSectionHeader("Terms & Acceptance", y: &y)
@@ -443,6 +412,42 @@ class PDFGenerator {
             y += 40
             ensureSpace(48, y: &y)
             drawSignatureArea(y: &y)
+
+            // Photos (moved to bottom after signature)
+            if let photos, !photos.isEmpty, settings.includePhotosInQuote {
+                print("📄 PDF Generator: Adding \(photos.count) photos to PDF")
+                ensureSpace(24 + 400, y: &y)
+                drawSectionHeader("Photos", y: &y)
+                let photoHeight: CGFloat = 400
+                let spacing: CGFloat = 20
+
+                for (idx, img) in photos.enumerated() {
+                    // Check if we need a new page
+                    if y + photoHeight + 30 > bottomLimit {
+                        newPage(context, &y)
+                        ensureSpace(24 + photoHeight, y: &y)
+                        if idx == 0 {
+                            drawSectionHeader("Photos", y: &y)
+                        }
+                    }
+
+                    // Calculate photo rect maintaining aspect ratio
+                    let rect = CGRect(x: margin, y: y, width: contentWidth, height: photoHeight)
+                    let aspect = AVMakeRect(aspectRatio: img.size, insideRect: rect)
+
+                    // Border
+                    let path = UIBezierPath(roundedRect: aspect, cornerRadius: 8)
+                    UIColor.white.setFill(); path.fill()
+                    UIColor.systemGray4.setStroke(); path.lineWidth = 1; path.stroke()
+                    img.draw(in: aspect)
+
+                    // Caption
+                    let capAttr: [NSAttributedString.Key: Any] = [ .font: smallFont, .foregroundColor: UIColor.darkGray ]
+                    ("Photo \(idx + 1)" as NSString).draw(at: CGPoint(x: aspect.minX, y: aspect.maxY + 4), withAttributes: capAttr)
+
+                    y = aspect.maxY + 30 + spacing
+                }
+            }
         }
 
         return data
@@ -478,7 +483,7 @@ class PDFGenerator {
             dateText.draw(at: CGPoint(x: 50, y: 130), withAttributes: bodyAttributes)
 
             // Quote Details with Price Analysis
-            var detailsText = """
+            let detailsText = """
             Materials: $\(String(format: "%.2f", breakdown.materialsCost))
             Labor: $\(String(format: "%.2f", breakdown.laborCost))
             Subtotal: $\(String(format: "%.2f", breakdown.subtotal))

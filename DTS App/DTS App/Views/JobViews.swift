@@ -459,8 +459,8 @@ struct PreviewSection: View {
                         .foregroundColor(.secondary)
 
                     // Updated segmented approach for component totals
-                    let gutterFeet = quoteDraft.gutterFeet + quoteDraft.downspoutFeet
-                    let guardFeet = quoteDraft.gutterGuardFeet
+                    let _ = quoteDraft.gutterFeet + quoteDraft.downspoutFeet // gutterFeet not used
+                    let _ = quoteDraft.gutterGuardFeet // guardFeet not used
 
                     let totalElbows = quoteDraft.aElbows + quoteDraft.bElbows + quoteDraft.twoCrimp + quoteDraft.fourCrimp
                     let elbowUnitCost = quoteDraft.isRoundDownspout ? appSettings.costPerRoundElbow : appSettings.costPerElbow

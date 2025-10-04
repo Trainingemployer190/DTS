@@ -89,8 +89,12 @@ struct QuoteDetailView: View {
         let settings = settingsArray.first ?? AppSettings()
         let breakdown = PricingEngine.calculatePrice(quote: quote, settings: settings)
         #if canImport(UIKit)
-        // Try to gather any stored images for this quote if available
-        let images: [UIImage] = [] // Could be loaded from PhotoRecord if wired up
+        // Load photos from the quote's PhotoRecord array
+        let images: [UIImage] = quote.photos.compactMap { photoRecord in
+            UIImage(contentsOfFile: photoRecord.fileURL)
+        }
+        print("📸 QuoteDetailView: Loading \(images.count) photos from \(quote.photos.count) photo records")
+
         if let data = PDFGenerator.shared.generateQuotePDF(
             quote: quote,
             settings: settings,

@@ -347,12 +347,14 @@ struct CapturedPhoto: Identifiable {
     #endif
     let timestamp: Date
     let location: String?
+    let quoteDraftId: UUID?
 
     #if canImport(UIKit)
-    init(image: UIImage, location: String? = nil) {
+    init(image: UIImage, location: String? = nil, quoteDraftId: UUID? = nil) {
         self.image = image
         self.timestamp = Date()
         self.location = location
+        self.quoteDraftId = quoteDraftId
     }
     #endif
 }
