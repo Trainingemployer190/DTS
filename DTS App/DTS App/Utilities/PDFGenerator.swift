@@ -182,7 +182,7 @@ class PDFGenerator {
             // Markup and commission remain for display
             let markup = breakdown.markupAmount
             let commission = breakdown.commissionAmount
-            let preTaxSubtotal = subtotal + markup
+            let preTaxSubtotal = subtotal + markup + commission
             let tax = breakdown.taxAmount
 
             var rowIndex = 0

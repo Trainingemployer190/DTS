@@ -79,11 +79,14 @@ struct PricingEngine {
         let gutterGuardLaborCost = quote.includeGutterGuard ? quote.gutterGuardFeet * settings.gutterGuardLaborPerFoot : 0
         let laborCost = gutterLaborCost + gutterGuardLaborCost
 
-        // Segment base costs by component
+        // Calculate subtotal FIRST (materials + labor + additional items)
+        let subtotal = materialsCost + laborCost + additionalItemsCost
+
+        // Segment base costs by component for component-level analysis
         let gutterBaseCost = (gutterMaterialsCost + downspoutMaterialsCost + elbowsCost + hangersCost) + gutterLaborCost + additionalItemsCost
         let guardBaseCost = gutterGuardCost + gutterGuardLaborCost
 
-        // Apply independent markups
+        // Apply markup to the SUBTOTAL (standard business practice)
         let gutterMarkupK = quote.markupPercent
         let guardMarkupK: Double = {
             if quote.guardMarkupPercent > 0 { return quote.guardMarkupPercent }
@@ -91,16 +94,21 @@ struct PricingEngine {
             return m > 0 ? (m / max(1 - m, 0.000001)) : 0
         }()
 
-        let gutterMarkupAmount = gutterBaseCost * gutterMarkupK
-        let guardMarkupAmount  = guardBaseCost * guardMarkupK
+        // Calculate markup amounts proportionally based on component costs
+        let totalBaseCost = gutterBaseCost + guardBaseCost
+        let gutterProportion = totalBaseCost > 0 ? gutterBaseCost / totalBaseCost : 1.0
+        let guardProportion = totalBaseCost > 0 ? guardBaseCost / totalBaseCost : 0.0
 
-        let subtotalPreCommission = gutterBaseCost + guardBaseCost + gutterMarkupAmount + guardMarkupAmount
+        // Total markup is calculated on the subtotal
+        let markupAmount = subtotal * gutterMarkupK
+
+        // Distribute markup proportionally for component-level reporting
+        let gutterMarkupAmount = markupAmount * gutterProportion
+        let guardMarkupAmount = markupAmount * guardProportion
+
+        let subtotalAfterMarkup = subtotal + markupAmount
         let discountAmount = 0.0 // No discount field in QuoteDraft
-        let subtotalAfterMarkupDiscount = subtotalPreCommission - discountAmount
-
-        // Aggregate totals for compatibility
-        let subtotal = materialsCost + laborCost + additionalItemsCost
-        let markupAmount = gutterMarkupAmount + guardMarkupAmount
+        let subtotalAfterMarkupDiscount = subtotalAfterMarkup - discountAmount
 
         // Calculate commission based on quote's commission percentage (added to customer total)
         let commissionAmount = subtotalAfterMarkupDiscount * quote.salesCommissionPercent

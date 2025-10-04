@@ -73,12 +73,12 @@ struct SettingsView: View {
         hangerSpacingText = settings.hangerSpacingFeet == 0 ? "" : String(settings.hangerSpacingFeet)
         laborGutterText = settings.laborPerFootGutter == 0 ? "" : String(settings.laborPerFootGutter)
         gutterGuardLaborText = settings.gutterGuardLaborPerFoot == 0 ? "" : String(settings.gutterGuardLaborPerFoot)
-        markupText = settings.defaultMarkupPercent == 0 ? "" : String(Int(settings.defaultMarkupPercent * 100))
-        profitMarginText = settings.defaultProfitMarginPercent == 0 ? "" : String(Int(settings.defaultProfitMarginPercent * 100))
-        salesCommissionText = settings.defaultSalesCommissionPercent == 0 ? "" : String(Int(settings.defaultSalesCommissionPercent * 100))
-        taxRateText = settings.taxRate == 0 ? "" : String(Int(settings.taxRate * 100))
-        gutterGuardMarkupText = settings.gutterGuardMarkupPercent == 0 ? "" : String(Int(settings.gutterGuardMarkupPercent * 100))
-        gutterGuardProfitMarginText = settings.gutterGuardProfitMarginPercent == 0 ? "" : String(Int(settings.gutterGuardProfitMarginPercent * 100))
+        markupText = settings.defaultMarkupPercent == 0 ? "" : String(format: "%.1f", settings.defaultMarkupPercent * 100)
+        profitMarginText = settings.defaultProfitMarginPercent == 0 ? "" : String(format: "%.1f", settings.defaultProfitMarginPercent * 100)
+        salesCommissionText = settings.defaultSalesCommissionPercent == 0 ? "" : String(format: "%.1f", settings.defaultSalesCommissionPercent * 100)
+        taxRateText = settings.taxRate == 0 ? "" : String(format: "%.1f", settings.taxRate * 100)
+        gutterGuardMarkupText = settings.gutterGuardMarkupPercent == 0 ? "" : String(format: "%.1f", settings.gutterGuardMarkupPercent * 100)
+        gutterGuardProfitMarginText = settings.gutterGuardProfitMarginPercent == 0 ? "" : String(format: "%.1f", settings.gutterGuardProfitMarginPercent * 100)
         materialCostRoundDownspoutText = settings.materialCostPerFootRoundDownspout == 0 ? "" : String(settings.materialCostPerFootRoundDownspout)
         costPerRoundElbowText = settings.costPerRoundElbow == 0 ? "" : String(settings.costPerRoundElbow)
     }
@@ -144,8 +144,8 @@ struct SettingsView: View {
         // Auto-calc markup from margin: k = m / (1 - m)
         let k = m >= 1 ? 0 : (m / max(1 - m, 0.000001))
         settings.defaultMarkupPercent = k
-        // Update UI mirror for markup so it reflects the computed value
-        markupText = k == 0 ? "" : String(Int((k * 100).rounded()))
+        // Update UI mirror for markup so it reflects the computed value with 1 decimal place
+        markupText = k == 0 ? "" : String(format: "%.1f", k * 100)
         saveSettings()
     }
 
@@ -173,8 +173,8 @@ struct SettingsView: View {
         // Auto-calc markup from margin: k = m / (1 - m)
         let k = m >= 1 ? 0 : (m / max(1 - m, 0.000001))
         settings.gutterGuardMarkupPercent = k
-        // Update UI mirror for markup so it reflects the computed value
-        gutterGuardMarkupText = k == 0 ? "" : String(Int((k * 100).rounded()))
+        // Update UI mirror for markup so it reflects the computed value with 1 decimal place
+        gutterGuardMarkupText = k == 0 ? "" : String(format: "%.1f", k * 100)
         saveSettings()
     }
 
@@ -492,7 +492,7 @@ struct SettingsView: View {
                     }
                 Text("%")
             }
-            
+
             HStack {
                 Text("Tax")
                 Spacer()

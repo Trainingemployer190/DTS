@@ -36,10 +36,10 @@ final class AppSettings {
     var laborPerFootGutter: Double = 2.25
 
     // Markup and profit margins
-    var defaultMarkupPercent: Double = 0.613
+    var defaultMarkupPercent: Double = 0.538  // Calculated from 35% margin: 0.35/(1-0.35)
     var defaultProfitMarginPercent: Double = 0.35
     var defaultSalesCommissionPercent: Double = 0.03
-    var gutterGuardMarkupPercent: Double = 0.613
+    var gutterGuardMarkupPercent: Double = 0.538  // Calculated from 35% margin: 0.35/(1-0.35)
     var gutterGuardProfitMarginPercent: Double = 0.35
 
     // Tax and currency

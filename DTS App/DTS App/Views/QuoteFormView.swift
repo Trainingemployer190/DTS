@@ -740,6 +740,14 @@ struct QuoteFormView: View {
                     .autocorrectionDisabled()
                     .textContentType(.none)
                     .focused($isProfitMarginFocused)
+                    .onChange(of: quoteDraft.profitMarginPercent) { _, newValue in
+                        // Immediately update markup when profit margin changes
+                        let m = newValue
+                        if m >= 0 && m < 1 {
+                            let calculatedMarkup = m / max(1 - m, 0.000001)
+                            quoteDraft.markupPercent = calculatedMarkup
+                        }
+                    }
                     .onSubmit {
                         let m = quoteDraft.profitMarginPercent
                         let calculatedMarkup = m / (1 - m)
@@ -826,6 +834,14 @@ struct QuoteFormView: View {
                         .keyboardType(.decimalPad)
                         .autocorrectionDisabled()
                         .textContentType(.none)
+                        .onChange(of: quoteDraft.guardProfitMarginPercent) { _, newValue in
+                            // Ensure guard markup updates immediately
+                            let m = newValue
+                            if m >= 0 && m < 1 {
+                                let k = m / max(1 - m, 0.000001)
+                                quoteDraft.guardMarkupPercent = k
+                            }
+                        }
                         Text("%")
                     }
                 }
