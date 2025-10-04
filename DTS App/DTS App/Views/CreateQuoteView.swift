@@ -190,7 +190,9 @@ struct CreateQuoteView: View {
         let quoteDraft = QuoteDraft()
         quoteDraft.jobId = job.jobId
         quoteDraft.clientName = job.clientName
-        quoteDraft.notes = "Quote for \(job.clientName)\nAddress: \(job.address)\nScheduled: \(job.scheduledAt.formatted(date: .abbreviated, time: .shortened))"
+        // Start with empty notes instead of pre-filling with job details
+        // This prevents notes from accumulating when creating multiple quotes
+        quoteDraft.notes = ""
 
         // Apply default settings for markup and commission percentages
         quoteDraft.applyDefaultSettings(settings)

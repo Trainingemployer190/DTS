@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 #if canImport(UIKit)
 import UIKit
@@ -74,44 +75,46 @@ struct JobRowView: View {
 struct JobDetailView: View {
     let job: JobberJob
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var photoCaptureManager = PhotoCaptureManager()
-    @State private var showingPhotoGallery = false
+    @EnvironmentObject var jobberAPI: JobberAPI
+    @State private var showingQuoteForm = false
+    @Query private var allQuoteDrafts: [QuoteDraft]
+
+    // Find existing quote for this job
+    private var existingQuote: QuoteDraft? {
+        allQuoteDrafts.first { $0.jobId == job.jobId && $0.quoteStatus != .completed }
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 JobInfoSection(job: job)
                 ServiceInfoSection(job: job)
-                PhotosSection(photoCaptureManager: photoCaptureManager, showingPhotoGallery: $showingPhotoGallery)
-                ActionButtonsSection(job: job, photoCaptureManager: photoCaptureManager)
+
+                // Create/Edit Quote button
+                Button(action: {
+                    showingQuoteForm = true
+                }) {
+                    HStack {
+                        Image(systemName: existingQuote != nil ? "doc.text" : "doc.text.fill")
+                        Text(existingQuote != nil ? "Edit Quote" : "Create Quote")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .padding(.horizontal)
+
                 Spacer()
             }
             .padding()
         }
         .navigationTitle("Job Details")
-        .fullScreenCover(isPresented: $photoCaptureManager.showingCamera) {
-            CameraView(
-                isPresented: $photoCaptureManager.showingCamera,
-                captureCount: $photoCaptureManager.captureCount
-            ) { image in
-                photoCaptureManager.processImage(image, jobId: job.jobId, quoteDraftId: nil as UUID?)
-            }
-        }
-        .sheet(isPresented: $photoCaptureManager.showingPhotoLibrary) {
-            PhotoLibraryPicker(isPresented: $photoCaptureManager.showingPhotoLibrary) { image in
-                photoCaptureManager.processImage(image, jobId: job.jobId, quoteDraftId: nil as UUID?)
-            }
-        }
-        .sheet(isPresented: $showingPhotoGallery) {
+        .sheet(isPresented: $showingQuoteForm) {
             NavigationView {
-                PhotoGalleryView(photos: photoCaptureManager.capturedImages)
-                    .navigationTitle("Photos")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
-                            Button("Done") { showingPhotoGallery = false }
-                        }
-                    }
+                QuoteFormView(job: job, prefilledQuoteDraft: nil)
             }
         }
     }
@@ -804,156 +807,3 @@ struct ServiceInfoSection: View {
         }
     }
 }
-
-struct PhotosSection: View {
-    @ObservedObject var photoCaptureManager: PhotoCaptureManager
-    @Binding var showingPhotoGallery: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Photos")
-                    .font(.title2)
-                    .fontWeight(.bold)
-
-                Spacer()
-
-                if !photoCaptureManager.capturedImages.isEmpty {
-                    Button("View All") {
-                        showingPhotoGallery = true
-                    }
-                    .font(.caption)
-                    .foregroundColor(.blue)
-                }
-            }
-
-            if photoCaptureManager.capturedImages.isEmpty {
-                Text("No photos captured yet")
-                    .foregroundColor(.secondary)
-                    .italic()
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(Array(photoCaptureManager.capturedImages.prefix(5))) { photo in
-                            // Simple image view to avoid type checking complexity
-                            Rectangle()
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(width: 80, height: 80)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                .overlay(
-                                    Image(systemName: "photo")
-                                        .foregroundColor(.gray)
-                                )
-                        }
-                    }
-                    .padding(.horizontal, 4)
-                }
-            }
-        }
-        .padding()
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-struct ActionButtonsSection: View {
-    let job: JobberJob
-    @ObservedObject var photoCaptureManager: PhotoCaptureManager
-
-    var body: some View {
-        VStack(spacing: 12) {
-            NavigationLink(destination: QuoteFormView(job: job)) {
-                HStack {
-                    Image(systemName: "doc.text.fill")
-                    Text("Create Quote")
-                }
-                .font(.headline)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(.blue)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-
-            CameraButton(photoCaptureManager: photoCaptureManager, jobId: job.jobId)
-            LocationStatusView(photoCaptureManager: photoCaptureManager)
-        }
-    }
-}
-
-struct CameraButton: View {
-    @ObservedObject var photoCaptureManager: PhotoCaptureManager
-    let jobId: String
-
-    var body: some View {
-        Button(action: {
-            photoCaptureManager.capturePhoto(for: jobId)
-        }) {
-            HStack(spacing: 12) {
-                Image(systemName: "camera.fill")
-                    .font(.title2)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Capture Photo")
-                        .font(.headline)
-                    Text("Tap to take a photo with location")
-                        .font(.caption)
-                        .opacity(0.8)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .opacity(0.6)
-            }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
-            .background(
-                LinearGradient(
-                    gradient: Gradient(colors: [.blue, .blue.opacity(0.8)]),
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(.white.opacity(0.2), lineWidth: 1)
-            )
-            .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
-        }
-    }
-}
-
-struct LocationStatusView: View {
-    @ObservedObject var photoCaptureManager: PhotoCaptureManager
-
-    var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: photoCaptureManager.isLocationAuthorized ? "location.fill" : "location.slash")
-                    .foregroundColor(photoCaptureManager.isLocationAuthorized ? .green : .orange)
-                Text(photoCaptureManager.formatLocationStatus())
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, 4)
-
-            if let locationError = photoCaptureManager.locationError {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                    Text(locationError)
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(.orange.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-        }
-    }
-}
-

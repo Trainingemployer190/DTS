@@ -70,6 +70,7 @@ class PhotoCaptureManager: NSObject, ObservableObject {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        locationManager.stopUpdatingLocation()
     }
 
     private func handleMemoryWarning() {
@@ -91,7 +92,11 @@ class PhotoCaptureManager: NSObject, ObservableObject {
         locationManager.delegate = self
         // Use a reasonable accuracy that doesn't drain battery
         locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-        // Don't start updates immediately
+        locationManager.distanceFilter = 50 // Update every 50 meters
+        // Start location updates when authorized
+        if cachedAuthorizationStatus == .authorizedWhenInUse || cachedAuthorizationStatus == .authorizedAlways {
+            locationManager.startUpdatingLocation()
+        }
     }
 
     private func checkLocationPermission() {
@@ -117,9 +122,9 @@ class PhotoCaptureManager: NSObject, ObservableObject {
                 return
             }
 
-            print("Requesting current location...")
-            // Use requestLocation for one-time location request instead of continuous updates
-            locationManager.requestLocation()
+            print("Starting location updates...")
+            // Start continuous location updates for more reliable location data
+            locationManager.startUpdatingLocation()
         case .denied, .restricted:
             print("Location not authorized - cannot request location")
             locationError = "Location access not granted"
@@ -197,10 +202,11 @@ class PhotoCaptureManager: NSObject, ObservableObject {
         autoreleasepool {
             let watermarkedImage = addWatermark(to: compressedImage)
 
-            // Save to Photos app if permission is granted
-            if isPhotosAuthorized {
-                saveToPhotosApp(watermarkedImage)
-            }
+            // Save to Photos app disabled to avoid duplicates
+            // Photos are already in the app and can be exported if needed
+            // if isPhotosAuthorized {
+            //     saveToPhotosApp(watermarkedImage)
+            // }
 
             // Save to Documents directory
             guard let imageData = watermarkedImage.jpegData(compressionQuality: 0.7),
@@ -233,7 +239,8 @@ class PhotoCaptureManager: NSObject, ObservableObject {
                 let capturedPhoto = CapturedPhoto(
                     image: uiImage,
                     location: locationString,
-                    quoteDraftId: quoteDraftId
+                    quoteDraftId: quoteDraftId,
+                    jobId: jobId
                 )
 
                 capturedImages.append(capturedPhoto)
@@ -364,7 +371,7 @@ class PhotoCaptureManager: NSObject, ObservableObject {
                 return "Location services disabled"
             }
 
-            if let error = locationError {
+            if let error = locationError, !error.contains("Getting location") {
                 return error
             } else if let address = currentAddress, !address.isEmpty {
                 // Take first 30 characters of address
@@ -522,16 +529,19 @@ extension PhotoCaptureManager: CLLocationManagerDelegate {
             case .authorizedWhenInUse, .authorizedAlways:
                 isLocationAuthorized = true
                 locationError = nil
-                // Don't start continuous updates - only request when needed
+                // Start continuous location updates for immediate location availability
+                locationManager.startUpdatingLocation()
             case .denied, .restricted:
                 isLocationAuthorized = false
                 locationError = "Location access denied. Go to Settings > Privacy & Security > Location Services to enable location access for this app."
+                locationManager.stopUpdatingLocation()
             case .notDetermined:
                 // Wait for user response
                 break
             @unknown default:
                 isLocationAuthorized = false
                 locationError = "Location access status unknown."
+                locationManager.stopUpdatingLocation()
             }
         }
     }

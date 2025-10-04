@@ -1875,22 +1875,101 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         return message
     }
 
-    /// Creates note attachments from captured photos
+    /// Creates note attachments from captured photos (Legacy function - not used with imgbb)
     func createNoteAttachments(from photos: [UIImage]) -> [NoteAttachmentAttributes] {
-        var attachments: [NoteAttachmentAttributes] = []
+        // This function is no longer used - photos are uploaded to imgbb first
+        // Keeping for backwards compatibility
+        return []
+    }
 
-        for (index, photo) in photos.enumerated() {
-            guard let imageData = photo.jpegData(compressionQuality: 0.8) else { continue }
+    // MARK: - Image Upload (imgbb)
 
-            let attachment = NoteAttachmentAttributes(
-                fileName: "quote_photo_\(index + 1).jpg",
-                fileData: imageData,
-                contentType: "image/jpeg"
-            )
-            attachments.append(attachment)
+    /// Uploads image to imgbb and returns the direct URL
+    func uploadImageToImgbb(_ image: UIImage) async -> Result<String, Error> {
+        let apiKey = "5e439e5a4e3c937ef15899d5efd99b30"
+        let uploadURL = "https://api.imgbb.com/1/upload?key=\(apiKey)"
+
+        // Convert image to JPEG with good quality
+        guard let imageData = image.jpegData(compressionQuality: 0.9) else {
+            print("❌ Failed to convert image to JPEG")
+            return .failure(APIError.invalidResponse)
         }
 
-        return attachments
+        // Create request
+        guard let url = URL(string: uploadURL) else {
+            return .failure(APIError.invalidURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+
+        // Create multipart form data
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+
+        // Add image field
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"image\"; filename=\"photo.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(imageData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        request.httpBody = body
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return .failure(APIError.invalidResponse)
+            }
+
+            guard httpResponse.statusCode == 200 else {
+                print("❌ imgbb upload failed with status: \(httpResponse.statusCode)")
+                if let errorString = String(data: data, encoding: .utf8) {
+                    print("❌ imgbb error: \(errorString)")
+                }
+                return .failure(APIError.graphQLError("Upload failed with status \(httpResponse.statusCode)"))
+            }
+
+            // Parse response
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            guard let dataDict = json?["data"] as? [String: Any],
+                  let imageURL = dataDict["url"] as? String else {
+                print("❌ Failed to parse imgbb response")
+                return .failure(APIError.invalidResponse)
+            }
+
+            print("✅ Image uploaded to imgbb: \(imageURL)")
+            return .success(imageURL)
+
+        } catch {
+            print("❌ imgbb upload error: \(error)")
+            return .failure(error)
+        }
+    }
+
+    /// Uploads multiple images to imgbb and returns array of URLs
+    func uploadImagesToImgbb(_ images: [UIImage]) async -> [String] {
+        var imageURLs: [String] = []
+
+        for (index, image) in images.enumerated() {
+            print("📸 Uploading image \(index + 1) of \(images.count) to imgbb...")
+            let result = await uploadImageToImgbb(image)
+
+            switch result {
+            case .success(let url):
+                imageURLs.append(url)
+                print("✅ Image \(index + 1) uploaded successfully")
+            case .failure(let error):
+                print("❌ Failed to upload image \(index + 1): \(error.localizedDescription)")
+            }
+        }
+
+        print("📸 Successfully uploaded \(imageURLs.count) of \(images.count) images")
+        return imageURLs
     }
 
     /// Submits quote as a note to Jobber request
@@ -1902,13 +1981,24 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     ) async -> Result<RequestNote, APIError> {
 
         print("📝 submitQuoteAsNote called with requestId: \(requestId)")
-        print("📸 Note will reference \(photos.count) photo(s) saved in app")
+        print("📸 Uploading \(photos.count) photo(s) to imgbb...")
 
-        let message = formatQuoteForNote(quote: quote, breakdown: breakdown, photoCount: photos.count)
+        // Step 1: Upload photos to imgbb and get URLs
+        var photoURLs: [String] = []
+        if !photos.isEmpty {
+            photoURLs = await uploadImagesToImgbb(photos)
+            print("📸 Got \(photoURLs.count) photo URLs from imgbb")
+        }
+
+        // Step 2: Create note with attachments
+        let message = formatQuoteForNote(quote: quote, breakdown: breakdown, photoCount: photoURLs.count)
+
+        // Convert URLs to NoteAttachmentAttributes
+        let attachments = photoURLs.isEmpty ? nil : photoURLs.map { NoteAttachmentAttributes(url: $0) }
 
         let input = RequestCreateNoteInput(
             message: message,
-            attachments: nil, // Jobber API doesn't support direct file uploads
+            attachments: attachments,
             pinned: true, // Pin important quotes
             linkedTo: nil // Could link to related jobs if needed
         )
@@ -1987,11 +2077,8 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         if let attachments = input.attachments {
             var attachmentData: [[String: Any]] = []
             for attachment in attachments {
-                let base64Data = attachment.fileData.base64EncodedString()
                 attachmentData.append([
-                    "fileName": attachment.fileName,
-                    "fileData": base64Data,
-                    "contentType": attachment.contentType
+                    "url": attachment.url
                 ])
             }
             var inputDict = variables["input"] as! [String: Any]
@@ -2024,6 +2111,114 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                 let response = RequestCreateNoteResponse(
                     requestNote: rawResponse.data.requestCreateNote.requestNote,
                     userErrors: rawResponse.data.requestCreateNote.userErrors?.map {
+                        GraphQLError(message: $0.message, path: $0.path ?? [])
+                    } ?? []
+                )
+                completion(.success(response))
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    /// Submit photos as a note to a Job
+    func submitPhotosAsJobNote(
+        jobId: String,
+        photos: [UIImage],
+        message: String = "Photos uploaded from DTS App"
+    ) async -> Result<JobNote, APIError> {
+
+        print("📝 submitPhotosAsJobNote called with jobId: \(jobId)")
+        print("📸 Uploading \(photos.count) photo(s) to imgbb...")
+
+        // Step 1: Upload photos to imgbb and get URLs
+        var photoURLs: [String] = []
+        if !photos.isEmpty {
+            photoURLs = await uploadImagesToImgbb(photos)
+            print("📸 Got \(photoURLs.count) photo URLs from imgbb")
+        }
+
+        // Step 2: Create note with attachments
+        let attachments = photoURLs.isEmpty ? nil : photoURLs.map { NoteAttachmentAttributes(url: $0) }
+
+        let input = JobCreateNoteInput(
+            message: message,
+            attachments: attachments
+        )
+
+        return await withCheckedContinuation { continuation in
+            Task {
+                await createJobNote(jobId: jobId, input: input) { result in
+                    switch result {
+                    case .success(let response):
+                        if !response.userErrors.isEmpty {
+                            let errorMessage = response.userErrors.map { $0.message }.joined(separator: ", ")
+                            print("❌ Job note creation failed with user errors: \(errorMessage)")
+                            continuation.resume(returning: .failure(.graphQLError(errorMessage)))
+                        } else {
+                            if let noteData = response.jobNote {
+                                print("✅ Job note created successfully with ID: \(noteData.id)")
+                                continuation.resume(returning: .success(noteData))
+                            } else {
+                                print("❌ Job note creation succeeded but no note data returned")
+                                continuation.resume(returning: .failure(.invalidResponse))
+                            }
+                        }
+                    case .failure(let error):
+                        print("❌ Job note creation failed with error: \(error)")
+                        if let apiError = error as? APIError {
+                            continuation.resume(returning: .failure(apiError))
+                        } else {
+                            continuation.resume(returning: .failure(.graphQLError(error.localizedDescription)))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// GraphQL mutation to create a job note
+    private func createJobNote(
+        jobId: String,
+        input: JobCreateNoteInput,
+        completion: @escaping (Result<JobCreateNoteResponse, Error>) -> Void
+    ) async {
+        let mutation = """
+        mutation JobCreateNote($jobId: EncodedId!, $input: JobCreateNoteInput!) {
+          jobCreateNote(jobId: $jobId, input: $input) {
+            jobNote {
+              id
+              message
+              createdAt
+            }
+            userErrors {
+              message
+              path
+            }
+          }
+        }
+        """
+
+        var variables: [String: Any] = [
+            "jobId": jobId,
+            "input": [
+                "message": input.message
+            ]
+        ]
+
+        // Add attachments if present
+        if let attachments = input.attachments {
+            var inputDict = variables["input"] as! [String: Any]
+            inputDict["attachments"] = attachments.map { $0.toDictionary() }
+            variables["input"] = inputDict
+        }
+
+        await performGraphQLRequest(query: mutation, variables: variables) { (result: Result<JobCreateNoteRawResponse, Error>) in
+            switch result {
+            case .success(let rawResponse):
+                let response = JobCreateNoteResponse(
+                    jobNote: rawResponse.data.jobCreateNote.jobNote,
+                    userErrors: rawResponse.data.jobCreateNote.userErrors?.map {
                         GraphQLError(message: $0.message, path: $0.path ?? [])
                     } ?? []
                 )
@@ -2332,10 +2527,12 @@ struct RequestCreateNoteInput {
     let linkedTo: RequestNoteLinkInput?
 }
 
-struct NoteAttachmentAttributes {
-    let fileName: String
-    let fileData: Data
-    let contentType: String
+struct NoteAttachmentAttributes: Codable {
+    let url: String
+
+    func toDictionary() -> [String: Any] {
+        return ["url": url]
+    }
 }
 
 struct RequestNoteLinkInput { let jobIds: [String]?; let quoteIds: [String]?; let invoiceIds: [String]? }
@@ -2361,4 +2558,26 @@ struct RequestCreateNoteRawResponse: Codable { let data: RequestCreateNoteDataRe
 struct RequestCreateNoteDataResponse: Codable { let requestCreateNote: RequestCreateNotePayload }
 struct RequestCreateNotePayload: Codable { let requestNote: RequestNote?; let userErrors: [RequestNoteUserError]? }
 struct RequestNoteUserError: Codable { let message: String; let path: [String]? }
+
+// MARK: - Job Note Creation Types
+struct JobCreateNoteInput {
+    let message: String
+    let attachments: [NoteAttachmentAttributes]?
+}
+
+struct JobNote: Codable {
+    let id: String
+    let message: String
+    let createdAt: String
+}
+
+struct JobCreateNoteResponse {
+    let jobNote: JobNote?
+    let userErrors: [GraphQLError]
+}
+
+struct JobCreateNoteRawResponse: Codable { let data: JobCreateNoteDataResponse }
+struct JobCreateNoteDataResponse: Codable { let jobCreateNote: JobCreateNotePayload }
+struct JobCreateNotePayload: Codable { let jobNote: JobNote?; let userErrors: [RequestNoteUserError]? }
+
 

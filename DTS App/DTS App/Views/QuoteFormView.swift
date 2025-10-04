@@ -527,6 +527,8 @@ struct QuoteFormView: View {
             if let prefilledQuoteDraft = prefilledQuoteDraft {
                 quoteDraft = prefilledQuoteDraft
                 print("Using pre-filled quote draft for client: \(prefilledQuoteDraft.clientName)")
+                // Clear notes to start fresh (prevent carrying over old quote notes)
+                quoteDraft.notes = ""
                 loadExistingPhotos()
             }
 
@@ -535,6 +537,10 @@ struct QuoteFormView: View {
                 quoteDraft.clientName = job.clientName
                 quoteDraft.clientAddress = job.address
                 quoteDraft.clientId = job.clientId
+                // Clear notes when creating new quote from job
+                if prefilledQuoteDraft == nil {
+                    quoteDraft.notes = ""
+                }
                 print("Populated client info from job: \(job.clientName) at \(job.address)")
             }
 
@@ -1300,6 +1306,12 @@ struct QuoteFormView: View {
                         // Mark as saved to Jobber when successful
                         quoteDraft.savedToJobber = true
 
+                        // Clear submitted photos from PhotoCaptureManager to prevent duplicates
+                        photoCaptureManager.capturedImages.removeAll { photo in
+                            photo.quoteDraftId == quoteDraft.localId
+                        }
+                        print("📸 Cleared \(quoteDraftPhotos.count) photos from PhotoCaptureManager after successful submission")
+
                         // Show success message
                         showingJobberSuccess = true
                         // Provide haptic feedback
@@ -1406,6 +1418,12 @@ struct QuoteFormView: View {
                         // Mark as saved to Jobber when successful
                         quoteDraft.savedToJobber = true
                         try? modelContext.save()
+
+                        // Clear submitted photos from PhotoCaptureManager to prevent duplicates
+                        photoCaptureManager.capturedImages.removeAll { photo in
+                            photo.quoteDraftId == quoteDraft.localId
+                        }
+                        print("📸 Cleared photos from PhotoCaptureManager after successful submission")
 
                         // Show success message
                         showingJobberSuccess = true
