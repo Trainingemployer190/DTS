@@ -18,6 +18,8 @@ struct QuoteHistoryView: View {
     @State private var isSendingToJobber = false
     @State private var sendingQuoteId: UUID?
     @State private var jobberSubmissionError: String?
+    @State private var showingCleanupConfirmation = false
+    @State private var orphanedPhotoCount = 0
 
     private var settings: AppSettings {
         settingsArray.first ?? AppSettings()
@@ -160,6 +162,27 @@ struct QuoteHistoryView: View {
                     .foregroundColor(.secondary)
                 }
 
+                GroupBox("Maintenance") {
+                    VStack(spacing: 12) {
+                        Button(action: {
+                            orphanedPhotoCount = findOrphanedPhotos().count
+                            showingCleanupConfirmation = true
+                        }) {
+                            HStack {
+                                Image(systemName: "trash.circle")
+                                    .foregroundColor(.red)
+                                Text("Clean Up Orphaned Photos")
+                                Spacer()
+                            }
+                        }
+                        .buttonStyle(.bordered)
+
+                        Text("Removes photo files that are no longer associated with any quote")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
                 Spacer()
             }
             .padding()
@@ -171,6 +194,14 @@ struct QuoteHistoryView: View {
                         showingStorageInfo = false
                     }
                 }
+            }
+            .alert("Clean Up Photos?", isPresented: $showingCleanupConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Clean Up", role: .destructive) {
+                    cleanupOrphanedPhotos()
+                }
+            } message: {
+                Text("Found \(orphanedPhotoCount) orphaned photo files. These are test photos or photos from deleted quotes that are no longer needed.")
             }
         }
     }
@@ -194,6 +225,58 @@ struct QuoteHistoryView: View {
     private func deletePhotoFile(_ photo: PhotoRecord) {
         let fileURL = URL(fileURLWithPath: photo.fileURL)
         try? FileManager.default.removeItem(at: fileURL)
+    }
+
+    private func findOrphanedPhotos() -> [URL] {
+        var orphanedPhotos: [URL] = []
+
+        // Get all photo file URLs from existing quotes
+        var validPhotoURLs = Set<String>()
+        for quote in allQuotes {
+            for photo in quote.photos {
+                validPhotoURLs.insert(photo.fileURL)
+            }
+        }
+
+        // Check temp directory for DTS_Photos
+        let tempPhotosDir = FileManager.default.temporaryDirectory.appendingPathComponent("DTS_Photos")
+        if let photoFiles = try? FileManager.default.contentsOfDirectory(at: tempPhotosDir, includingPropertiesForKeys: nil) {
+            for fileURL in photoFiles {
+                if !validPhotoURLs.contains(fileURL.path) {
+                    orphanedPhotos.append(fileURL)
+                }
+            }
+        }
+
+        // Check documents directory
+        let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        if let photoFiles = try? FileManager.default.contentsOfDirectory(at: documentsDir, includingPropertiesForKeys: nil) {
+            for fileURL in photoFiles where fileURL.pathExtension.lowercased() == "jpg" || fileURL.pathExtension.lowercased() == "jpeg" {
+                if !validPhotoURLs.contains(fileURL.path) {
+                    orphanedPhotos.append(fileURL)
+                }
+            }
+        }
+
+        print("🔍 Found \(orphanedPhotos.count) orphaned photos")
+        return orphanedPhotos
+    }
+
+    private func cleanupOrphanedPhotos() {
+        let orphanedPhotos = findOrphanedPhotos()
+        var deletedCount = 0
+
+        for photoURL in orphanedPhotos {
+            do {
+                try FileManager.default.removeItem(at: photoURL)
+                deletedCount += 1
+                print("🗑️ Deleted orphaned photo: \(photoURL.lastPathComponent)")
+            } catch {
+                print("❌ Failed to delete orphaned photo \(photoURL.lastPathComponent): \(error)")
+            }
+        }
+
+        print("✅ Cleaned up \(deletedCount) orphaned photos")
     }
 
     private func cleanupOldQuotes() {

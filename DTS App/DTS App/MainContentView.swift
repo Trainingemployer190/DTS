@@ -36,13 +36,22 @@ struct MainContentView: View {
             .tag(2)
 
             NavigationView {
+                PhotoLibraryView()
+            }
+            .tabItem {
+                Image(systemName: "photo.stack")
+                Text("Photos")
+            }
+            .tag(3)
+
+            NavigationView {
                 SettingsView()
             }
             .tabItem {
                 Image(systemName: "gear")
                 Text("Settings")
             }
-            .tag(3)
+            .tag(4)
         }
         .onAppear {
             setupJobberAPI()

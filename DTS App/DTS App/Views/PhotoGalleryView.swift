@@ -14,10 +14,15 @@ struct PhotoGalleryView: View {
     @Environment(\.dismiss) private var dismiss
     let photos: [CapturedPhoto]
     @State private var selectedIndex: Int
+    @State private var showingAnnotationEditor = false
 
-    init(photos: [CapturedPhoto], initialIndex: Int = 0) {
+    // Callback to handle annotated image
+    var onPhotoAnnotated: ((Int, UIImage) -> Void)?
+
+    init(photos: [CapturedPhoto], initialIndex: Int = 0, onPhotoAnnotated: ((Int, UIImage) -> Void)? = nil) {
         self.photos = photos
         _selectedIndex = State(initialValue: initialIndex)
+        self.onPhotoAnnotated = onPhotoAnnotated
     }
 
     var body: some View {
@@ -53,15 +58,38 @@ struct PhotoGalleryView: View {
                     .foregroundColor(.white)
                 }
 
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .principal) {
                     Text("\(selectedIndex + 1) of \(photos.count)")
                         .foregroundColor(.white)
                         .font(.subheadline)
+                }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        showingAnnotationEditor = true
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "pencil.tip.crop.circle")
+                            Text("Annotate")
+                        }
+                        .foregroundColor(.white)
+                    }
                 }
             }
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarBackground(Color.black.opacity(0.8), for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .sheet(isPresented: $showingAnnotationEditor) {
+                if selectedIndex < photos.count {
+                    QuotePhotoAnnotationEditor(
+                        image: photos[selectedIndex].image,
+                        onSave: { annotatedImage in
+                            onPhotoAnnotated?(selectedIndex, annotatedImage)
+                            showingAnnotationEditor = false
+                        }
+                    )
+                }
+            }
         }
     }
 }

@@ -292,10 +292,56 @@ final class PhotoRecord {
     var longitude: Double?
     var uploaded: Bool = false
 
+    // Annotation features
+    var title: String = ""
+    var notes: String = ""
+    var tags: [String] = []
+    var category: String = "General"
+    var annotations: [PhotoAnnotation] = [] // Drawing/text annotations
+
     init(fileURL: String, jobId: String? = nil, quoteDraftId: UUID? = nil) {
         self.fileURL = fileURL
         self.jobId = jobId
         self.quoteDraftId = quoteDraftId
+    }
+}
+
+// Annotation data structure for drawing on photos
+struct PhotoAnnotation: Codable {
+    var id: UUID = UUID()
+    var type: AnnotationType
+    var points: [CGPoint] // For freehand drawing
+    var text: String? // For text annotations (legacy, no longer used)
+    var color: String // Hex color
+    var position: CGPoint // For text/arrow position
+    var size: CGFloat // Stroke width or text size
+
+    enum AnnotationType: String, Codable {
+        case freehand = "freehand"
+        case arrow = "arrow"
+        case box = "box"
+        case circle = "circle"
+
+        // Custom decoder to handle legacy 'text' type gracefully
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            let value = try container.decode(String.self)
+
+            switch value {
+            case "freehand": self = .freehand
+            case "arrow": self = .arrow
+            case "box": self = .box
+            case "circle": self = .circle
+            case "text":
+                // Legacy text annotations - convert to freehand as fallback
+                self = .freehand
+            default:
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Cannot initialize AnnotationType from invalid String value \(value)"
+                )
+            }
+        }
     }
 }
 

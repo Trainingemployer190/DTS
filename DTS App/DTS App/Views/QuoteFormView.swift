@@ -504,7 +504,13 @@ struct QuoteFormView: View {
             }
             .fullScreenCover(isPresented: $showingPhotoGallery) {
                 if !quoteDraftPhotos.isEmpty {
-                    PhotoGalleryView(photos: quoteDraftPhotos, initialIndex: 0)
+                    PhotoGalleryView(
+                        photos: quoteDraftPhotos,
+                        initialIndex: 0,
+                        onPhotoAnnotated: { index, annotatedImage in
+                            handlePhotoAnnotated(at: index, with: annotatedImage)
+                        }
+                    )
                 }
             }
             .safeAreaInset(edge: .top) {
@@ -1536,6 +1542,34 @@ struct QuoteFormView: View {
     }
 
     // MARK: - Photo Management
+
+    private func handlePhotoAnnotated(at index: Int, with annotatedImage: UIImage) {
+        #if canImport(UIKit)
+        // Find the photo in capturedImages that matches the quote draft
+        let quoteDraftPhotos = photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId }
+
+        guard index < quoteDraftPhotos.count else { return }
+
+        // Get the photo to replace
+        let photoToReplace = quoteDraftPhotos[index]
+
+        // Find its index in the full capturedImages array
+        if let capturedIndex = photoCaptureManager.capturedImages.firstIndex(where: { $0.id == photoToReplace.id }) {
+            // Create new CapturedPhoto with annotated image
+            let annotatedPhoto = CapturedPhoto(
+                image: annotatedImage,
+                location: photoToReplace.location,
+                quoteDraftId: photoToReplace.quoteDraftId,
+                jobId: photoToReplace.jobId
+            )
+
+            // Replace in the array
+            photoCaptureManager.capturedImages[capturedIndex] = annotatedPhoto
+
+            print("✏️ Replaced photo at index \(capturedIndex) with annotated version")
+        }
+        #endif
+    }
 
     private func savePhotosToQuote() {
         #if canImport(UIKit)

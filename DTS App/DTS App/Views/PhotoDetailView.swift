@@ -12,11 +12,19 @@ import SwiftData
 import UIKit
 #endif
 
+// Wrapper to make UIImage identifiable for sheet presentation
+struct IdentifiableImage: Identifiable {
+    let id = UUID()
+    let image: UIImage
+}
+
 struct PhotoDetailView: View {
     @Bindable var photo: PhotoRecord
     @Environment(\.dismiss) private var dismiss
     @State private var showingAnnotationEditor = false
     @State private var showingDeleteConfirmation = false
+    @State private var imageToShare: IdentifiableImage?
+    @State private var isRenderingImage = false
 
     var body: some View {
         NavigationStack {
@@ -41,11 +49,17 @@ struct PhotoDetailView: View {
                         }
                         .buttonStyle(.bordered)
 
-                        ShareLink(item: photoAsImage(), preview: SharePreview("Photo", image: photoAsImage())) {
-                            Label("Share", systemImage: "square.and.arrow.up")
-                                .frame(maxWidth: .infinity)
+                        Button(action: sharePhoto) {
+                            if isRenderingImage {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                            } else {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                                    .frame(maxWidth: .infinity)
+                            }
                         }
                         .buttonStyle(.bordered)
+                        .disabled(isRenderingImage)
                     }
                     .padding(.horizontal)
 
@@ -148,6 +162,9 @@ struct PhotoDetailView: View {
             .sheet(isPresented: $showingAnnotationEditor) {
                 PhotoAnnotationEditor(photo: photo)
             }
+            .sheet(item: $imageToShare) { identifiableImage in
+                ShareSheet(activityItems: [identifiableImage.image])
+            }
             .alert("Delete Photo?", isPresented: $showingDeleteConfirmation) {
                 Button("Cancel", role: .cancel) {}
                 Button("Delete", role: .destructive) {
@@ -160,11 +177,167 @@ struct PhotoDetailView: View {
         }
     }
 
+    private func sharePhoto() {
+        // If no annotations, share immediately without rendering
+        if photo.annotations.isEmpty {
+            if let image = UIImage(contentsOfFile: photo.fileURL) {
+                imageToShare = IdentifiableImage(image: image)
+            }
+            return
+        }
+
+        // Show loading state
+        isRenderingImage = true
+
+        // Render on main thread (required for UIGraphicsImageRenderer)
+        // but dispatch async to allow UI to update first
+        DispatchQueue.main.async {
+            guard let renderedImage = self.renderAnnotatedImage() else {
+                self.isRenderingImage = false
+                return
+            }
+            self.isRenderingImage = false
+            self.imageToShare = IdentifiableImage(image: renderedImage)
+        }
+    }
+
     private func photoAsImage() -> Image {
         if let uiImage = UIImage(contentsOfFile: photo.fileURL) {
             return Image(uiImage: uiImage)
         }
         return Image(systemName: "photo")
+    }
+
+    private func renderAnnotatedImage() -> UIImage? {
+        guard let baseImage = UIImage(contentsOfFile: photo.fileURL) else { return nil }
+        guard !photo.annotations.isEmpty else { return baseImage }
+
+        // Optimize: render at a reasonable size (max 2048 width) for sharing
+        // This makes rendering much faster while maintaining good quality
+        let maxWidth: CGFloat = 2048
+        let targetSize: CGSize
+        if baseImage.size.width > maxWidth {
+            let scale = maxWidth / baseImage.size.width
+            targetSize = CGSize(width: maxWidth, height: baseImage.size.height * scale)
+        } else {
+            targetSize = baseImage.size
+        }
+
+        let renderer = UIGraphicsImageRenderer(size: targetSize, format: UIGraphicsImageRendererFormat.default())
+
+        // Calculate scale for annotations
+        let displayWidth: CGFloat = 400
+        let annotationScale = targetSize.width / displayWidth
+        let imageScale = targetSize.width / baseImage.size.width
+
+        return renderer.image { context in
+            // Draw the base image scaled to target size
+            baseImage.draw(in: CGRect(origin: .zero, size: targetSize))
+
+            // Draw each annotation with proper scaling
+            for annotation in photo.annotations {
+                // Scale annotation coordinates to match resized image
+                let scaledAnnotation = scaleAnnotation(annotation, by: imageScale)
+                drawAnnotationOnContext(scaledAnnotation, in: context.cgContext, scale: annotationScale)
+            }
+        }
+    }
+
+    private func scaleAnnotation(_ annotation: PhotoAnnotation, by scale: CGFloat) -> PhotoAnnotation {
+        var scaled = annotation
+        scaled.points = annotation.points.map { CGPoint(x: $0.x * scale, y: $0.y * scale) }
+        scaled.position = CGPoint(x: annotation.position.x * scale, y: annotation.position.y * scale)
+        return scaled
+    }
+
+    private func drawAnnotationOnContext(_ annotation: PhotoAnnotation, in context: CGContext, scale: CGFloat) {
+        context.saveGState()
+
+        let color = UIColor(Color(hex: annotation.color) ?? .red)
+        context.setStrokeColor(color.cgColor)
+        context.setFillColor(color.cgColor)
+
+        // Scale the stroke width proportionally to image size
+        // annotation.size is in screen points, scale it to match image resolution
+        let lineWidth = annotation.size * scale
+
+        context.setLineWidth(lineWidth)
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+
+        switch annotation.type {
+        case .freehand:
+            guard let firstPoint = annotation.points.first else { break }
+            context.beginPath()
+            context.move(to: firstPoint)
+            for point in annotation.points.dropFirst() {
+                context.addLine(to: point)
+            }
+            context.strokePath()
+
+        case .arrow:
+            guard annotation.points.count >= 2,
+                  let start = annotation.points.first,
+                  let end = annotation.points.last else { break }
+
+            // Draw arrow line
+            context.beginPath()
+            context.move(to: start)
+            context.addLine(to: end)
+            context.strokePath()
+
+            // Draw arrowhead - scale proportionally to line width
+            let angle = atan2(end.y - start.y, end.x - start.x)
+            let arrowLength: CGFloat = 15 * scale  // Scale arrowhead size
+            let arrowAngle: CGFloat = .pi / 6
+
+            let point1 = CGPoint(
+                x: end.x - arrowLength * cos(angle - arrowAngle),
+                y: end.y - arrowLength * sin(angle - arrowAngle)
+            )
+            let point2 = CGPoint(
+                x: end.x - arrowLength * cos(angle + arrowAngle),
+                y: end.y - arrowLength * sin(angle + arrowAngle)
+            )
+
+            context.beginPath()
+            context.move(to: end)
+            context.addLine(to: point1)
+            context.strokePath()
+
+            context.beginPath()
+            context.move(to: end)
+            context.addLine(to: point2)
+            context.strokePath()
+
+        case .box:
+            guard annotation.points.count >= 2,
+                  let start = annotation.points.first,
+                  let end = annotation.points.last else { break }
+
+            let rect = CGRect(
+                x: min(start.x, end.x),
+                y: min(start.y, end.y),
+                width: abs(end.x - start.x),
+                height: abs(end.y - start.y)
+            )
+            context.stroke(rect)
+
+        case .circle:
+            guard annotation.points.count >= 2,
+                  let start = annotation.points.first,
+                  let end = annotation.points.last else { break }
+
+            let rect = CGRect(
+                x: min(start.x, end.x),
+                y: min(start.y, end.y),
+                width: abs(end.x - start.x),
+                height: abs(end.y - start.y)
+            )
+            context.strokeEllipse(in: rect)
+        }
+
+        context.restoreGState()
     }
 
     private func deletePhoto() {
@@ -184,106 +357,110 @@ struct AnnotatedPhotoView: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let imageSize = calculateImageSize(for: image, in: geometry.size)
+            let scale = imageSize.width / image.size.width
+            let xOffset = (geometry.size.width - imageSize.width) / 2
+            let yOffset = (geometry.size.height - imageSize.height) / 2
+
             ZStack {
                 // Base image
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
 
-                // Annotations overlay
-                ForEach(annotations, id: \.id) { annotation in
-                    AnnotationShape(annotation: annotation, imageSize: geometry.size)
+                // Annotations overlay using Canvas for proper coordinate transformation
+                Canvas { context, size in
+                    for annotation in annotations {
+                        drawAnnotation(annotation, in: &context, scale: scale, offset: CGPoint(x: xOffset, y: yOffset))
+                    }
                 }
+                .frame(width: geometry.size.width, height: geometry.size.height)
             }
         }
         .aspectRatio(image.size.width / image.size.height, contentMode: .fit)
     }
-}
 
-// MARK: - Annotation Shape Renderer
+    private func calculateImageSize(for image: UIImage, in containerSize: CGSize) -> CGSize {
+        let imageAspect = image.size.width / image.size.height
+        let containerAspect = containerSize.width / containerSize.height
 
-struct AnnotationShape: View {
-    let annotation: PhotoAnnotation
-    let imageSize: CGSize
-
-    var color: Color {
-        Color(hex: annotation.color) ?? .red
+        if imageAspect > containerAspect {
+            // Image is wider - fit to width
+            let width = containerSize.width
+            let height = width / imageAspect
+            return CGSize(width: width, height: height)
+        } else {
+            // Image is taller - fit to height
+            let height = containerSize.height
+            let width = height * imageAspect
+            return CGSize(width: width, height: height)
+        }
     }
 
-    var body: some View {
+    private func drawAnnotation(_ annotation: PhotoAnnotation, in context: inout GraphicsContext, scale: CGFloat, offset: CGPoint) {
+        let scaledPoints = annotation.points.map { CGPoint(x: $0.x * scale + offset.x, y: $0.y * scale + offset.y) }
+        let color = Color(hex: annotation.color) ?? .red
+        let lineWidth = annotation.size
+
+        var path = Path()
+
         switch annotation.type {
         case .freehand:
-            Path { path in
-                guard let firstPoint = annotation.points.first else { return }
-                path.move(to: firstPoint)
-                for point in annotation.points.dropFirst() {
+            if let first = scaledPoints.first {
+                path.move(to: first)
+                for point in scaledPoints.dropFirst() {
                     path.addLine(to: point)
                 }
             }
-            .stroke(color, lineWidth: annotation.size)
-
         case .arrow:
-            ArrowShape(start: annotation.points.first ?? .zero,
-                      end: annotation.points.last ?? .zero)
-                .stroke(color, lineWidth: annotation.size)
+            if scaledPoints.count >= 2, let start = scaledPoints.first, let end = scaledPoints.last {
+                // Arrow line
+                path.move(to: start)
+                path.addLine(to: end)
 
+                // Arrow head
+                let angle = atan2(end.y - start.y, end.x - start.x)
+                let arrowLength: CGFloat = 15
+                let arrowAngle: CGFloat = .pi / 6
+
+                let point1 = CGPoint(
+                    x: end.x - arrowLength * cos(angle - arrowAngle),
+                    y: end.y - arrowLength * sin(angle - arrowAngle)
+                )
+                let point2 = CGPoint(
+                    x: end.x - arrowLength * cos(angle + arrowAngle),
+                    y: end.y - arrowLength * sin(angle + arrowAngle)
+                )
+
+                path.move(to: end)
+                path.addLine(to: point1)
+                path.move(to: end)
+                path.addLine(to: point2)
+            }
         case .box:
-            if let start = annotation.points.first, let end = annotation.points.last {
-                Rectangle()
-                    .path(in: CGRect(origin: start, size: CGSize(width: end.x - start.x, height: end.y - start.y)))
-                    .stroke(color, lineWidth: annotation.size)
+            if scaledPoints.count >= 2, let start = scaledPoints.first, let end = scaledPoints.last {
+                let rect = CGRect(
+                    x: min(start.x, end.x),
+                    y: min(start.y, end.y),
+                    width: abs(end.x - start.x),
+                    height: abs(end.y - start.y)
+                )
+                path.addRect(rect)
             }
-
         case .circle:
-            if let center = annotation.points.first {
-                let radius = annotation.points.last.map { sqrt(pow($0.x - center.x, 2) + pow($0.y - center.y, 2)) } ?? 50
-                Circle()
-                    .path(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-                    .stroke(color, lineWidth: annotation.size)
-            }
-
-        case .text:
-            if let text = annotation.text {
-                Text(text)
-                    .font(.system(size: annotation.size))
-                    .foregroundColor(color)
-                    .position(annotation.position)
+            if scaledPoints.count >= 2, let start = scaledPoints.first, let end = scaledPoints.last {
+                let rect = CGRect(
+                    x: min(start.x, end.x),
+                    y: min(start.y, end.y),
+                    width: abs(end.x - start.x),
+                    height: abs(end.y - start.y)
+                )
+                path.addEllipse(in: rect)
             }
         }
-    }
-}
 
-// MARK: - Arrow Shape
-
-struct ArrowShape: Shape {
-    let start: CGPoint
-    let end: CGPoint
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: start)
-        path.addLine(to: end)
-
-        // Add arrowhead
-        let angle = atan2(end.y - start.y, end.x - start.x)
-        let arrowLength: CGFloat = 15
-        let arrowAngle: CGFloat = .pi / 6
-
-        let point1 = CGPoint(
-            x: end.x - arrowLength * cos(angle - arrowAngle),
-            y: end.y - arrowLength * sin(angle - arrowAngle)
-        )
-        let point2 = CGPoint(
-            x: end.x - arrowLength * cos(angle + arrowAngle),
-            y: end.y - arrowLength * sin(angle + arrowAngle)
-        )
-
-        path.move(to: end)
-        path.addLine(to: point1)
-        path.move(to: end)
-        path.addLine(to: point2)
-
-        return path
+        context.stroke(path, with: .color(color), lineWidth: lineWidth)
     }
 }
 
