@@ -414,6 +414,19 @@ struct PhotoLibraryView: View {
                 )
                 context.strokeEllipse(in: rect)
             }
+        case .text:
+            // Draw text annotation
+            if let text = annotation.text, !text.isEmpty {
+                let textSize = (annotation.fontSize ?? annotation.size) * scaleFactor
+                let font = UIFont.boldSystemFont(ofSize: textSize)
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: font,
+                    .foregroundColor: color
+                ]
+
+                let attributedString = NSAttributedString(string: text, attributes: attributes)
+                attributedString.draw(at: annotation.position)
+            }
         }
         #endif
     }

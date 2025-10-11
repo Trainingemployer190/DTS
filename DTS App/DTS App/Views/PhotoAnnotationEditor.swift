@@ -6,10 +6,8 @@
 //
 
 import SwiftUI
-
-#if canImport(UIKit)
+import SwiftData
 import UIKit
-#endif
 
 struct PhotoAnnotationEditor: View {
     @Bindable var photo: PhotoRecord
@@ -25,6 +23,16 @@ struct PhotoAnnotationEditor: View {
     @State private var pressStartTime: Date?
     @State private var pressStartLocation: CGPoint?
     @State private var hasMoved: Bool = false
+    @State private var selectedTextAnnotationIndex: Int? = nil
+    @State private var editingTextAnnotationIndex: Int? = nil
+    @State private var textInput = ""
+    @State private var tapCount: Int = 0
+    @State private var lastTapTime: Date = .distantPast
+    @State private var baseWidth: CGFloat = 200.0
+    @State private var baseFontSize: CGFloat = 20.0
+    @State private var isDraggingHandle: Bool = false
+    @State private var fontResizeDragLocation: CGPoint = .zero
+    @State private var widthResizeDragLocation: CGPoint = .zero
 
     // MARK: - Helper Functions
 
@@ -116,6 +124,9 @@ struct PhotoAnnotationEditor: View {
                 )
                 path.addEllipse(in: rect)
             }
+        case .text:
+            // Text is rendered separately below
+            break
         }
 
         // Draw selection outline if selected - make it very visible
@@ -126,10 +137,53 @@ struct PhotoAnnotationEditor: View {
         }
 
         context.stroke(path, with: .color(color), lineWidth: lineWidth)
+
+        // Render text annotations
+        if annotation.type == .text, let text = annotation.text, !text.isEmpty {
+            let textPosition = CGPoint(
+                x: annotation.position.x * scale + offset.x,
+                y: annotation.position.y * scale + offset.y
+            )
+            let textSize = annotation.fontSize ?? annotation.size
+
+            // Get text box width (default to 200 if not set for backward compatibility)
+            let textBoxWidth = annotation.textBoxWidth ?? 200.0
+
+            // Manually wrap text based on width
+            let wrappedText = wrapText(text, width: textBoxWidth, fontSize: textSize)
+
+            // Draw text with selection highlight if selected
+            if isSelected {
+                // Yellow outline for selected text
+                var yOffset: CGFloat = 0
+                for line in wrappedText {
+                    context.draw(
+                        Text(line)
+                            .font(.system(size: textSize, weight: .bold))
+                            .foregroundColor(.yellow),
+                        at: CGPoint(x: textPosition.x, y: textPosition.y + yOffset),
+                        anchor: .topLeading
+                    )
+                    yOffset += textSize * 1.2
+                }
+            }
+
+            var yOffset: CGFloat = 0
+            for line in wrappedText {
+                context.draw(
+                    Text(line)
+                        .font(.system(size: textSize, weight: .bold))
+                        .foregroundColor(color),
+                    at: CGPoint(x: textPosition.x, y: textPosition.y + yOffset),
+                    anchor: .topLeading
+                )
+                yOffset += textSize * 1.2
+            }
+        }
     }
 
     enum AnnotationTool {
-        case freehand, arrow, box, circle
+        case freehand, arrow, box, circle, text
     }
 
     var body: some View {
@@ -169,7 +223,34 @@ struct PhotoAnnotationEditor: View {
                             .gesture(
                                 DragGesture(minimumDistance: 0)
                                     .onChanged { value in
-                                        // Initialize press tracking on first touch
+                                        // Handle text tool - check if dragging selected text
+                                        if selectedTool == .text {
+                                            if pressStartTime == nil {
+                                                pressStartTime = Date()
+                                                pressStartLocation = value.location
+                                                hasMoved = false
+                                                return
+                                            }
+
+                                            // Check for movement
+                                            if let startLoc = pressStartLocation {
+                                                let distance = hypot(value.location.x - startLoc.x, value.location.y - startLoc.y)
+                                                if distance >= 10 && !hasMoved {
+                                                    hasMoved = true
+                                                }
+                                            }
+
+                                            // If moving and text is selected, move it
+                                            if hasMoved, let selectedIndex = selectedTextAnnotationIndex,
+                                               let image = UIImage(contentsOfFile: photo.fileURL) {
+                                                let imageSize = calculateImageSize(for: image, in: geometry.size)
+                                                let newPosition = convertToImageCoordinates(value.location, in: geometry.size, imageSize: imageSize, image: image)
+                                                photo.annotations[selectedIndex].position = newPosition
+                                            }
+                                            return
+                                        }
+
+                                        // Initialize press tracking on first touch for other tools
                                         if pressStartTime == nil {
                                             pressStartTime = Date()
                                             pressStartLocation = value.location
@@ -207,6 +288,7 @@ struct PhotoAnnotationEditor: View {
                                         if let startLoc = pressStartLocation {
                                             let distance = hypot(value.location.x - startLoc.x, value.location.y - startLoc.y)
                                             if distance >= 10 && !hasMoved {
+                                                print("🚶 MOVEMENT DETECTED - Distance: \(distance)px")
                                                 hasMoved = true
                                             }
                                         }
@@ -223,6 +305,85 @@ struct PhotoAnnotationEditor: View {
                                         }
                                     }
                                     .onEnded { value in
+                                        print("🏁 GESTURE ENDED - Tool: \(selectedTool), Moved: \(hasMoved)")
+
+                                        // Handle text tool tap (if didn't move)
+                                        if selectedTool == .text && !hasMoved {
+                                            print("✅ TEXT TAP DETECTED")
+                                            guard let image = UIImage(contentsOfFile: photo.fileURL) else {
+                                                print("❌ Failed to load image")
+                                                pressStartTime = nil
+                                                pressStartLocation = nil
+                                                hasMoved = false
+                                                return
+                                            }
+                                            let imageSize = calculateImageSize(for: image, in: geometry.size)
+                                            print("📐 Screen tap: \(value.location), Container size: \(geometry.size), Image size: \(imageSize)")
+                                            let imagePoint = convertToImageCoordinates(value.location, in: geometry.size, imageSize: imageSize, image: image)
+                                            print("📍 Converted to image coordinates: \(imagePoint)")
+
+                                            // Check if tapped on existing text annotation (in screen space for accurate hit detection)
+                                            let tappedTextIndex = findTextAnnotationAtScreenPoint(screenPoint: value.location, containerSize: geometry.size, imageSize: imageSize, image: image)
+                                            print("🔍 Found text at index: \(tappedTextIndex?.description ?? "none")")
+
+                                            if let index = tappedTextIndex {
+                                                // Tapped on existing text
+                                                if selectedTextAnnotationIndex == index {
+                                                    // Already selected - enter edit mode
+                                                    print("✏️ ENTERING EDIT MODE for index \(index)")
+                                                    editingTextAnnotationIndex = index
+                                                    textInput = photo.annotations[index].text ?? "Text"
+                                                    print("   - Text to edit: '\(textInput)'")
+                                                } else {
+                                                    // Select it
+                                                    print("🎯 SELECTING text at index \(index)")
+                                                    selectedTextAnnotationIndex = index
+                                                    editingTextAnnotationIndex = nil
+
+                                                    // Initialize base values for resizing
+                                                    baseWidth = photo.annotations[index].textBoxWidth ?? 200.0
+                                                    baseFontSize = photo.annotations[index].fontSize ?? 20.0
+                                                    print("   📏 Base values initialized: width=\(baseWidth), fontSize=\(baseFontSize)")
+                                                }
+                                            } else {
+                                                // Tapped outside any text
+                                                if selectedTextAnnotationIndex != nil {
+                                                    // Deselect
+                                                    print("❌ DESELECTING text")
+                                                    selectedTextAnnotationIndex = nil
+                                                    editingTextAnnotationIndex = nil
+                                                } else {
+                                                    // Create new text annotation
+                                                    print("✨ CREATING NEW TEXT annotation")
+                                                    let newAnnotation = PhotoAnnotation(
+                                                        id: UUID(),
+                                                        type: .text,
+                                                        points: [],
+                                                        text: "Text",
+                                                        color: selectedColor.toHex(),
+                                                        position: imagePoint,
+                                                        size: strokeWidth,
+                                                        fontSize: 20.0,
+                                                        textBoxWidth: 200.0
+                                                    )
+                                                    photo.annotations.append(newAnnotation)
+                                                    selectedTextAnnotationIndex = photo.annotations.count - 1
+                                                    editingTextAnnotationIndex = nil
+
+                                                    // Initialize base values for new text
+                                                    baseWidth = 200.0
+                                                    baseFontSize = 20.0
+                                                    print("   - New text at index: \(selectedTextAnnotationIndex?.description ?? "nil")")
+                                                    print("   📏 Base values initialized: width=\(baseWidth), fontSize=\(baseFontSize)")
+                                                }
+                                            }
+
+                                            pressStartTime = nil
+                                            pressStartLocation = nil
+                                            hasMoved = false
+                                            return
+                                        }
+
                                         // Reset state
                                         if selectedAnnotationIndex != nil {
                                             selectedAnnotationIndex = nil
@@ -291,6 +452,19 @@ struct PhotoAnnotationEditor: View {
                                 .foregroundColor(.white)
                                 .frame(width: 44, height: 44)
                                 .background(selectedTool == .circle ? Color.blue : Color.black.opacity(0.7))
+                                .clipShape(Circle())
+                                .overlay(
+                                    Circle()
+                                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                                )
+                        }
+
+                        Button(action: { selectedTool = .text }) {
+                            Image(systemName: "textformat")
+                                .font(.system(size: 22))
+                                .foregroundColor(.white)
+                                .frame(width: 44, height: 44)
+                                .background(selectedTool == .text ? Color.blue : Color.black.opacity(0.7))
                                 .clipShape(Circle())
                                 .overlay(
                                     Circle()
@@ -373,10 +547,265 @@ struct PhotoAnnotationEditor: View {
                     .fontWeight(.semibold)
                 }
             }
+            // Text annotation overlay - selection handles or editor
+            .overlay {
+                let _ = print("🔍 OVERLAY EVALUATION - selectedIndex: \(selectedTextAnnotationIndex?.description ?? "nil"), editingIndex: \(editingTextAnnotationIndex?.description ?? "nil")")
+
+                GeometryReader { geometry in
+                    if let image = UIImage(contentsOfFile: photo.fileURL) {
+                        let imageSize = calculateImageSize(for: image, in: geometry.size)
+                        let scale = imageSize.width / image.size.width
+                        let xOffset = (geometry.size.width - imageSize.width) / 2
+                        let yOffset = (geometry.size.height - imageSize.height) / 2
+
+                        // Show selection handles for selected text
+                        if let selectedIndex = selectedTextAnnotationIndex,
+                           selectedIndex < photo.annotations.count,
+                           photo.annotations[selectedIndex].type == .text {
+                            let _ = print("✅ RENDERING SELECTION HANDLES for index \(selectedIndex)")
+                            let annotation = photo.annotations[selectedIndex]
+                            let textSize = annotation.fontSize ?? 20.0
+                            let text = annotation.text ?? "Text"
+                            let textBoxWidth = annotation.textBoxWidth ?? 200.0
+
+                            // Calculate text height based on content and wrapping
+                            let lineHeight = textSize * 1.2
+                            let charactersPerLine = Int(textBoxWidth / (textSize * 0.6))
+                            let estimatedLines = max(1, (text.count + charactersPerLine - 1) / charactersPerLine)
+                            let textBoxHeight = CGFloat(estimatedLines) * lineHeight
+
+                            let screenX = annotation.position.x * scale + xOffset
+                            let screenY = annotation.position.y * scale + yOffset
+
+                            // Dotted border around text box
+                            Rectangle()
+                                .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5, 5]))
+                                .foregroundColor(.blue)
+                                .frame(width: textBoxWidth, height: textBoxHeight)
+                                .position(x: screenX + textBoxWidth/2, y: screenY + textBoxHeight/2)
+
+                            // Delete button (top-left corner)
+                            Button(action: {
+                                photo.annotations.remove(at: selectedIndex)
+                                selectedTextAnnotationIndex = nil
+                            }) {
+                                Image(systemName: "trash.circle.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.red)
+                                    .background(Circle().fill(Color.white))
+                            }
+                            .position(x: screenX - 12, y: screenY - 12)
+
+                            // Right edge resize handle (middle-right for width adjustment)
+                            let handleX = screenX + textBoxWidth
+                            let handleY = screenY + textBoxHeight/2
+
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 20, height: 20)
+                                .position(
+                                    x: isDraggingHandle ? widthResizeDragLocation.x : handleX,
+                                    y: isDraggingHandle ? widthResizeDragLocation.y : handleY
+                                )
+                                .id("width-handle-\(selectedIndex)-\(isDraggingHandle)")
+                                .gesture(
+                                    DragGesture()
+                                        .onChanged { value in
+                                            if !isDraggingHandle {
+                                                isDraggingHandle = true
+                                                widthResizeDragLocation = value.startLocation
+                                                print("🟢 WIDTH RESIZE STARTED")
+                                                print("   📍 Initial handle position: (\(String(format: "%.1f", handleX)), \(String(format: "%.1f", handleY)))")
+                                                print("   👆 Initial touch (startLocation): (\(String(format: "%.1f", value.startLocation.x)), \(String(format: "%.1f", value.startLocation.y)))")
+                                                print("   🎯 Initial baseWidth: \(String(format: "%.1f", baseWidth))")
+                                                print("   📐 Initial stored width: \(String(format: "%.1f", photo.annotations[selectedIndex].textBoxWidth ?? 200.0))")
+                                                print("   📏 Scale factor: \(String(format: "%.3f", scale))")
+                                                print("   🖼️  ScreenX: \(String(format: "%.1f", screenX)), TextBoxWidth: \(String(format: "%.1f", textBoxWidth))")
+                                            }
+
+                                            // Update drag location to follow finger
+                                            widthResizeDragLocation = value.location
+
+                                            // Current touch position
+                                            let touchX = value.location.x
+                                            let touchY = value.location.y
+
+                                            // Expected handle position with new width
+                                            let currentWidth = photo.annotations[selectedIndex].textBoxWidth ?? 200.0
+                                            let expectedHandleX = screenX + currentWidth
+
+                                            // Distance between touch and where handle WOULD be without fix
+                                            let offsetX = touchX - expectedHandleX
+                                            let offsetY = touchY - handleY
+                                            let lagDistance = sqrt(offsetX * offsetX + offsetY * offsetY)
+
+                                            // Speed calculation
+                                            let speed = abs(value.translation.width) > 0 ? abs(currentWidth - baseWidth) / abs(value.translation.width) : 0
+
+                                            // Calculate new width based on drag (stay in screen space, don't convert to image space!)
+                                            let dragDelta = value.translation.width  // Already in screen space
+                                            let calculatedNewWidth = baseWidth + dragDelta
+                                            let clampedNewWidth = max(50, min(500, calculatedNewWidth))
+
+                                            print("🟢 WIDTH RESIZE")
+                                            print("   👆 Finger at: (\(String(format: "%.1f", touchX)), \(String(format: "%.1f", touchY)))")
+                                            print("   🎯 Drag handle visual at: (\(String(format: "%.1f", widthResizeDragLocation.x)), \(String(format: "%.1f", widthResizeDragLocation.y)))")
+                                            print("   📍 Expected handle (old way): (\(String(format: "%.1f", expectedHandleX)), \(String(format: "%.1f", handleY)))")
+                                            print("   📏 Lag prevented: \(String(format: "%.1f", lagDistance))px, Offset: (\(String(format: "%.1f", offsetX)), \(String(format: "%.1f", offsetY)))")
+                                            print("   📊 Translation.width: \(String(format: "%.1f", value.translation.width))px (screen space)")
+                                            print("   🔢 dragDelta (SCREEN space): \(String(format: "%.1f", dragDelta))px = translation (NO scale conversion!)")
+                                            print("   📐 Width calculation: base(\(String(format: "%.1f", baseWidth))) + delta(\(String(format: "%.1f", dragDelta))) = \(String(format: "%.1f", calculatedNewWidth))")
+                                            print("   ✂️  Clamped to: \(String(format: "%.1f", clampedNewWidth)) (min: 50, max: 500)")
+                                            print("   💾 Setting annotation width to: \(String(format: "%.1f", clampedNewWidth))")
+                                            print("   ⚡️ Speed factor: \(String(format: "%.3f", speed)) (width change / screen drag)")
+
+                                            photo.annotations[selectedIndex].textBoxWidth = clampedNewWidth
+
+                                            print("   ✅ Annotation width now: \(String(format: "%.1f", photo.annotations[selectedIndex].textBoxWidth ?? 0))")
+                                        }
+                                        .onEnded { value in
+                                            isDraggingHandle = false
+                                            print("🟢 WIDTH RESIZE ENDED")
+                                            print("   📊 Final translation: \(String(format: "%.1f", value.translation.width))px")
+                                            let finalWidth = photo.annotations[selectedIndex].textBoxWidth ?? 200.0
+                                            print("   📐 Final width: \(String(format: "%.1f", finalWidth))")
+
+                                            // Commit the final width as the new base (screen space, no scale conversion!)
+                                            let dragDelta = value.translation.width  // Already in screen space
+                                            baseWidth = max(50, min(500, baseWidth + dragDelta))
+                                            photo.annotations[selectedIndex].textBoxWidth = baseWidth
+                                            print("   ✅ New baseWidth committed: \(String(format: "%.1f", baseWidth))")
+                                        }
+                                )
+
+                            // Bottom-right corner resize handle (for font size)
+                            let fontHandleX = screenX + textBoxWidth + 10
+                            let fontHandleY = screenY + textBoxHeight + 10
+
+                            Circle()
+                                .fill(Color.blue)
+                                .frame(width: 20, height: 20)
+                                .position(
+                                    x: isDraggingHandle ? fontResizeDragLocation.x : fontHandleX,
+                                    y: isDraggingHandle ? fontResizeDragLocation.y : fontHandleY
+                                )
+                                .id("font-handle-\(selectedIndex)-\(isDraggingHandle)")
+                                .gesture(
+                                    DragGesture()
+                                        .onChanged { value in
+                                            if !isDraggingHandle {
+                                                isDraggingHandle = true
+                                                fontResizeDragLocation = value.startLocation
+                                                print("🔵 FONT RESIZE STARTED")
+                                                print("   📍 Initial handle position: (\(String(format: "%.1f", fontHandleX)), \(String(format: "%.1f", fontHandleY)))")
+                                                print("   👆 Initial touch (startLocation): (\(String(format: "%.1f", value.startLocation.x)), \(String(format: "%.1f", value.startLocation.y)))")
+                                                print("   🎯 Initial baseFontSize: \(String(format: "%.1f", baseFontSize))")
+                                                print("   📐 Initial stored fontSize: \(String(format: "%.1f", photo.annotations[selectedIndex].fontSize ?? 20.0))")
+                                                print("   📏 Text: '\(text)', Width: \(String(format: "%.1f", textBoxWidth))")
+                                            }
+
+                                            // Update drag location to follow finger
+                                            fontResizeDragLocation = value.location
+
+                                            // Current touch position
+                                            let touchX = value.location.x
+                                            let touchY = value.location.y
+
+                                            // Current font size
+                                            let currentSize = photo.annotations[selectedIndex].fontSize ?? 20.0
+
+                                            // Recalculate expected handle position with new font size (height changes)
+                                            let wrappedLines = wrapText(text, width: textBoxWidth, fontSize: currentSize)
+                                            let currentTextBoxHeight = CGFloat(wrappedLines.count) * currentSize * 1.2
+                                            let expectedHandleX = screenX + textBoxWidth + 10
+                                            let expectedHandleY = screenY + currentTextBoxHeight + 10
+
+                                            // Distance between touch and where handle WOULD be without fix
+                                            let offsetX = touchX - expectedHandleX
+                                            let offsetY = touchY - expectedHandleY
+                                            let lagDistance = sqrt(offsetX * offsetX + offsetY * offsetY)
+
+                                            // Speed calculation
+                                            let speed = abs(value.translation.height) > 0 ? abs(currentSize - baseFontSize) / abs(value.translation.height) : 0
+
+                                            // Calculate new font size based on drag distance (divide by 5 for sensitivity)
+                                            let fontDelta = value.translation.height / 5
+                                            let calculatedNewSize = baseFontSize + fontDelta
+                                            let clampedNewSize = max(12, min(72, calculatedNewSize))
+
+                                            print("🔵 FONT RESIZE")
+                                            print("   👆 Finger at: (\(String(format: "%.1f", touchX)), \(String(format: "%.1f", touchY)))")
+                                            print("   🎯 Drag handle visual at: (\(String(format: "%.1f", fontResizeDragLocation.x)), \(String(format: "%.1f", fontResizeDragLocation.y)))")
+                                            print("   📍 Expected handle (old way): (\(String(format: "%.1f", expectedHandleX)), \(String(format: "%.1f", expectedHandleY)))")
+                                            print("   📏 Lag prevented: \(String(format: "%.1f", lagDistance))px, Offset: (\(String(format: "%.1f", offsetX)), \(String(format: "%.1f", offsetY)))")
+                                            print("   📊 Translation.height: \(String(format: "%.1f", value.translation.height))px (vertical drag)")
+                                            print("   � fontDelta: \(String(format: "%.1f", fontDelta))pt = translation(\(String(format: "%.1f", value.translation.height))) / 5")
+                                            print("   📐 Font calculation: base(\(String(format: "%.1f", baseFontSize))) + delta(\(String(format: "%.1f", fontDelta))) = \(String(format: "%.1f", calculatedNewSize))")
+                                            print("   ✂️  Clamped to: \(String(format: "%.1f", clampedNewSize))pt (min: 12, max: 72)")
+                                            print("   📝 Wrapped lines: \(wrappedLines.count), Height: \(String(format: "%.1f", currentTextBoxHeight))px")
+                                            print("   💾 Setting annotation fontSize to: \(String(format: "%.1f", clampedNewSize))")
+                                            print("   ⚡️ Speed factor: \(String(format: "%.3f", speed)) (font change / screen drag)")
+
+                                            photo.annotations[selectedIndex].fontSize = clampedNewSize
+
+                                            print("   ✅ Annotation fontSize now: \(String(format: "%.1f", photo.annotations[selectedIndex].fontSize ?? 0))")
+                                        }
+                                        .onEnded { value in
+                                            isDraggingHandle = false
+                                            print("🔵 FONT RESIZE ENDED")
+                                            print("   📊 Final translation: \(String(format: "%.1f", value.translation.height))px")
+                                            let finalSize = photo.annotations[selectedIndex].fontSize ?? 20.0
+                                            print("   📐 Final font size: \(String(format: "%.1f", finalSize))")
+
+                                            // Commit the final size as the new base
+                                            baseFontSize = max(12, min(72, baseFontSize + value.translation.height / 5))
+                                            photo.annotations[selectedIndex].fontSize = baseFontSize
+                                            print("   ✅ New baseFontSize committed: \(String(format: "%.1f", baseFontSize))")
+                                        }
+                                )
+                        }
+
+                        // Show inline editor for editing text
+                        if let editIndex = editingTextAnnotationIndex,
+                           editIndex < photo.annotations.count {
+                            let _ = print("✏️ RENDERING TEXT EDITOR for index \(editIndex)")
+                            let annotation = photo.annotations[editIndex]
+                            let textSize = annotation.fontSize ?? 20.0
+                            let _ = print("   - Text: '\(annotation.text ?? "nil")'")
+                            let _ = print("   - Font size: \(textSize)")
+
+                            let screenX = annotation.position.x * scale + xOffset
+                            let screenY = annotation.position.y * scale + yOffset
+                            let _ = print("   - Screen position: (\(screenX), \(screenY))")
+
+                            // Simple text field overlay
+                            TextEditorOverlay(
+                                text: $textInput,
+                                fontSize: textSize,
+                                onCancel: {
+                                    print("❌ CANCEL tapped")
+                                    editingTextAnnotationIndex = nil
+                                    selectedTextAnnotationIndex = nil
+                                },
+                                onDone: {
+                                    print("✅ DONE tapped - saving text: '\(textInput)'")
+                                    photo.annotations[editIndex].text = textInput.isEmpty ? "Text" : textInput
+                                    editingTextAnnotationIndex = nil
+                                    selectedTextAnnotationIndex = editIndex
+                                }
+                            )
+                            .position(x: geometry.size.width / 2, y: max(150, min(screenY - 100, geometry.size.height - 150)))
+                        }
+                    }
+                }
+                .allowsHitTesting(true)
+            }
         }
     }
 
     private func handleDragChanged(_ value: DragGesture.Value, in size: CGSize) {
+        // Skip drag handling for text tool - text uses tap-to-place
+        guard selectedTool != .text else { return }
         guard let image = UIImage(contentsOfFile: photo.fileURL) else { return }
 
         let imageSize = calculateImageSize(for: image, in: size)
@@ -423,6 +852,34 @@ struct PhotoAnnotationEditor: View {
             x: originalAnnotationPosition.x + delta.x,
             y: originalAnnotationPosition.y + delta.y
         )
+    }
+
+    private func wrapText(_ text: String, width: CGFloat, fontSize: CGFloat) -> [String] {
+        let words = text.split(separator: " ").map(String.init)
+        var lines: [String] = []
+        var currentLine = ""
+
+        let approximateCharWidth = fontSize * 0.6
+        let maxCharsPerLine = Int(width / approximateCharWidth)
+
+        for word in words {
+            let testLine = currentLine.isEmpty ? word : currentLine + " " + word
+
+            if testLine.count <= maxCharsPerLine {
+                currentLine = testLine
+            } else {
+                if !currentLine.isEmpty {
+                    lines.append(currentLine)
+                }
+                currentLine = word
+            }
+        }
+
+        if !currentLine.isEmpty {
+            lines.append(currentLine)
+        }
+
+        return lines.isEmpty ? [text] : lines
     }
 
     private func findAnnotationAt(point: CGPoint) -> Int? {
@@ -506,7 +963,124 @@ struct PhotoAnnotationEditor: View {
             // Check if near the edge of the ellipse (within tolerance)
             let normalizedTolerance = tolerance / max(radiusX, radiusY)
             return abs(distanceFromCenter - 1.0) < normalizedTolerance || distanceFromCenter < 1.0
+
+        case .text:
+            // Check if point is within text bounds (approximate)
+            // Use a larger tolerance for text to make it easier to select
+            guard let text = annotation.text, !text.isEmpty else { return false }
+            let textSize = annotation.fontSize ?? annotation.size
+
+            // Approximate text bounds (width based on character count, height based on font size)
+            let approximateWidth = CGFloat(text.count) * textSize * 0.6
+            let approximateHeight = textSize * 1.2
+
+            let textRect = CGRect(
+                x: annotation.position.x,
+                y: annotation.position.y,
+                width: approximateWidth,
+                height: approximateHeight
+            )
+
+            return textRect.insetBy(dx: -tolerance, dy: -tolerance).contains(point)
         }
+    }
+
+    private func findTextAnnotationAtScreenPoint(screenPoint: CGPoint, containerSize: CGSize, imageSize: CGSize, image: UIImage) -> Int? {
+        print("🔍 findTextAnnotationAtScreenPoint - screen point: \(screenPoint)")
+
+        // Calculate scale and offset (same as rendering)
+        let scale = imageSize.width / image.size.width
+        let offset = CGPoint(
+            x: (containerSize.width - imageSize.width) / 2,
+            y: (containerSize.height - imageSize.height) / 2
+        )
+
+        print("   Scale: \(scale), Offset: \(offset)")
+
+        // Check text annotations in reverse order (top-most first)
+        for (index, annotation) in photo.annotations.enumerated().reversed() {
+            guard annotation.type == .text else { continue }
+            guard let text = annotation.text, !text.isEmpty else { continue }
+
+            let textSize = annotation.fontSize ?? 20.0
+            let textBoxWidth = annotation.textBoxWidth ?? 200.0
+
+            // Convert text position from image coordinates to screen coordinates
+            let screenX = annotation.position.x * scale + offset.x
+            let screenY = annotation.position.y * scale + offset.y
+
+            // Calculate text box height based on wrapping
+            let lineHeight = textSize * 1.2
+            let charactersPerLine = Int(textBoxWidth / (textSize * 0.6))
+            let estimatedLines = max(1, (text.count + charactersPerLine - 1) / charactersPerLine)
+            let textBoxHeight = CGFloat(estimatedLines) * lineHeight
+
+            let screenRect = CGRect(
+                x: screenX,
+                y: screenY,
+                width: textBoxWidth,
+                height: textBoxHeight
+            )
+
+            print("   - Index \(index): '\(text)' at screen coords (\(screenX), \(screenY)), rect: \(screenRect)")
+
+            let tolerance: CGFloat = 20.0
+            let hitTestRect = screenRect.insetBy(dx: -tolerance, dy: -tolerance)
+            let isHit = hitTestRect.contains(screenPoint)
+
+            print("     Hit test rect: \(hitTestRect), contains: \(isHit)")
+
+            if isHit {
+                print("   ✅ HIT! Returning index \(index)")
+                return index
+            }
+        }
+
+        print("   ❌ No text hit")
+        return nil
+    }
+
+    private func findTextAnnotationAt(point: CGPoint, scale: CGFloat) -> Int? {
+        print("🔍 findTextAnnotationAt called - point: \(point), scale: \(scale), total annotations: \(photo.annotations.count)")
+
+        // Find text annotations in reverse order (top-most first)
+        for (index, annotation) in photo.annotations.enumerated().reversed() {
+            guard annotation.type == .text else {
+                print("   - Index \(index): Skipping (not text type)")
+                continue
+            }
+            guard let text = annotation.text, !text.isEmpty else {
+                print("   - Index \(index): Skipping (no text)")
+                continue
+            }
+
+            let textSize = annotation.fontSize ?? 20.0
+            let approximateWidth = CGFloat(text.count) * textSize * 0.6
+            let approximateHeight = textSize * 1.2
+
+            let textRect = CGRect(
+                x: annotation.position.x,
+                y: annotation.position.y,
+                width: approximateWidth,
+                height: approximateHeight
+            )
+
+            print("   - Index \(index): text='\(text)', position=\(annotation.position)")
+            print("     Text rect (image coords): \(textRect)")
+            print("     Distance from tap: dx=\(abs(point.x - annotation.position.x)), dy=\(abs(point.y - annotation.position.y))")
+
+            let tolerance: CGFloat = 20.0
+            let hitTestRect = textRect.insetBy(dx: -tolerance, dy: -tolerance)
+            let isHit = hitTestRect.contains(point)
+            print("     Hit test rect: \(hitTestRect), contains point: \(isHit)")
+
+            if isHit {
+                print("   ✅ HIT! Returning index \(index)")
+                return index
+            }
+        }
+        print("   ❌ No hit found")
+        return nil
     }
 
     private func distanceToLineSegment(point: CGPoint, start: CGPoint, end: CGPoint) -> CGFloat {
@@ -526,6 +1100,8 @@ struct PhotoAnnotationEditor: View {
     }
 
     private func handleDragEnded(_ value: DragGesture.Value, in size: CGSize) {
+        // Skip drag handling for text tool - text uses tap-to-place
+        guard selectedTool != .text else { return }
         guard let annotation = currentAnnotation else { return }
 
         // Finalize annotation
@@ -548,6 +1124,7 @@ extension PhotoAnnotationEditor.AnnotationTool {
         case .arrow: return .arrow
         case .box: return .box
         case .circle: return .circle
+        case .text: return .text
         }
     }
 
@@ -557,6 +1134,7 @@ extension PhotoAnnotationEditor.AnnotationTool {
         case .arrow: return "arrow.up.right"
         case .box: return "rectangle"
         case .circle: return "circle"
+        case .text: return "textformat"
         }
     }
 
@@ -566,13 +1144,11 @@ extension PhotoAnnotationEditor.AnnotationTool {
         case .arrow: return "Arrow"
         case .box: return "Box"
         case .circle: return "Circle"
+        case .text: return "Text"
         }
     }
 }
 
 extension PhotoAnnotationEditor.AnnotationTool: Hashable {}
 
-#Preview {
-    PhotoAnnotationEditor(photo: PhotoRecord(fileURL: ""))
-        .modelContainer(for: [PhotoRecord.self])
-}
+// MARK: - Text Editor Overlay Component

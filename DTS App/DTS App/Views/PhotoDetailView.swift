@@ -335,6 +335,21 @@ struct PhotoDetailView: View {
                 height: abs(end.y - start.y)
             )
             context.strokeEllipse(in: rect)
+
+        case .text:
+            // Draw text annotation
+            if let text = annotation.text, !text.isEmpty {
+                let textSize = (annotation.fontSize ?? annotation.size) * scale
+                let font = UIFont.boldSystemFont(ofSize: textSize)
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: font,
+                    .foregroundColor: color
+                ]
+
+                let attributedString = NSAttributedString(string: text, attributes: attributes)
+                // Draw at annotation position (already in image coordinates)
+                attributedString.draw(at: annotation.position)
+            }
         }
 
         context.restoreGState()
@@ -458,9 +473,29 @@ struct AnnotatedPhotoView: View {
                 )
                 path.addEllipse(in: rect)
             }
+        case .text:
+            // Text is rendered separately below
+            break
         }
 
         context.stroke(path, with: .color(color), lineWidth: lineWidth)
+
+        // Render text annotations
+        if annotation.type == .text, let text = annotation.text, !text.isEmpty {
+            let textPosition = CGPoint(
+                x: annotation.position.x * scale + offset.x,
+                y: annotation.position.y * scale + offset.y
+            )
+            let textSize = annotation.fontSize ?? annotation.size
+
+            context.draw(
+                Text(text)
+                    .font(.system(size: textSize, weight: .bold))
+                    .foregroundColor(color),
+                at: textPosition,
+                anchor: .topLeading
+            )
+        }
     }
 }
 

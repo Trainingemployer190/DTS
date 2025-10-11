@@ -26,6 +26,9 @@ struct QuotePhotoAnnotationEditor: View {
     @State private var pressStartTime: Date?
     @State private var pressStartLocation: CGPoint?
     @State private var hasMoved: Bool = false
+    @State private var selectedTextAnnotationIndex: Int? = nil
+    @State private var editingTextAnnotationIndex: Int? = nil
+    @State private var textInput = ""
 
     var body: some View {
         NavigationStack {
@@ -91,9 +94,31 @@ struct QuotePhotoAnnotationEditor: View {
                         )
                         path.addEllipse(in: rect)
                     }
+                case .text:
+                    // Text is rendered separately below
+                    break
                 }
 
                 context.stroke(path, with: .color(selectedColor), lineWidth: strokeWidth)
+
+                // Render text annotations
+                for annotation in annotations {
+                    if annotation.type == .text, let text = annotation.text, !text.isEmpty {
+                        let textPosition = CGPoint(
+                            x: annotation.position.x * scale + xOffset,
+                            y: annotation.position.y * scale + yOffset
+                        )
+                        let textSize = annotation.fontSize ?? annotation.size
+
+                        context.draw(
+                            Text(text)
+                                .font(.system(size: textSize, weight: .bold))
+                                .foregroundColor(Color(hex: annotation.color) ?? .red),
+                            at: textPosition,
+                            anchor: .topLeading
+                        )
+                    }
+                }
             }
         }
         .frame(width: geometry.size.width, height: geometry.size.height)
@@ -101,7 +126,16 @@ struct QuotePhotoAnnotationEditor: View {
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in
-                                    // Initialize press tracking on first touch
+                                    // Handle text tool tap FIRST before drag logic
+                                    if selectedTool == .text && pressStartTime == nil {
+                                        // This is the start of a potential tap - do nothing yet
+                                        pressStartTime = Date()
+                                        pressStartLocation = value.location
+                                        hasMoved = false
+                                        return
+                                    }
+
+                                    // Initialize press tracking on first touch for other tools
                                     if pressStartTime == nil {
                                         pressStartTime = Date()
                                         pressStartLocation = value.location
@@ -152,6 +186,47 @@ struct QuotePhotoAnnotationEditor: View {
                                     }
                                 }
                                 .onEnded { value in
+                                    // Handle text tool tap (if didn't move)
+                                    if selectedTool == .text && !hasMoved {
+                                        let imagePoint = convertToImageCoordinates(value.location, in: geometry.size)
+
+                                        // Check if tapped on existing text annotation
+                                        let tappedTextIndex = findTextAnnotationAt(point: imagePoint)
+
+                                        if let index = tappedTextIndex {
+                                            // Tapped on existing text
+                                            if selectedTextAnnotationIndex == index {
+                                                // Already selected - enter edit mode
+                                                editingTextAnnotationIndex = index
+                                                textInput = annotations[index].text ?? "Text"
+                                            } else {
+                                                // Select it
+                                                selectedTextAnnotationIndex = index
+                                                editingTextAnnotationIndex = nil
+                                            }
+                                        } else {
+                                            // Create new text annotation
+                                            let newAnnotation = PhotoAnnotation(
+                                                id: UUID(),
+                                                type: .text,
+                                                points: [],
+                                                text: "Text",
+                                                color: selectedColor.toHex(),
+                                                position: imagePoint,
+                                                size: strokeWidth,
+                                                fontSize: 20.0
+                                            )
+                                            annotations.append(newAnnotation)
+                                            selectedTextAnnotationIndex = annotations.count - 1
+                                            editingTextAnnotationIndex = nil
+                                        }
+
+                                        pressStartTime = nil
+                                        pressStartLocation = nil
+                                        hasMoved = false
+                                        return
+                                    }
+
                                     // Reset state
                                     if selectedAnnotationIndex != nil {
                                         selectedAnnotationIndex = nil
@@ -180,7 +255,7 @@ struct QuotePhotoAnnotationEditor: View {
 
                     VStack(spacing: 12) {
                         // Tool buttons
-                        ForEach([PhotoAnnotation.AnnotationType.freehand, .arrow, .box, .circle], id: \.self) { tool in
+                        ForEach([PhotoAnnotation.AnnotationType.freehand, .arrow, .box, .circle, .text], id: \.self) { tool in
                             Button(action: { selectedTool = tool }) {
                                 Image(systemName: tool.iconName)
                                     .font(.system(size: 22))
@@ -274,6 +349,91 @@ struct QuotePhotoAnnotationEditor: View {
                     .fontWeight(.semibold)
                 }
             }
+            // Text annotation overlay - selection handles or editor
+            .overlay {
+                GeometryReader { geometry in
+                    let imageSize = calculateImageSize(in: geometry.size)
+                    let scale = imageSize.width / image.size.width
+                    let xOffset = (geometry.size.width - imageSize.width) / 2
+                    let yOffset = (geometry.size.height - imageSize.height) / 2
+
+                    // Show selection handles for selected text
+                    if let selectedIndex = selectedTextAnnotationIndex,
+                       selectedIndex < annotations.count,
+                       annotations[selectedIndex].type == .text {
+                        let annotation = annotations[selectedIndex]
+                        let textSize = annotation.fontSize ?? 20.0
+                        let text = annotation.text ?? "Text"
+
+                        // Calculate text bounds
+                        let approximateWidth = CGFloat(text.count) * textSize * 0.6
+                        let approximateHeight = textSize * 1.2
+
+                        let screenX = annotation.position.x * scale + xOffset
+                        let screenY = annotation.position.y * scale + yOffset
+
+                        // Dotted border around text
+                        Rectangle()
+                            .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5, 5]))
+                            .foregroundColor(.blue)
+                            .frame(width: approximateWidth, height: approximateHeight)
+                            .position(x: screenX + approximateWidth/2, y: screenY + approximateHeight/2)
+
+                        // Delete button (top-left corner)
+                        Button(action: {
+                            annotations.remove(at: selectedIndex)
+                            selectedTextAnnotationIndex = nil
+                        }) {
+                            Image(systemName: "trash.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.red)
+                                .background(Circle().fill(Color.white))
+                        }
+                        .position(x: screenX - 12, y: screenY - 12)
+
+                        // Resize handle (bottom-right corner)
+                        Circle()
+                            .fill(Color.blue)
+                            .frame(width: 20, height: 20)
+                            .position(x: screenX + approximateWidth + 10, y: screenY + approximateHeight + 10)
+                            .gesture(
+                                DragGesture()
+                                    .onChanged { value in
+                                        // Calculate new font size based on drag distance
+                                        let newSize = max(12, min(72, textSize + value.translation.height / 5))
+                                        annotations[selectedIndex].fontSize = newSize
+                                    }
+                            )
+                    }
+
+                    // Show inline editor for editing text
+                    if let editIndex = editingTextAnnotationIndex,
+                       editIndex < annotations.count {
+                        let annotation = annotations[editIndex]
+                        let textSize = annotation.fontSize ?? 20.0
+
+                        let _ = annotation.position.x * scale + xOffset  // screenX not used
+                        let screenY = annotation.position.y * scale + yOffset
+
+                        // Simple text field overlay
+                        TextEditorOverlay(
+                            text: $textInput,
+                            fontSize: textSize,
+                            onCancel: {
+                                editingTextAnnotationIndex = nil
+                                selectedTextAnnotationIndex = nil
+                            },
+                            onDone: {
+                                annotations[editIndex].text = textInput.isEmpty ? "Text" : textInput
+                                editingTextAnnotationIndex = nil
+                                selectedTextAnnotationIndex = editIndex
+                            }
+                        )
+                        .position(x: geometry.size.width / 2, y: max(150, min(screenY - 100, geometry.size.height - 150)))
+                    }
+                }
+                .allowsHitTesting(true)
+            }
         }
     }
 
@@ -306,6 +466,31 @@ struct QuotePhotoAnnotationEditor: View {
         let adjustedY = point.y - yOffset
 
         return CGPoint(x: adjustedX * scale, y: adjustedY * scale)
+    }
+
+    private func findTextAnnotationAt(point: CGPoint) -> Int? {
+        // Find text annotations in reverse order (top-most first)
+        for (index, annotation) in annotations.enumerated().reversed() {
+            guard annotation.type == .text else { continue }
+            guard let text = annotation.text, !text.isEmpty else { continue }
+
+            let textSize = annotation.fontSize ?? 20.0
+            let approximateWidth = CGFloat(text.count) * textSize * 0.6
+            let approximateHeight = textSize * 1.2
+
+            let textRect = CGRect(
+                x: annotation.position.x,
+                y: annotation.position.y,
+                width: approximateWidth,
+                height: approximateHeight
+            )
+
+            let tolerance: CGFloat = 20.0
+            if textRect.insetBy(dx: -tolerance, dy: -tolerance).contains(point) {
+                return index
+            }
+        }
+        return nil
     }
 
     private func handleAnnotationDrag(_ value: DragGesture.Value, in containerSize: CGSize) {
@@ -405,6 +590,24 @@ struct QuotePhotoAnnotationEditor: View {
             // Check if near the edge of the ellipse (within tolerance)
             let normalizedTolerance = tolerance / max(radiusX, radiusY)
             return abs(distanceFromCenter - 1.0) < normalizedTolerance || distanceFromCenter < 1.0
+
+        case .text:
+            // Check if point is within text bounds (approximate)
+            guard let text = annotation.text, !text.isEmpty else { return false }
+            let textSize = annotation.fontSize ?? annotation.size
+
+            // Approximate text bounds
+            let approximateWidth = CGFloat(text.count) * textSize * 0.6
+            let approximateHeight = textSize * 1.2
+
+            let textRect = CGRect(
+                x: annotation.position.x,
+                y: annotation.position.y,
+                width: approximateWidth,
+                height: approximateHeight
+            )
+
+            return textRect.insetBy(dx: -tolerance, dy: -tolerance).contains(point)
         }
     }
 
@@ -436,10 +639,15 @@ struct QuotePhotoAnnotationEditor: View {
             } else {
                 currentDrawing = [currentDrawing[0], imagePoint]
             }
+        case .text:
+            // Text tool uses tap-to-place, not drag
+            break
         }
     }
 
     private func handleDragEnded(_ value: DragGesture.Value, in containerSize: CGSize) {
+        // Skip for text tool which uses tap-to-place
+        guard selectedTool != .text else { return }
         guard !currentDrawing.isEmpty else { return }
 
         let position = currentDrawing.first ?? .zero
@@ -515,6 +723,9 @@ struct QuotePhotoAnnotationEditor: View {
                 )
                 path.addEllipse(in: rect)
             }
+        case .text:
+            // Text is rendered separately below
+            break
         }
 
         // Draw selection outline if selected - make it very visible
@@ -525,6 +736,34 @@ struct QuotePhotoAnnotationEditor: View {
         }
 
         context.stroke(path, with: .color(color), lineWidth: lineWidth)
+
+        // Render text annotations
+        if annotation.type == .text, let text = annotation.text, !text.isEmpty {
+            let textPosition = CGPoint(
+                x: annotation.position.x * scale + offset.x,
+                y: annotation.position.y * scale + offset.y
+            )
+            let textSize = annotation.fontSize ?? annotation.size
+
+            // Draw selection highlight for text if selected
+            if isSelected {
+                context.draw(
+                    Text(text)
+                        .font(.system(size: textSize, weight: .bold))
+                        .foregroundColor(.yellow),
+                    at: textPosition,
+                    anchor: .topLeading
+                )
+            }
+
+            context.draw(
+                Text(text)
+                    .font(.system(size: textSize, weight: .bold))
+                    .foregroundColor(color),
+                at: textPosition,
+                anchor: .topLeading
+            )
+        }
     }
 
     private func saveAnnotatedImage() {
@@ -612,6 +851,28 @@ struct QuotePhotoAnnotationEditor: View {
                 )
                 context.strokeEllipse(in: rect)
             }
+        case .text:
+            // Draw text
+            if let text = annotation.text, !text.isEmpty {
+                let textSize = annotation.fontSize ?? annotation.size
+                let scaledTextSize = textSize * scaleFactor
+
+                let font = UIFont.boldSystemFont(ofSize: scaledTextSize)
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: font,
+                    .foregroundColor: color
+                ]
+
+                let attributedString = NSAttributedString(string: text, attributes: attributes)
+                let textRect = CGRect(
+                    x: annotation.position.x,
+                    y: annotation.position.y,
+                    width: image.size.width - annotation.position.x,
+                    height: image.size.height - annotation.position.y
+                )
+
+                attributedString.draw(in: textRect)
+            }
         }
     }
 }
@@ -623,6 +884,7 @@ extension PhotoAnnotation.AnnotationType {
         case .arrow: return "arrow.up.right"
         case .box: return "rectangle"
         case .circle: return "circle"
+        case .text: return "textformat"
         }
     }
 
@@ -632,6 +894,7 @@ extension PhotoAnnotation.AnnotationType {
         case .arrow: return "Arrow"
         case .box: return "Box"
         case .circle: return "Circle"
+        case .text: return "Text"
         }
     }
 }

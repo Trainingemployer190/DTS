@@ -311,16 +311,19 @@ struct PhotoAnnotation: Codable {
     var id: UUID = UUID()
     var type: AnnotationType
     var points: [CGPoint] // For freehand drawing
-    var text: String? // For text annotations (legacy, no longer used)
+    var text: String? // For text annotations
     var color: String // Hex color
     var position: CGPoint // For text/arrow position
     var size: CGFloat // Stroke width or text size
+    var fontSize: CGFloat? // Font size for text annotations (separate from stroke width)
+    var textBoxWidth: CGFloat? // Width for text wrapping (nil = no wrapping)
 
     enum AnnotationType: String, Codable {
         case freehand = "freehand"
         case arrow = "arrow"
         case box = "box"
         case circle = "circle"
+        case text = "text"
 
         // Custom decoder to handle legacy 'text' type gracefully
         init(from decoder: Decoder) throws {
@@ -332,9 +335,7 @@ struct PhotoAnnotation: Codable {
             case "arrow": self = .arrow
             case "box": self = .box
             case "circle": self = .circle
-            case "text":
-                // Legacy text annotations - convert to freehand as fallback
-                self = .freehand
+            case "text": self = .text
             default:
                 throw DecodingError.dataCorruptedError(
                     in: container,
