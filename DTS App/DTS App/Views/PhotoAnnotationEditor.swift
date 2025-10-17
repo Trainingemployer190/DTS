@@ -198,6 +198,19 @@ struct PhotoAnnotationEditor: View {
         case freehand, arrow, box, circle, text
     }
 
+    // MARK: - Text Width Calculation
+    private func calculateTextWidth(text: String, fontSize: CGFloat) -> CGFloat {
+        let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font]
+        let attributedString = NSAttributedString(string: text, attributes: attributes)
+        let boundingRect = attributedString.boundingRect(
+            with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin],
+            context: nil
+        )
+        return ceil(boundingRect.width) + 4  // Add 4pt padding
+    }
+
     // MARK: - Canvas View Helper
     @ViewBuilder
     private func canvasView(geometry: GeometryProxy) -> some View {
@@ -374,6 +387,13 @@ struct PhotoAnnotationEditor: View {
                 } else {
                     // Create new text annotation
                     print("✨ CREATING NEW TEXT annotation")
+                    
+                    // Calculate actual width needed for "Text" at screen size, then convert to image space
+                    let screenFontSize: CGFloat = 20.0  // Target screen size
+                    let actualScreenWidth = calculateTextWidth(text: "Text", fontSize: screenFontSize)
+                    let scale = imageSize.width / image.size.width
+                    let imageSpaceWidth = actualScreenWidth / scale  // Convert to image space
+                    
                     let newAnnotation = PhotoAnnotation(
                         id: UUID(),
                         type: .text,
@@ -383,19 +403,18 @@ struct PhotoAnnotationEditor: View {
                         position: imagePoint,
                         size: strokeWidth,
                         fontSize: 20.0,
-                        textBoxWidth: 200.0
+                        textBoxWidth: imageSpaceWidth  // Use calculated width instead of fixed 200
                     )
                     photo.annotations.append(newAnnotation)
                     selectedTextAnnotationIndex = photo.annotations.count - 1
                     editingTextAnnotationIndex = nil
 
                     // Initialize base values for new text - CONVERT to screen space!
-                    let newTextImageWidth = 200.0  // Image space default
                     let newScale = imageSize.width / image.size.width  // Calculate scale from local vars
-                    baseWidth = newTextImageWidth * newScale  // Convert to SCREEN space
+                    baseWidth = imageSpaceWidth * newScale  // Convert to SCREEN space
                     baseFontSize = 20.0
                     print("   - New text at index: \(selectedTextAnnotationIndex?.description ?? "nil")")
-                    print("   📏 Base values initialized: imageWidth=\(newTextImageWidth) → screenWidth=\(baseWidth), fontSize=\(baseFontSize)")
+                    print("   📏 Base values initialized: imageWidth=\(imageSpaceWidth) → screenWidth=\(baseWidth), fontSize=\(baseFontSize)")
                 }
             }
 
@@ -578,10 +597,9 @@ struct PhotoAnnotationEditor: View {
                             let rawScreenFontSize = imageFontSize * scale
                             let screenFontSize = max(rawScreenFontSize, 16.0)
 
-                            // Scale text box width proportionally to font size adjustment
-                            let rawScreenTextBoxWidth = imageTextBoxWidth * scale
-                            let fontScaleAdjustment = rawScreenFontSize > 0 ? screenFontSize / rawScreenFontSize : 1.0
-                            let screenTextBoxWidth = rawScreenTextBoxWidth * fontScaleAdjustment
+                            // Scale text box width - just multiply by scale, don't apply font adjustment
+                            // Font adjustment is for visual height only, not width
+                            let screenTextBoxWidth = imageTextBoxWidth * scale
 
                             // Calculate text height based on content and wrapping (in SCREEN space)
                             let lineHeight = screenFontSize * 1.2
@@ -891,8 +909,8 @@ struct PhotoAnnotationEditor: View {
                                             // Speed calculation
                                             let speed = abs(value.translation.height) > 0 ? abs(currentImageFontSize - baseFontSize) / abs(value.translation.height) : 0
 
-                                            // Calculate new font size based on drag distance (divide by 5 for sensitivity)
-                                            let fontDelta = value.translation.height / 5
+                                            // Calculate new font size based on drag distance (1px = 1pt for full control)
+                                            let fontDelta = value.translation.height
                                             let calculatedNewSize = baseFontSize + fontDelta
                                             let clampedNewSize = max(12, min(72, calculatedNewSize))
 
@@ -902,7 +920,7 @@ struct PhotoAnnotationEditor: View {
                                             print("   📍 Expected handle (old way): (\(String(format: "%.1f", expectedHandleX)), \(String(format: "%.1f", expectedHandleY)))")
                                             print("   📏 Lag prevented: \(String(format: "%.1f", lagDistance))px, Offset: (\(String(format: "%.1f", offsetX)), \(String(format: "%.1f", offsetY)))")
                                             print("   📊 Translation.height: \(String(format: "%.1f", value.translation.height))px (vertical drag)")
-                                            print("   � fontDelta: \(String(format: "%.1f", fontDelta))pt = translation(\(String(format: "%.1f", value.translation.height))) / 5")
+                                            print("   🎯 fontDelta: \(String(format: "%.1f", fontDelta))pt = translation(\(String(format: "%.1f", value.translation.height))) * 1.0 (1px = 1pt)")
                                             print("   📐 Font calculation: base(\(String(format: "%.1f", baseFontSize))) + delta(\(String(format: "%.1f", fontDelta))) = \(String(format: "%.1f", calculatedNewSize))")
                                             print("   ✂️  Clamped to: \(String(format: "%.1f", clampedNewSize))pt (min: 12, max: 72)")
                                             print("   📝 Wrapped lines: \(wrappedLines.count), Height: \(String(format: "%.1f", currentTextBoxHeight))px")
@@ -920,8 +938,8 @@ struct PhotoAnnotationEditor: View {
                                             let finalSize = photo.annotations[selectedIndex].fontSize ?? 20.0
                                             print("   📐 Final font size: \(String(format: "%.1f", finalSize))")
 
-                                            // Commit the final size as the new base
-                                            baseFontSize = max(12, min(72, baseFontSize + value.translation.height / 5))
+                                            // Commit the final size as the new base (1px = 1pt)
+                                            baseFontSize = max(12, min(72, baseFontSize + value.translation.height))
                                             photo.annotations[selectedIndex].fontSize = baseFontSize
                                             print("   ✅ New baseFontSize committed: \(String(format: "%.1f", baseFontSize))")
                                         }

@@ -22,5 +22,13 @@
     "files.trimTrailingWhitespace": true,
     "files.insertFinalNewline": true,
     "swift.autoGenerateProject": false,
-    "swift.actionAfterBuildError": "Focus Terminal"
+    "swift.actionAfterBuildError": "Focus Terminal",
+
+    "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+    "github.copilot.chat.mcp.enabled": false,
+    "github.copilot.chat.mcp.excludedServers": [
+        "gitkraken2",
+        "gitkraken3",
+        "gitkraken4"
+    ]
 }

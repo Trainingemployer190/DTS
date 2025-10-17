@@ -297,7 +297,8 @@ final class PhotoRecord {
     var notes: String = ""
     var tags: [String] = []
     var category: String = "General"
-    var annotations: [PhotoAnnotation] = [] // Drawing/text annotations
+    var annotations: [PhotoAnnotation] = [] // Drawing/text annotations (custom system)
+    var pencilKitDrawingData: Data? = nil  // PencilKit drawing data (prototype)
 
     init(fileURL: String, jobId: String? = nil, quoteDraftId: UUID? = nil) {
         self.fileURL = fileURL
@@ -317,6 +318,7 @@ struct PhotoAnnotation: Codable {
     var size: CGFloat // Stroke width or text size
     var fontSize: CGFloat? // Font size for text annotations (separate from stroke width)
     var textBoxWidth: CGFloat? // Width for text wrapping (nil = no wrapping)
+    var hasExplicitWidth: Bool = false // True if user has manually resized width (prevents auto-sizing)
 
     enum AnnotationType: String, Codable {
         case freehand = "freehand"
@@ -343,6 +345,42 @@ struct PhotoAnnotation: Codable {
                 )
             }
         }
+    }
+
+    // Custom Codable implementation to handle backward compatibility
+    enum CodingKeys: String, CodingKey {
+        case id, type, points, text, color, position, size, fontSize, textBoxWidth, hasExplicitWidth
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        type = try container.decode(AnnotationType.self, forKey: .type)
+        points = try container.decode([CGPoint].self, forKey: .points)
+        text = try container.decodeIfPresent(String.self, forKey: .text)
+        color = try container.decode(String.self, forKey: .color)
+        position = try container.decode(CGPoint.self, forKey: .position)
+        size = try container.decode(CGFloat.self, forKey: .size)
+        fontSize = try container.decodeIfPresent(CGFloat.self, forKey: .fontSize)
+        textBoxWidth = try container.decodeIfPresent(CGFloat.self, forKey: .textBoxWidth)
+        // Default to false for old data that doesn't have this field
+        hasExplicitWidth = try container.decodeIfPresent(Bool.self, forKey: .hasExplicitWidth) ?? false
+    }
+
+    // Standard initializer for creating new annotations
+    init(id: UUID = UUID(), type: AnnotationType, points: [CGPoint], text: String? = nil,
+         color: String, position: CGPoint, size: CGFloat, fontSize: CGFloat? = nil,
+         textBoxWidth: CGFloat? = nil, hasExplicitWidth: Bool = false) {
+        self.id = id
+        self.type = type
+        self.points = points
+        self.text = text
+        self.color = color
+        self.position = position
+        self.size = size
+        self.fontSize = fontSize
+        self.textBoxWidth = textBoxWidth
+        self.hasExplicitWidth = hasExplicitWidth
     }
 }
 

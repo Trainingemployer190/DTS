@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "github": {
+      "disabledTools": [
+        "activate_github_tools_workflow_management",
+        "activate_github_tools_notification_management",
+        "activate_github_tools_project_management",
+        "activate_github_tools_discussion_management",
+        "activate_github_tools_release_management",
+        "activate_github_tools_star_management",
+        "activate_github_tools_security_management",
+        "activate_github_tools_gist_management",
+
+        "activate_github_tools_user_management",
+        "activate_github_tools_web_search",
+        "activate_github_tools_commit_management",
+        "activate_github_tools_label_management",
+        "mcp_gitkraken2_*",
+        "mcp_gitkraken3_*",
+        "mcp_gitkraken4_*"
+      ]
+    }
+  }
+}
