@@ -637,8 +637,11 @@ struct PhotoAnnotationEditor: View {
                                     .position(x: screenX + screenTextBoxWidth/2, y: screenY + screenTextBoxHeight/2)
 
                                 // Delete button (top-left corner)
-                                let deleteButtonX = screenX - 12
-                                let deleteButtonY = screenY - 12
+                                // Clamp to stay within screen bounds (with 30px margin)
+                                let rawDeleteButtonX = screenX - 12
+                                let rawDeleteButtonY = screenY - 12
+                                let deleteButtonX = max(30, min(geometry.size.width - 30, rawDeleteButtonX))
+                                let deleteButtonY = max(30, min(geometry.size.height - 30, rawDeleteButtonY))
 
                                 Button(action: {
                                     photo.annotations.remove(at: selectedIndex)
@@ -652,8 +655,11 @@ struct PhotoAnnotationEditor: View {
                                 .position(x: deleteButtonX, y: deleteButtonY)
 
                                 // Right edge resize handle (middle-right for width adjustment)
-                                let widthHandleX = screenX + screenTextBoxWidth
-                                let widthHandleY = screenY + screenTextBoxHeight/2
+                                // Clamp handle positions to stay within screen bounds (with 30px margin)
+                                let rawWidthHandleX = screenX + screenTextBoxWidth
+                                let rawWidthHandleY = screenY + screenTextBoxHeight/2
+                                let widthHandleX = max(30, min(geometry.size.width - 30, rawWidthHandleX))
+                                let widthHandleY = max(30, min(geometry.size.height - 30, rawWidthHandleY))
 
                                 Circle()
                                     .fill(Color.green)
@@ -675,7 +681,11 @@ struct PhotoAnnotationEditor: View {
                                             let screenDelta = value.translation.width
                                             let imageDelta = screenDelta / scale
                                             let newImageWidth = baseWidth + imageDelta
-                                            let clampedImageWidth = max(50, min(5000, newImageWidth))
+
+                                            // Limit width to screen width (convert to image space)
+                                            let maxScreenWidth = geometry.size.width - 40  // 40px margin
+                                            let maxImageWidth = maxScreenWidth / scale
+                                            let clampedImageWidth = max(50, min(maxImageWidth, newImageWidth))
 
                                             // Update directly - triggers SwiftUI re-render
                                             photo.annotations[selectedIndex].textBoxWidth = clampedImageWidth
@@ -685,7 +695,11 @@ struct PhotoAnnotationEditor: View {
                                             isDraggingWidthHandle = false
                                             let screenDelta = value.translation.width
                                             let imageDelta = screenDelta / scale
-                                            let finalWidth = max(50, min(5000, baseWidth + imageDelta))
+
+                                            // Limit width to screen width (convert to image space)
+                                            let maxScreenWidth = geometry.size.width - 40  // 40px margin
+                                            let maxImageWidth = maxScreenWidth / scale
+                                            let finalWidth = max(50, min(maxImageWidth, baseWidth + imageDelta))
                                             photo.annotations[selectedIndex].textBoxWidth = finalWidth
                                             baseWidth = finalWidth
                                             print("� WIDTH RESIZE ENDED - Final: \(String(format: "%.1f", finalWidth)) (IMAGE space)")
@@ -694,8 +708,11 @@ struct PhotoAnnotationEditor: View {
 
                                 // Bottom-right corner resize handle (for font size)
                                 // Recalculate position based on CURRENT height
-                                let fontHandleX = screenX + screenTextBoxWidth
-                                let fontHandleY = screenY + screenTextBoxHeight  // This now updates with font size changes
+                                // Clamp handle positions to stay within screen bounds (with 30px margin)
+                                let rawFontHandleX = screenX + screenTextBoxWidth
+                                let rawFontHandleY = screenY + screenTextBoxHeight
+                                let fontHandleX = max(30, min(geometry.size.width - 30, rawFontHandleX))
+                                let fontHandleY = max(30, min(geometry.size.height - 30, rawFontHandleY))
 
                                 Circle()
                                     .fill(Color.blue)
@@ -758,7 +775,11 @@ struct PhotoAnnotationEditor: View {
                                             // Also scale width proportionally to maintain text wrapping
                                             let fontSizeRatio = clampedNewSize / baseFontSize
                                             let newWidth = baseWidth * fontSizeRatio
-                                            let clampedNewWidth = max(50, min(5000, newWidth))  // Increased max to 5000
+
+                                            // Limit width to screen width (convert to image space)
+                                            let maxScreenWidth = geometry.size.width - 40  // 40px margin
+                                            let maxImageWidth = maxScreenWidth / scale
+                                            let clampedNewWidth = max(50, min(maxImageWidth, newWidth))
 
                                             photo.annotations[selectedIndex].fontSize = clampedNewSize
                                             photo.annotations[selectedIndex].textBoxWidth = clampedNewWidth
@@ -777,7 +798,12 @@ struct PhotoAnnotationEditor: View {
 
                                             // Scale width proportionally
                                             let fontSizeRatio = finalSize / baseFontSize
-                                            let finalWidth = max(50, min(5000, baseWidth * fontSizeRatio))  // Increased max to 5000
+                                            let newWidth = baseWidth * fontSizeRatio
+
+                                            // Limit width to screen width (convert to image space)
+                                            let maxScreenWidth = geometry.size.width - 40  // 40px margin
+                                            let maxImageWidth = maxScreenWidth / scale
+                                            let finalWidth = max(50, min(maxImageWidth, newWidth))
 
                                             // Commit both final size and width
                                             photo.annotations[selectedIndex].fontSize = finalSize
@@ -804,33 +830,98 @@ struct PhotoAnnotationEditor: View {
                             let screenY = annotation.position.y * scale + yOffset
                             let _ = print("   - Screen position: (\(screenX), \(screenY))")
 
-                            // Simple text field overlay
-                            TextEditorOverlay(
-                                text: $textInput,
-                                fontSize: textSize,
-                                onCancel: {
-                                    print("❌ CANCEL tapped")
-                                    editingTextAnnotationIndex = nil
-                                    selectedTextAnnotationIndex = nil
-                                },
-                                onDone: {
-                                    print("✅ DONE tapped - saving text: '\(textInput)'")
-                                    let newText = textInput.isEmpty ? "Text" : textInput
-                                    photo.annotations[editIndex].text = newText
+                            // Calculate the actual text box bounds for this annotation
+                            let imageFontSize = annotation.fontSize ?? 20.0
+                            let screenFontSize = imageFontSize * scale
+                            let imageTextBoxWidth = annotation.textBoxWidth ?? 200.0
+                            let screenTextBoxWidth = imageTextBoxWidth * scale
 
-                                    // Recalculate text box width based on new text and current font size
-                                    let currentFontSize = photo.annotations[editIndex].fontSize ?? 20.0
-                                    let screenWidth = calculateTextWidth(text: newText, fontSize: currentFontSize * scale)
-                                    let imageWidth = screenWidth / scale
-                                    photo.annotations[editIndex].textBoxWidth = imageWidth
+                            // Get actual wrapped lines to calculate height
+                            let wrappedLines = wrapText(annotation.text ?? "Text", width: screenTextBoxWidth, fontSize: screenFontSize)
+                            let lineHeight = screenFontSize * 1.2
+                            let screenTextBoxHeight = CGFloat(wrappedLines.count) * lineHeight
 
-                                    print("   📏 Updated textBoxWidth to \(imageWidth) (image space) for text: '\(newText)'")
-
-                                    editingTextAnnotationIndex = nil
-                                    selectedTextAnnotationIndex = editIndex
-                                }
+                            // Create the text box rectangle
+                            let textBoxRect = CGRect(
+                                x: screenX,
+                                y: screenY,
+                                width: screenTextBoxWidth,
+                                height: screenTextBoxHeight
                             )
-                            .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+
+                            GeometryReader { editorGeometry in
+                                ZStack {
+                                    // Background overlay to detect taps outside
+                                    Color.black.opacity(0.3)
+                                        .frame(width: editorGeometry.size.width, height: editorGeometry.size.height)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture { location in
+                                            // Only close if tap is outside the text box area (with some padding)
+                                            let paddedTextRect = textBoxRect.insetBy(dx: -20, dy: -20)
+
+                                            if !paddedTextRect.contains(location) {
+                                                print("🎯 Tap outside text box - saving text")
+                                                let newText = textInput.isEmpty ? "Text" : textInput
+                                                photo.annotations[editIndex].text = newText
+
+                                                // Recalculate text box width
+                                                let currentFontSize = photo.annotations[editIndex].fontSize ?? 20.0
+                                                let screenWidth = calculateTextWidth(text: newText, fontSize: currentFontSize * scale)
+                                                let imageWidth = screenWidth / scale
+
+                                                // Limit width to screen width
+                                                let maxScreenWidth = geometry.size.width - 40
+                                                let maxImageWidth = maxScreenWidth / scale
+                                                let clampedImageWidth = min(maxImageWidth, imageWidth)
+
+                                                photo.annotations[editIndex].textBoxWidth = clampedImageWidth
+
+                                                editingTextAnnotationIndex = nil
+                                                selectedTextAnnotationIndex = editIndex
+                                            } else {
+                                                print("🎯 Tap inside text box area - keeping editor open")
+                                            }
+                                        }
+
+                                    // Simple text field overlay
+                                    TextEditorOverlay(
+                                        text: $textInput,
+                                        fontSize: textSize,
+                                        onCancel: {
+                                            print("❌ CANCEL tapped")
+                                            editingTextAnnotationIndex = nil
+                                            selectedTextAnnotationIndex = nil
+                                        },
+                                        onDone: {
+                                            print("✅ DONE tapped - saving text: '\(textInput)'")
+                                            let newText = textInput.isEmpty ? "Text" : textInput
+                                            photo.annotations[editIndex].text = newText
+
+                                            // Recalculate text box width based on new text and current font size
+                                            let currentFontSize = photo.annotations[editIndex].fontSize ?? 20.0
+                                            let screenWidth = calculateTextWidth(text: newText, fontSize: currentFontSize * scale)
+                                            let imageWidth = screenWidth / scale
+
+                                            // Limit width to screen width (convert to image space)
+                                            let maxScreenWidth = geometry.size.width - 40  // 40px margin
+                                            let maxImageWidth = maxScreenWidth / scale
+                                            let clampedImageWidth = min(maxImageWidth, imageWidth)
+
+                                            photo.annotations[editIndex].textBoxWidth = clampedImageWidth
+
+                                            print("   📏 Updated textBoxWidth to \(clampedImageWidth) (image space) for text: '\(newText)'")
+
+                                            editingTextAnnotationIndex = nil
+                                            selectedTextAnnotationIndex = editIndex
+                                        }
+                                    )
+                                    .position(x: editorGeometry.size.width / 2, y: editorGeometry.size.height / 2)
+                                    .onTapGesture {
+                                        // Consume taps on the editor itself to prevent closing
+                                        print("📝 Tap on editor - keeping it open")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1038,29 +1129,39 @@ struct PhotoAnnotationEditor: View {
             guard annotation.type == .text else { continue }
             guard let text = annotation.text, !text.isEmpty else { continue }
 
-            let textSize = annotation.fontSize ?? 20.0
-            let textBoxWidth = annotation.textBoxWidth ?? 200.0
+            // Get font size and convert to screen space
+            let imageFontSize = annotation.fontSize ?? 20.0
+            let screenFontSize = imageFontSize * scale
+
+            // Get text box width and convert to screen space
+            let imageTextBoxWidth = annotation.textBoxWidth ?? 200.0
+            let screenTextBoxWidth = imageTextBoxWidth * scale
 
             // Convert text position from image coordinates to screen coordinates
+            // This is the TOP-LEFT position where text starts rendering
             let screenX = annotation.position.x * scale + offset.x
             let screenY = annotation.position.y * scale + offset.y
 
-            // Calculate text box height based on wrapping
-            let lineHeight = textSize * 1.2
-            let charactersPerLine = Int(textBoxWidth / (textSize * 0.6))
-            let estimatedLines = max(1, (text.count + charactersPerLine - 1) / charactersPerLine)
-            let textBoxHeight = CGFloat(estimatedLines) * lineHeight
+            // Calculate ACTUAL text box height using the same wrapping logic as rendering
+            let wrappedLines = wrapText(text, width: screenTextBoxWidth, fontSize: screenFontSize)
+            let lineHeight = screenFontSize * 1.2
+            let actualLineCount = wrappedLines.count
+            let screenTextBoxHeight = CGFloat(actualLineCount) * lineHeight
 
+            // Create the hit test rectangle - this should match exactly where the text is rendered
             let screenRect = CGRect(
                 x: screenX,
                 y: screenY,
-                width: textBoxWidth,
-                height: textBoxHeight
+                width: screenTextBoxWidth,
+                height: screenTextBoxHeight
             )
 
-            print("   - Index \(index): '\(text)' at screen coords (\(screenX), \(screenY)), rect: \(screenRect)")
+            print("   - Index \(index): '\(text)' at screen coords (\(screenX), \(screenY))")
+            print("     Screen rect: \(screenRect)")
+            print("     Lines: \(actualLineCount), height: \(screenTextBoxHeight)")
 
-            let tolerance: CGFloat = 20.0
+            // Use a smaller tolerance for more precise hit detection
+            let tolerance: CGFloat = 10.0  // Reduced from 20.0
             let hitTestRect = screenRect.insetBy(dx: -tolerance, dy: -tolerance)
             let isHit = hitTestRect.contains(screenPoint)
 
