@@ -17,7 +17,7 @@ struct TextEditorOverlay: View {
     var body: some View {
         VStack(spacing: 12) {
             TextField("Enter text", text: $text, axis: .vertical)
-                .font(.system(size: fontSize, weight: .bold))
+                .font(.system(size: 18, weight: .bold))  // Fixed editor font size
                 .foregroundColor(.white)
                 .multilineTextAlignment(.center)
                 .padding(12)

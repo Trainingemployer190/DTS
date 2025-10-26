@@ -486,16 +486,60 @@ struct AnnotatedPhotoView: View {
                 x: annotation.position.x * scale + offset.x,
                 y: annotation.position.y * scale + offset.y
             )
-            let textSize = annotation.fontSize ?? annotation.size
 
-            context.draw(
-                Text(text)
-                    .font(.system(size: textSize, weight: .bold))
-                    .foregroundColor(color),
-                at: textPosition,
-                anchor: .topLeading
-            )
+            // Get font size from annotation (stored in image space) and scale to screen space
+            let imageFontSize = annotation.fontSize ?? 20.0
+            let screenFontSize = imageFontSize * scale
+
+            // Get text box width and scale to screen space
+            let imageTextBoxWidth = annotation.textBoxWidth ?? 200.0
+            let screenTextBoxWidth = imageTextBoxWidth * scale
+
+            // Wrap text for proper multi-line rendering
+            let wrappedText = wrapText(text, width: screenTextBoxWidth, fontSize: screenFontSize)
+
+            // Draw each line
+            var yOffset: CGFloat = 0
+            for line in wrappedText {
+                context.draw(
+                    Text(line)
+                        .font(.system(size: screenFontSize, weight: .bold))
+                        .foregroundColor(color),
+                    at: CGPoint(x: textPosition.x, y: textPosition.y + yOffset),
+                    anchor: .topLeading
+                )
+                yOffset += screenFontSize * 1.2  // Line height
+            }
         }
+    }
+
+    // Text wrapping helper (same as PhotoAnnotationEditor)
+    private func wrapText(_ text: String, width: CGFloat, fontSize: CGFloat) -> [String] {
+        let words = text.split(separator: " ").map(String.init)
+        var lines: [String] = []
+        var currentLine = ""
+
+        let approximateCharWidth = fontSize * 0.6
+        let maxCharsPerLine = Int(width / approximateCharWidth)
+
+        for word in words {
+            let testLine = currentLine.isEmpty ? word : currentLine + " " + word
+
+            if testLine.count <= maxCharsPerLine {
+                currentLine = testLine
+            } else {
+                if !currentLine.isEmpty {
+                    lines.append(currentLine)
+                }
+                currentLine = word
+            }
+        }
+
+        if !currentLine.isEmpty {
+            lines.append(currentLine)
+        }
+
+        return lines.isEmpty ? [text] : lines
     }
 }
 
