@@ -362,20 +362,17 @@ struct PhotoAnnotationEditor: View {
     private func handleCanvasDragEnded(_ value: DragGesture.Value, geometry: GeometryProxy, image: UIImage) {
         print("🏁 GESTURE ENDED - Tool: \(selectedTool), Moved: \(hasMoved)")
 
-        // Handle text tool tap (if didn't move)
-        if selectedTool == .text && !hasMoved {
-            print("✅ TEXT TAP DETECTED")
+        // Check for text annotation tap FIRST, regardless of selected tool (if didn't move)
+        if !hasMoved {
             let imageSize = calculateImageSize(for: image, in: geometry.size)
-            print("📐 Screen tap: \(value.location), Container size: \(geometry.size), Image size: \(imageSize)")
-            let imagePoint = convertToImageCoordinates(value.location, in: geometry.size, imageSize: imageSize, image: image)
-            print("📍 Converted to image coordinates: \(imagePoint)")
 
             // Check if tapped on existing text annotation (in screen space for accurate hit detection)
             let tappedTextIndex = findTextAnnotationAtScreenPoint(screenPoint: value.location, containerSize: geometry.size, imageSize: imageSize, image: image)
-            print("🔍 Found text at index: \(tappedTextIndex?.description ?? "none")")
 
             if let index = tappedTextIndex {
-                // Tapped on existing text
+                // User tapped on text annotation - handle it regardless of current tool
+                print("🔍 Found text at index: \(index) - handling text tap")
+
                 if selectedTextAnnotationIndex == index {
                     // Already selected - enter edit mode
                     print("✏️ ENTERING EDIT MODE for index \(index)")
@@ -388,57 +385,70 @@ struct PhotoAnnotationEditor: View {
                     selectedTextAnnotationIndex = index
                     editingTextAnnotationIndex = nil
 
-                    // Initialize base values for resizing - CONVERT image space to screen space!
+                    // Initialize base values for resizing
                     let imageSpaceWidth = photo.annotations[index].textBoxWidth ?? 200.0
-                    let localScale = imageSize.width / image.size.width  // Calculate scale in this scope
-                    baseWidth = imageSpaceWidth * localScale  // Convert to SCREEN space for dragging
+                    let localScale = imageSize.width / image.size.width
+                    baseWidth = imageSpaceWidth * localScale
                     baseFontSize = photo.annotations[index].fontSize ?? 20.0
                     print("   📏 Base values initialized: imageWidth=\(imageSpaceWidth) → screenWidth=\(baseWidth), fontSize=\(baseFontSize)")
                 }
+
+                pressStartTime = nil
+                pressStartLocation = nil
+                hasMoved = false
+                return
+            }
+        }
+
+        // Handle text tool tap for creating new text (if didn't move)
+        if selectedTool == .text && !hasMoved {
+            print("✅ TEXT TAP DETECTED")
+            let imageSize = calculateImageSize(for: image, in: geometry.size)
+            print("📐 Screen tap: \(value.location), Container size: \(geometry.size), Image size: \(imageSize)")
+            let imagePoint = convertToImageCoordinates(value.location, in: geometry.size, imageSize: imageSize, image: image)
+            print("📍 Converted to image coordinates: \(imagePoint)")
+
+            // Tapped outside any text - deselect or create new
+            if selectedTextAnnotationIndex != nil {
+                // Deselect
+                print("❌ DESELECTING text")
+                selectedTextAnnotationIndex = nil
+                editingTextAnnotationIndex = nil
             } else {
-                // Tapped outside any text
-                if selectedTextAnnotationIndex != nil {
-                    // Deselect
-                    print("❌ DESELECTING text")
-                    selectedTextAnnotationIndex = nil
-                    editingTextAnnotationIndex = nil
-                } else {
-                    // Create new text annotation
-                    print("✨ CREATING NEW TEXT annotation")
+                // Create new text annotation
+                print("✨ CREATING NEW TEXT annotation")
 
-                    // We want text to be ~20pt on screen for readability
-                    // Image space font size = screen size / scale
-                    let targetScreenFontSize: CGFloat = 20.0  // Readable size on screen
-                    let scale = imageSize.width / image.size.width
-                    let imageSpaceFontSize = targetScreenFontSize / scale  // Convert to image space
+                // We want text to be ~20pt on screen for readability
+                let targetScreenFontSize: CGFloat = 20.0
+                let scale = imageSize.width / image.size.width
+                let imageSpaceFontSize = targetScreenFontSize / scale
 
-                    // Calculate width needed for "Text" at screen size, then convert to image space
-                    let actualScreenWidth = calculateTextWidth(text: "Text", fontSize: targetScreenFontSize)
-                    let imageSpaceWidth = actualScreenWidth / scale  // Convert to image space
+                // Calculate width needed for "Text" at screen size, then convert to image space
+                let actualScreenWidth = calculateTextWidth(text: "Text", fontSize: targetScreenFontSize)
+                let imageSpaceWidth = actualScreenWidth / scale
 
-                    let newAnnotation = PhotoAnnotation(
-                        id: UUID(),
-                        type: .text,
-                        points: [],
-                        text: "Text",
-                        color: selectedColor.toHex(),
-                        position: imagePoint,
-                        size: strokeWidth,
-                        fontSize: imageSpaceFontSize,  // Use calculated size for readability
-                        textBoxWidth: imageSpaceWidth  // Use calculated width instead of fixed 200
-                    )
-                    photo.annotations.append(newAnnotation)
-                    selectedTextAnnotationIndex = photo.annotations.count - 1
-                    editingTextAnnotationIndex = nil
+                let newAnnotation = PhotoAnnotation(
+                    id: UUID(),
+                    type: .text,
+                    points: [],
+                    text: "Text",
+                    color: selectedColor.toHex(),
+                    position: imagePoint,
+                    size: strokeWidth,
+                    fontSize: imageSpaceFontSize,
+                    textBoxWidth: imageSpaceWidth
+                )
+                photo.annotations.append(newAnnotation)
+                selectedTextAnnotationIndex = photo.annotations.count - 1
+                editingTextAnnotationIndex = nil
 
-                    // Initialize base values for new text - CONVERT to screen space!
-                    let newScale = imageSize.width / image.size.width  // Calculate scale from local vars
-                    baseWidth = imageSpaceWidth * newScale  // Convert to SCREEN space
-                    baseFontSize = imageSpaceFontSize  // This is already in image space
-                    baseFontSize = 20.0
-                    print("   - New text at index: \(selectedTextAnnotationIndex?.description ?? "nil")")
-                    print("   📏 Base values initialized: imageWidth=\(imageSpaceWidth) → screenWidth=\(baseWidth), fontSize=\(baseFontSize)")
-                }
+                // Initialize base values for new text
+                let newScale = imageSize.width / image.size.width
+                baseWidth = imageSpaceWidth * newScale
+                baseFontSize = imageSpaceFontSize
+                baseFontSize = 20.0
+                print("   - New text at index: \(selectedTextAnnotationIndex?.description ?? "nil")")
+                print("   📏 Base values initialized: imageWidth=\(imageSpaceWidth) → screenWidth=\(baseWidth), fontSize=\(baseFontSize)")
             }
 
             pressStartTime = nil
