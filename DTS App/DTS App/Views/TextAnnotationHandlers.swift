@@ -119,11 +119,11 @@ class TextResizeAndRotateHandler: TextDragHandler {
         // Just convert to image space and apply directly
         let imageDeltaFont = translation.height / scale
         let newFont: CGFloat = max(12.0, min(400.0, initialFontSize + imageDeltaFont))
-        
+
         var ann = annotations[annotationIndex]
         let oldFont: CGFloat = ann.fontSize ?? initialFontSize
         ann.fontSize = newFont
-        
+
         // Scale width proportionally if not explicitly set
         if !ann.hasExplicitWidth, let w = ann.textBoxWidth {
             let ratio: CGFloat = newFont / max(oldFont, 1.0)
@@ -163,16 +163,16 @@ class TextHandlerManager: ObservableObject {
         let imageFont: CGFloat = annotation.fontSize ?? annotation.size
         let rawScreenFont: CGFloat = imageFont * scale
         let screenFontSize: CGFloat = max(rawScreenFont, 12.0)  // Match editor's minimum of 12pt
-        
+
         // Text box width
         let imageWidth: CGFloat = annotation.textBoxWidth ?? 200.0
         let screenWidth: CGFloat = imageWidth * scale
-        
+
         // Height estimate - for wrapped text, estimate based on text length
         // Most single-line text will have height around screenFontSize * 1.2
         let text = annotation.text ?? "Text"
         let estimatedLineHeight = screenFontSize * 1.2
-        
+
         // Better estimate: most text in this app is 1-2 lines, so default to 1 line
         // We'll expand hit detection zones to be forgiving
         let estimatedScreenHeight = estimatedLineHeight

@@ -147,13 +147,13 @@ struct PhotoAnnotationEditor: View {
                 x: annotation.position.x * scale + offset.x,
                 y: annotation.position.y * scale + offset.y
             )
-            
+
             // Get font size from annotation (already in image space)
             let imageFontSize = annotation.fontSize ?? 20.0
-            
+
             // Convert to screen space for rendering
             let screenFontSize = imageFontSize * scale
-            
+
             print("📝 TEXT RENDER for '\(text)'")
             print("   imageFontSize: \(String(format: "%.1f", imageFontSize))pt")
             print("   scale: \(String(format: "%.3f", scale))")
@@ -397,7 +397,7 @@ struct PhotoAnnotationEditor: View {
                     let targetScreenFontSize: CGFloat = 20.0  // Readable size on screen
                     let scale = imageSize.width / image.size.width
                     let imageSpaceFontSize = targetScreenFontSize / scale  // Convert to image space
-                    
+
                     // Calculate width needed for "Text" at screen size, then convert to image space
                     let actualScreenWidth = calculateTextWidth(text: "Text", fontSize: targetScreenFontSize)
                     let imageSpaceWidth = actualScreenWidth / scale  // Convert to image space
@@ -594,89 +594,36 @@ struct PhotoAnnotationEditor: View {
                            photo.annotations[selectedIndex].type == .text {
                             let _ = print("✅ RENDERING SELECTION HANDLES for index \(selectedIndex)")
                             let annotation = photo.annotations[selectedIndex]
-                            // Get font size directly from annotation (in IMAGE space)
-                            let imageFontSize = annotation.fontSize ?? 20.0  // Image space
                             let text = annotation.text ?? "Text"
                             let imageTextBoxWidth = annotation.textBoxWidth ?? 200.0  // Image space
-                            let _ = print("   🎯 imageFontSize: \(String(format: "%.1f", imageFontSize))pt")
 
                             let screenX = annotation.position.x * scale + xOffset
                             let screenY = annotation.position.y * scale + yOffset
 
-                            // Convert image space dimensions to screen space
-                            let rawScreenFontSize = imageFontSize * scale
-                            let screenFontSize = rawScreenFontSize
+                            // IMPORTANT: Recalculate these values INSIDE the ZStack so they update during drag
+                            let currentImageFontSize = annotation.fontSize ?? 20.0  // Get CURRENT value during drag
+                            let screenFontSize = currentImageFontSize * scale  // This will update as fontSize changes
 
-                            // Scale text box width - just multiply by scale, don't apply font adjustment
-                            // Font adjustment is for visual height only, not width
+                            // Scale text box width
                             let screenTextBoxWidth = imageTextBoxWidth * scale
 
-                            // Calculate text height based on content and wrapping (in SCREEN space)
+                            // Calculate text height based on CURRENT font size (will update during drag)
                             let lineHeight = screenFontSize * 1.2
                             let charactersPerLine = Int(screenTextBoxWidth / (screenFontSize * 0.6))
                             let estimatedLines = max(1, (text.count + charactersPerLine - 1) / charactersPerLine)
                             let screenTextBoxHeight = CGFloat(estimatedLines) * lineHeight
 
-                            // 📐 LAYOUT DIAGNOSTIC LOGGING
-                            let _ = print("📐 TEXT BOX LAYOUT DIAGNOSTIC:")
-                            let _ = print("   🎨 Scale Factor: \(String(format: "%.4f", scale))")
-                            let _ = print("   📝 Text Content: '\(text)' (\(text.count) chars)")
-                            let _ = print("   ")
-                            let _ = print("   📏 IMAGE SPACE VALUES (stored in model):")
-                            let _ = print("      Position: (\(String(format: "%.1f", annotation.position.x)), \(String(format: "%.1f", annotation.position.y)))")
-                            let _ = print("      Font Size: \(String(format: "%.1f", imageFontSize))pt")
-                            let _ = print("      Box Width: \(String(format: "%.1f", imageTextBoxWidth))px")
-                            let _ = print("   ")
-                            let _ = print("   🖥️  SCREEN SPACE VALUES (rendered pixels):")
-                            let _ = print("      Text Position: (\(String(format: "%.1f", screenX)), \(String(format: "%.1f", screenY)))")
-                            let _ = print("      Font Size: \(String(format: "%.1f", screenFontSize))pt")
-                            let _ = print("      Box Width: \(String(format: "%.1f", screenTextBoxWidth))px")
-                            let _ = print("      Box Height: \(String(format: "%.1f", screenTextBoxHeight))px")
-                            let _ = print("      Chars/Line: \(charactersPerLine), Lines: \(estimatedLines)")
-                            let _ = print("   ")
-                            let _ = print("   🔷 TEXT BOX BOUNDARY (blue dotted rectangle):")
-                            let _ = print("      TopLeft: (\(String(format: "%.1f", screenX)), \(String(format: "%.1f", screenY)))")
-                            let _ = print("      TopRight: (\(String(format: "%.1f", screenX + screenTextBoxWidth)), \(String(format: "%.1f", screenY)))")
-                            let _ = print("      BottomLeft: (\(String(format: "%.1f", screenX)), \(String(format: "%.1f", screenY + screenTextBoxHeight)))")
-                            let _ = print("      BottomRight: (\(String(format: "%.1f", screenX + screenTextBoxWidth)), \(String(format: "%.1f", screenY + screenTextBoxHeight)))")
-                            let _ = print("      Center: (\(String(format: "%.1f", screenX + screenTextBoxWidth/2)), \(String(format: "%.1f", screenY + screenTextBoxHeight/2)))")
-                            let _ = print("   ═══════════════════════════════════════════════════════")
-                            let _ = print("")
-
                             ZStack {
-                                // Dotted border around text box
+                                // Dotted border around text box - this will now update position during font resize
                                 Rectangle()
                                     .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5, 5]))
                                     .foregroundColor(.blue)
                                     .frame(width: screenTextBoxWidth, height: screenTextBoxHeight)
                                     .position(x: screenX + screenTextBoxWidth/2, y: screenY + screenTextBoxHeight/2)
 
-                            // 📊 LOG: Text Box Corners
-                            let _ = {
-                                print("📦 TEXT BOX CORNERS:")
-                                print("   Top-Left: (\(String(format: "%.1f", screenX)), \(String(format: "%.1f", screenY)))")
-                                print("   Top-Right: (\(String(format: "%.1f", screenX + screenTextBoxWidth)), \(String(format: "%.1f", screenY)))")
-                                print("   Bottom-Left: (\(String(format: "%.1f", screenX)), \(String(format: "%.1f", screenY + screenTextBoxHeight)))")
-                                print("   Bottom-Right: (\(String(format: "%.1f", screenX + screenTextBoxWidth)), \(String(format: "%.1f", screenY + screenTextBoxHeight)))")
-                                print("   Width: \(String(format: "%.1f", screenTextBoxWidth)), Height: \(String(format: "%.1f", screenTextBoxHeight))")
-                            }()
-
                             // Delete button (top-left corner)
                             let deleteButtonX = screenX - 12
                             let deleteButtonY = screenY - 12
-
-                            // 📊 LOG: Delete Button Position
-                            let _ = {
-                                let expectedCornerX = screenX
-                                let expectedCornerY = screenY
-                                let deltaX = deleteButtonX - (expectedCornerX - 12)
-                                let deltaY = deleteButtonY - (expectedCornerY - 12)
-                                print("🔴 DELETE BUTTON (Top-Left with -12 offset):")
-                                print("   Button at: (\(String(format: "%.1f", deleteButtonX)), \(String(format: "%.1f", deleteButtonY)))")
-                                print("   Expected (top-left - 12): (\(String(format: "%.1f", expectedCornerX - 12)), \(String(format: "%.1f", expectedCornerY - 12)))")
-                                print("   Delta: (\(String(format: "%.1f", deltaX)), \(String(format: "%.1f", deltaY))) - \(deltaX == 0 && deltaY == 0 ? "✅ PERFECT" : "❌ DRIFTING")")
-                                print("")
-                            }()
 
                             Button(action: {
                                 photo.annotations.remove(at: selectedIndex)
@@ -693,29 +640,17 @@ struct PhotoAnnotationEditor: View {
                             let widthHandleX = screenX + screenTextBoxWidth
                             let widthHandleY = screenY + screenTextBoxHeight/2
 
-                            // 📊 LOG: Width Handle Position
-                            let _ = {
-                                let expectedCornerX = screenX + screenTextBoxWidth
-                                let expectedCornerY = screenY + screenTextBoxHeight/2
-                                let deltaX = widthHandleX - expectedCornerX
-                                let deltaY = widthHandleY - expectedCornerY
-                                print("🟢 WIDTH HANDLE (Middle-Right):")
-                                print("   Handle at: (\(String(format: "%.1f", widthHandleX)), \(String(format: "%.1f", widthHandleY)))")
-                                print("   Expected (middle-right edge): (\(String(format: "%.1f", expectedCornerX)), \(String(format: "%.1f", expectedCornerY)))")
-                                print("   Delta: (\(String(format: "%.1f", deltaX)), \(String(format: "%.1f", deltaY))) - \(deltaX == 0 && deltaY == 0 ? "✅ PERFECT" : "❌ DRIFTING")")
-                            }()
-
                             Circle()
                                 .fill(Color.green)
                                 .frame(width: 20, height: 20)
+                                .contentShape(Rectangle().size(width: 50, height: 50))  // Larger hit area - use Rectangle for better tap detection
                                 .position(x: widthHandleX, y: widthHandleY)
                                 .offset(
                                     x: isDraggingWidthHandle ? widthResizeDragLocation.x - initialWidthHandlePosition.x : 0,
                                     y: isDraggingWidthHandle ? widthResizeDragLocation.y - initialWidthHandlePosition.y : 0
                                 )
-                                .id("width-handle-\(selectedIndex)-\(isDraggingWidthHandle)")
-                                .gesture(
-                                    DragGesture()
+                                .gesture(  // Remove .highPriorityGesture - just use regular .gesture
+                                    DragGesture(minimumDistance: 1)  // Reduced from 0 to 1 for better detection
                                         .onChanged { value in
                                             if !isDraggingWidthHandle {
                                                 isDraggingWidthHandle = true
@@ -837,33 +772,21 @@ struct PhotoAnnotationEditor: View {
                                 )
 
                             // Bottom-right corner resize handle (for font size)
-                            // Position AT the corner of the text box, not offset
+                            // Recalculate position based on CURRENT height
                             let fontHandleX = screenX + screenTextBoxWidth
-                            let fontHandleY = screenY + screenTextBoxHeight
-
-                            // 📊 LOG: Font Handle Position
-                            let _ = {
-                                let expectedCornerX = screenX + screenTextBoxWidth
-                                let expectedCornerY = screenY + screenTextBoxHeight
-                                let deltaX = fontHandleX - expectedCornerX
-                                let deltaY = fontHandleY - expectedCornerY
-                                print("🔵 FONT HANDLE (Bottom-Right):")
-                                print("   Handle at: (\(String(format: "%.1f", fontHandleX)), \(String(format: "%.1f", fontHandleY)))")
-                                print("   Expected (bottom-right corner): (\(String(format: "%.1f", expectedCornerX)), \(String(format: "%.1f", expectedCornerY)))")
-                                print("   Delta: (\(String(format: "%.1f", deltaX)), \(String(format: "%.1f", deltaY))) - \(deltaX == 0 && deltaY == 0 ? "✅ PERFECT" : "❌ DRIFTING")")
-                            }()
+                            let fontHandleY = screenY + screenTextBoxHeight  // This now updates with font size changes
 
                             Circle()
                                 .fill(Color.blue)
                                 .frame(width: 20, height: 20)
+                                .contentShape(Rectangle().size(width: 50, height: 50))  // Larger hit area - use Rectangle for better tap detection
                                 .position(x: fontHandleX, y: fontHandleY)
                                 .offset(
                                     x: isDraggingFontHandle ? fontResizeDragLocation.x - initialFontHandlePosition.x : 0,
                                     y: isDraggingFontHandle ? fontResizeDragLocation.y - initialFontHandlePosition.y : 0
                                 )
-                                .id("font-handle-\(selectedIndex)-\(isDraggingFontHandle)")
-                                .gesture(
-                                    DragGesture()
+                                .gesture(  // Remove .highPriorityGesture - just use regular .gesture
+                                    DragGesture(minimumDistance: 1)  // Reduced from 0 to 1 for better detection
                                         .onChanged { value in
                                             if !isDraggingFontHandle {
                                                 isDraggingFontHandle = true
@@ -889,14 +812,15 @@ struct PhotoAnnotationEditor: View {
                                             // Use diagonal distance for more intuitive resizing
                                             // Positive diagonal = bigger, negative = smaller
                                             let diagonalDelta = (value.translation.width + value.translation.height) / 2.0
-                                            
-                                            // Convert screen space delta to image space delta
-                                            // When user drags 100 screen pixels, we want proportional change in image space
-                                            let imageSpaceDelta = diagonalDelta / scale
-                                            
+
+                                            // Convert screen space delta to image space delta with sensitivity adjustment
+                                            // Sensitivity: Lower = slower resize, Higher = faster resize
+                                            let sensitivity: CGFloat = 0.3  // 30% of the calculated change for smoother control
+                                            let imageSpaceDelta = (diagonalDelta / scale) * sensitivity
+
                                             // Calculate new font size in IMAGE space
                                             let calculatedNewSize = baseFontSize + imageSpaceDelta
-                                            let clampedNewSize = max(12, min(800, calculatedNewSize))  // Max 800pt in image space = ~107pt on screen at 0.134 scale
+                                            let clampedNewSize = max(12, min(800, calculatedNewSize))  // Allow large text in image space
 
                                             print("🔵 FONT RESIZE")
                                             print("   � Translation: (w: \(String(format: "%.1f", value.translation.width)), h: \(String(format: "%.1f", value.translation.height)))")
@@ -907,22 +831,23 @@ struct PhotoAnnotationEditor: View {
 
                                             // Update the annotation directly for immediate visual feedback
                                             photo.annotations[selectedIndex].fontSize = clampedNewSize
-                                            
+
                                             print("   ✅ Updated fontSize to: \(String(format: "%.1f", clampedNewSize))")
                                         }
                                         .onEnded { value in
                                             isDraggingFontHandle = false
                                             print("🔵 FONT RESIZE ENDED")
-                                            
-                                            // Calculate final size using same logic
+
+                                            // Calculate final size using same logic with sensitivity
                                             let diagonalDelta = (value.translation.width + value.translation.height) / 2.0
-                                            let imageSpaceDelta = diagonalDelta / scale
+                                            let sensitivity: CGFloat = 0.3
+                                            let imageSpaceDelta = (diagonalDelta / scale) * sensitivity
                                             let finalSize = max(12, min(800, baseFontSize + imageSpaceDelta))
-                                            
+
                                             // Commit the final size
                                             photo.annotations[selectedIndex].fontSize = finalSize
                                             baseFontSize = finalSize
-                                            
+
                                             print("   ✅ Final fontSize committed: \(String(format: "%.1f", finalSize)) (IMAGE space)")
                                         }
                                 )
