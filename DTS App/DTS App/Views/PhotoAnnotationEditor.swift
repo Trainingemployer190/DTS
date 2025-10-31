@@ -36,6 +36,11 @@ struct PhotoAnnotationEditor: View {
     @State private var widthResizeDragLocation: CGPoint = .zero
     @State private var initialWidthHandlePosition: CGPoint = .zero
     @State private var initialFontHandlePosition: CGPoint = .zero
+    
+    // Arrow selection states
+    @State private var selectedArrowAnnotationIndex: Int? = nil
+    @State private var isDraggingArrowStart: Bool = false
+    @State private var isDraggingArrowEnd: Bool = false
 
     // MARK: - Helper Functions
 
@@ -70,7 +75,9 @@ struct PhotoAnnotationEditor: View {
     private func drawAnnotation(_ annotation: PhotoAnnotation, in context: inout GraphicsContext, scale: CGFloat, offset: CGPoint, isSelected: Bool = false) {
         let scaledPoints = annotation.points.map { CGPoint(x: $0.x * scale + offset.x, y: $0.y * scale + offset.y) }
         let color = Color(hex: annotation.color) ?? .red
-        let lineWidth = isSelected ? annotation.size * 1.5 : annotation.size
+        // Scale stroke width from image space to screen space
+        let scaledLineWidth = annotation.size * scale
+        let lineWidth = isSelected ? scaledLineWidth * 1.5 : scaledLineWidth
 
         var path = Path()
 
@@ -88,9 +95,9 @@ struct PhotoAnnotationEditor: View {
                 path.move(to: start)
                 path.addLine(to: end)
 
-                // Arrow head
+                // Arrow head - scale proportionally to line width
                 let angle = atan2(end.y - start.y, end.x - start.x)
-                let arrowLength: CGFloat = 15
+                let arrowLength: CGFloat = max(15, scaledLineWidth * 5)  // Scale with line width
                 let arrowAngle: CGFloat = .pi / 6
 
                 let point1 = CGPoint(
@@ -256,9 +263,13 @@ struct PhotoAnnotationEditor: View {
     private func canvasDragGesture(geometry: GeometryProxy, image: UIImage) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
+                if pressStartTime == nil {
+                    print("👆 CANVAS TAP STARTED at \(value.location)")
+                }
                 handleCanvasDragChanged(value, geometry: geometry, image: image)
             }
             .onEnded { value in
+                print("👆 CANVAS TAP ENDED at \(value.location)")
                 handleCanvasDragEnded(value, geometry: geometry, image: image)
             }
     }
@@ -309,6 +320,13 @@ struct PhotoAnnotationEditor: View {
         if pressStartTime == nil {
             pressStartTime = Date()
             pressStartLocation = value.location
+            
+            // If an arrow is already selected, store its original state for dragging
+            if let selectedIndex = selectedArrowAnnotationIndex {
+                originalAnnotationPoints = photo.annotations[selectedIndex].points
+                originalAnnotationPosition = photo.annotations[selectedIndex].position
+                print("🎯 Starting drag on selected arrow \(selectedIndex) - stored \(originalAnnotationPoints.count) points")
+            }
 
             // Capture the size for the timer closure
             let containerSize = geometry.size
@@ -342,15 +360,15 @@ struct PhotoAnnotationEditor: View {
         if let startLoc = pressStartLocation {
             let distance = hypot(value.location.x - startLoc.x, value.location.y - startLoc.y)
             if distance >= 10 && !hasMoved {
-                print("🚶 MOVEMENT DETECTED - Distance: \(distance)px")
+                print("🚶 MOVEMENT DETECTED - Distance: \(String(format: "%.1f", distance))px from \(startLoc) to \(value.location)")
                 hasMoved = true
             }
         }
 
         // Handle dragging
         if hasMoved {
-            if selectedAnnotationIndex != nil {
-                // Move selected annotation
+            if selectedAnnotationIndex != nil || selectedArrowAnnotationIndex != nil {
+                // Move selected annotation (either old system or arrow)
                 handleAnnotationDrag(value, in: geometry.size)
             } else {
                 // Draw new annotation
@@ -361,16 +379,22 @@ struct PhotoAnnotationEditor: View {
 
     private func handleCanvasDragEnded(_ value: DragGesture.Value, geometry: GeometryProxy, image: UIImage) {
         print("🏁 GESTURE ENDED - Tool: \(selectedTool), Moved: \(hasMoved)")
+        print("   📍 Tap location: \(value.location)")
+        print("   🎯 Current selections - Arrow: \(selectedArrowAnnotationIndex?.description ?? "nil"), Text: \(selectedTextAnnotationIndex?.description ?? "nil")")
 
-        // Check for text annotation tap FIRST, regardless of selected tool (if didn't move)
+        // Get hit detection info for all annotation types first
+        let imageSize = calculateImageSize(for: image, in: geometry.size)
+        print("   📐 Image size: \(imageSize), Container size: \(geometry.size)")
+        
+        let tappedTextIndex = findTextAnnotationAtScreenPoint(screenPoint: value.location, containerSize: geometry.size, imageSize: imageSize, image: image)
+        let tappedArrowIndex = findArrowAnnotationAtScreenPoint(screenPoint: value.location, containerSize: geometry.size, imageSize: imageSize, image: image)
+        
+        print("   🔍 Hit detection - Text index: \(tappedTextIndex?.description ?? "nil"), Arrow index: \(tappedArrowIndex?.description ?? "nil")")
+
+        // Check for tap (not drag) interactions
         if !hasMoved {
-            let imageSize = calculateImageSize(for: image, in: geometry.size)
-
-            // Check if tapped on existing text annotation (in screen space for accurate hit detection)
-            let tappedTextIndex = findTextAnnotationAtScreenPoint(screenPoint: value.location, containerSize: geometry.size, imageSize: imageSize, image: image)
-
+            // Handle text annotation tap
             if let index = tappedTextIndex {
-                // User tapped on text annotation - handle it regardless of current tool
                 print("🔍 Found text at index: \(index) - handling text tap")
 
                 if selectedTextAnnotationIndex == index {
@@ -383,6 +407,7 @@ struct PhotoAnnotationEditor: View {
                     // Select it
                     print("🎯 SELECTING text at index \(index)")
                     selectedTextAnnotationIndex = index
+                    selectedArrowAnnotationIndex = nil  // Deselect arrow if selected
                     editingTextAnnotationIndex = nil
 
                     // Initialize base values for resizing
@@ -398,58 +423,76 @@ struct PhotoAnnotationEditor: View {
                 hasMoved = false
                 return
             }
-        }
+            
+            // Handle arrow annotation tap
+            if let index = tappedArrowIndex {
+                print("🏹 Found arrow at index: \(index) - handling arrow tap")
+                
+                if selectedArrowAnnotationIndex == index {
+                    // Already selected - deselect it
+                    print("❌ DESELECTING arrow at index \(index)")
+                    selectedArrowAnnotationIndex = nil
+                } else {
+                    // Select it
+                    print("🎯 SELECTING arrow at index \(index)")
+                    selectedArrowAnnotationIndex = index
+                    selectedTextAnnotationIndex = nil  // Deselect text if selected
+                    editingTextAnnotationIndex = nil
+                    
+                    // Store original points and position for drag operations
+                    originalAnnotationPoints = photo.annotations[index].points
+                    originalAnnotationPosition = photo.annotations[index].position
+                    print("   📦 Stored original points for dragging: \(originalAnnotationPoints.count) points")
+                }
+                
+                // Don't clear press tracking - user might want to drag immediately
+                // pressStartTime = nil
+                // pressStartLocation = nil
+                pressStartTime = nil  // Clear time but keep location for potential drag
+                hasMoved = false
+                return
+            }
 
-        // Handle text tool tap for creating new text (if didn't move)
-        if selectedTool == .text && !hasMoved {
-            print("✅ TEXT TAP DETECTED")
-            let imageSize = calculateImageSize(for: image, in: geometry.size)
-            print("📐 Screen tap: \(value.location), Container size: \(geometry.size), Image size: \(imageSize)")
+        // Priority 3: Handle text tool tap for creating new text (only if text tool is active)
+        if selectedTool == .text && tappedTextIndex == nil && tappedArrowIndex == nil {
+            print("✅ TEXT TAP DETECTED on empty space with text tool")
             let imagePoint = convertToImageCoordinates(value.location, in: geometry.size, imageSize: imageSize, image: image)
             print("📍 Converted to image coordinates: \(imagePoint)")
 
-            // Tapped outside any text - deselect or create new
-            if selectedTextAnnotationIndex != nil {
-                // Deselect
-                print("❌ DESELECTING text")
-                selectedTextAnnotationIndex = nil
-                editingTextAnnotationIndex = nil
-            } else {
-                // Create new text annotation
-                print("✨ CREATING NEW TEXT annotation")
+            // Create new text annotation
+            print("✨ CREATING NEW TEXT annotation")
 
-                // We want text to be ~20pt on screen for readability
-                let targetScreenFontSize: CGFloat = 20.0
-                let scale = imageSize.width / image.size.width
-                let imageSpaceFontSize = targetScreenFontSize / scale
+            // We want text to be ~20pt on screen for readability
+            let targetScreenFontSize: CGFloat = 20.0
+            let scale = imageSize.width / image.size.width
+            let imageSpaceFontSize = targetScreenFontSize / scale
 
-                // Calculate width needed for "Text" at screen size, then convert to image space
-                let actualScreenWidth = calculateTextWidth(text: "Text", fontSize: targetScreenFontSize)
-                let imageSpaceWidth = actualScreenWidth / scale
+            // Calculate width needed for "Text" at screen size, then convert to image space
+            let actualScreenWidth = calculateTextWidth(text: "Text", fontSize: targetScreenFontSize)
+            let imageSpaceWidth = actualScreenWidth / scale
 
-                let newAnnotation = PhotoAnnotation(
-                    id: UUID(),
-                    type: .text,
-                    points: [],
-                    text: "Text",
-                    color: selectedColor.toHex(),
-                    position: imagePoint,
-                    size: strokeWidth,
-                    fontSize: imageSpaceFontSize,
-                    textBoxWidth: imageSpaceWidth
-                )
-                photo.annotations.append(newAnnotation)
-                selectedTextAnnotationIndex = photo.annotations.count - 1
-                editingTextAnnotationIndex = nil
+            let newAnnotation = PhotoAnnotation(
+                id: UUID(),
+                type: .text,
+                points: [],
+                text: "Text",
+                color: selectedColor.toHex(),
+                position: imagePoint,
+                size: strokeWidth,
+                fontSize: imageSpaceFontSize,
+                textBoxWidth: imageSpaceWidth
+            )
+            photo.annotations.append(newAnnotation)
+            selectedTextAnnotationIndex = photo.annotations.count - 1
+            selectedArrowAnnotationIndex = nil  // Deselect any arrow
+            editingTextAnnotationIndex = nil
 
-                // Initialize base values for new text
-                let newScale = imageSize.width / image.size.width
-                baseWidth = imageSpaceWidth * newScale
-                baseFontSize = imageSpaceFontSize
-                baseFontSize = 20.0
-                print("   - New text at index: \(selectedTextAnnotationIndex?.description ?? "nil")")
-                print("   📏 Base values initialized: imageWidth=\(imageSpaceWidth) → screenWidth=\(baseWidth), fontSize=\(baseFontSize)")
-            }
+            // Initialize base values for new text
+            let newScale = imageSize.width / image.size.width
+            baseWidth = imageSpaceWidth * newScale
+            baseFontSize = imageSpaceFontSize
+            print("   - New text at index: \(selectedTextAnnotationIndex?.description ?? "nil")")
+            print("   📏 Base values initialized: imageWidth=\(imageSpaceWidth) → screenWidth=\(baseWidth), fontSize=\(baseFontSize)")
 
             pressStartTime = nil
             pressStartLocation = nil
@@ -457,20 +500,67 @@ struct PhotoAnnotationEditor: View {
             return
         }
 
-        // Reset state
+        // Priority 4: If we tapped on empty space (no annotations hit), deselect everything
+        // This ONLY happens if nothing was tapped (no text, no arrow)
+        // This includes taps outside the image bounds
+        if tappedTextIndex == nil && tappedArrowIndex == nil {
+            print("   ✅ Empty space tap detected - checking for deselections...")
+            
+            var deselected = false
+            
+            if selectedArrowAnnotationIndex != nil {
+                print("      ❌ DESELECTING arrow (was at index \(selectedArrowAnnotationIndex!))")
+                selectedArrowAnnotationIndex = nil
+                deselected = true
+            }
+            
+            if selectedTextAnnotationIndex != nil {
+                print("      ❌ DESELECTING text (was at index \(selectedTextAnnotationIndex!))")
+                selectedTextAnnotationIndex = nil
+                editingTextAnnotationIndex = nil
+                deselected = true
+            }
+            
+            if !deselected {
+                print("      ℹ️ Nothing was selected to deselect")
+            } else {
+                print("      ✅ Deselection complete")
+            }
+        } else {
+            print("   ℹ️ Tapped on an annotation - not deselecting")
+        }
+        
+    } else {
+        // Had movement - this was a drag operation
+        print("   ℹ️ Gesture had movement (hasMoved=true)")
+        
+        // Handle annotation dragging completion
         if selectedAnnotationIndex != nil {
             selectedAnnotationIndex = nil
             originalAnnotationPoints = []
             originalAnnotationPosition = .zero
-        } else if hasMoved {
+            print("   ✅ Finished moving annotation")
+        } else if currentAnnotation != nil {
+            // Just finished drawing a new annotation
             handleDragEnded(value, in: geometry.size)
+            print("   🔍 Checking for deselection after draw operation...")
+            
+            // After drawing, check if we should deselect anything
+            // This ensures clean state after drawing
+            if selectedArrowAnnotationIndex != nil || selectedTextAnnotationIndex != nil {
+                print("      🧹 Clearing selections after draw")
+                selectedArrowAnnotationIndex = nil
+                selectedTextAnnotationIndex = nil
+                editingTextAnnotationIndex = nil
+            }
         }
-        pressStartTime = nil
-        pressStartLocation = nil
-        hasMoved = false
     }
-
-    // MARK: - Toolbar View
+    
+    // Always reset gesture tracking state
+    pressStartTime = nil
+    pressStartLocation = nil
+    hasMoved = false
+}    // MARK: - Toolbar View
     @ViewBuilder
     private var toolbarView: some View {
         HStack {
@@ -606,7 +696,8 @@ struct PhotoAnnotationEditor: View {
                 let _ = print("🔍 OVERLAY EVALUATION - selectedIndex: \(selectedTextAnnotationIndex?.description ?? "nil"), editingIndex: \(editingTextAnnotationIndex?.description ?? "nil")")
 
                 GeometryReader { geometry in
-                    if let image = UIImage(contentsOfFile: photo.fileURL) {
+                    ZStack {
+                        if let image = UIImage(contentsOfFile: photo.fileURL) {
                         let imageSize = calculateImageSize(for: image, in: geometry.size)
                         let scale = imageSize.width / image.size.width
                         let xOffset = (geometry.size.width - imageSize.width) / 2
@@ -645,6 +736,7 @@ struct PhotoAnnotationEditor: View {
                                     .foregroundColor(.blue)
                                     .frame(width: screenTextBoxWidth, height: screenTextBoxHeight)
                                     .position(x: screenX + screenTextBoxWidth/2, y: screenY + screenTextBoxHeight/2)
+                                    .allowsHitTesting(false)  // Border should not capture hits
 
                                 // Delete button (top-left corner)
                                 // Clamp to stay within screen bounds (with 30px margin)
@@ -662,6 +754,7 @@ struct PhotoAnnotationEditor: View {
                                         .foregroundColor(.red)
                                         .background(Circle().fill(Color.white))
                                 }
+                                .allowsHitTesting(true)  // Override parent to capture hits
                                 .position(x: deleteButtonX, y: deleteButtonY)
 
                                 // Right edge resize handle (middle-right for width adjustment)
@@ -675,6 +768,7 @@ struct PhotoAnnotationEditor: View {
                                     .fill(Color.green)
                                     .frame(width: 20, height: 20)
                                     .contentShape(Rectangle().size(width: 50, height: 40))
+                                    .allowsHitTesting(true)  // Override parent to capture hits
                                     .position(x: widthHandleX, y: widthHandleY)
                                 .gesture(
                                     DragGesture(minimumDistance: 1)
@@ -728,6 +822,7 @@ struct PhotoAnnotationEditor: View {
                                     .fill(Color.blue)
                                     .frame(width: 20, height: 20)
                                     .contentShape(Rectangle().size(width: 50, height: 50))  // Larger hit area - use Rectangle for better tap detection
+                                    .allowsHitTesting(true)  // Override parent to capture hits
                                     .position(x: fontHandleX, y: fontHandleY)
                                     .offset(
                                         x: isDraggingFontHandle ? fontResizeDragLocation.x - initialFontHandlePosition.x : 0,
@@ -933,9 +1028,135 @@ struct PhotoAnnotationEditor: View {
                                 }
                             }
                         }
+                        
+                        // Show selection handles for selected arrow
+                        if let selectedIndex = selectedArrowAnnotationIndex,
+                           selectedIndex < photo.annotations.count,
+                           photo.annotations[selectedIndex].type == .arrow,
+                           photo.annotations[selectedIndex].points.count >= 2 {
+                            let _ = print("🏹 RENDERING ARROW SELECTION HANDLES for index \(selectedIndex)")
+                            let annotation = photo.annotations[selectedIndex]
+                            
+                            let start = annotation.points[0]
+                            let end = annotation.points[annotation.points.count - 1]
+                            
+                            // Convert to screen coordinates
+                            let screenStartX = start.x * scale + xOffset
+                            let screenStartY = start.y * scale + yOffset
+                            let screenEndX = end.x * scale + xOffset
+                            let screenEndY = end.y * scale + yOffset
+                            
+                            // Calculate midpoint for delete button
+                            let midX = (screenStartX + screenEndX) / 2
+                            let midY = (screenStartY + screenEndY) / 2
+                            
+                            ZStack {
+                                // Transparent background that doesn't capture hits
+                                Color.clear
+                                    .allowsHitTesting(false)
+                                
+                                // Start point handle (green circle)
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 24, height: 24)
+                                    .position(x: screenStartX, y: screenStartY)
+                                    .contentShape(Circle())
+                                    .allowsHitTesting(true)  // Override parent to capture hits
+                                    .gesture(
+                                        DragGesture(minimumDistance: 1)
+                                            .onChanged { value in
+                                                print("🟢 START HANDLE DRAG at \(value.location)")
+                                                if !isDraggingArrowStart {
+                                                    isDraggingArrowStart = true
+                                                    print("🟢 START POINT DRAG STARTED")
+                                                }
+                                                
+                                                // Convert screen drag to image coordinates
+                                                let screenPoint = value.location
+                                                let imagePoint = convertToImageCoordinates(
+                                                    screenPoint,
+                                                    in: geometry.size,
+                                                    imageSize: imageSize,
+                                                    image: image
+                                                )
+                                                
+                                                // Update start point while keeping end point
+                                                var newPoints = photo.annotations[selectedIndex].points
+                                                newPoints[0] = imagePoint
+                                                photo.annotations[selectedIndex].points = newPoints
+                                            }
+                                            .onEnded { _ in
+                                                isDraggingArrowStart = false
+                                                print("🟢 START POINT DRAG ENDED")
+                                            }
+                                    )
+                                
+                                // End point handle (blue circle)
+                                Circle()
+                                    .fill(Color.blue)
+                                    .frame(width: 24, height: 24)
+                                    .position(x: screenEndX, y: screenEndY)
+                                    .contentShape(Circle())
+                                    .allowsHitTesting(true)  // Override parent to capture hits
+                                    .gesture(
+                                        DragGesture(minimumDistance: 1)
+                                            .onChanged { value in
+                                                print("🔵 END HANDLE DRAG at \(value.location)")
+                                                if !isDraggingArrowEnd {
+                                                    isDraggingArrowEnd = true
+                                                    print("🔵 END POINT DRAG STARTED")
+                                                }
+                                                
+                                                // Convert screen drag to image coordinates
+                                                let screenPoint = value.location
+                                                let imagePoint = convertToImageCoordinates(
+                                                    screenPoint,
+                                                    in: geometry.size,
+                                                    imageSize: imageSize,
+                                                    image: image
+                                                )
+                                                
+                                                // Update end point while keeping start point
+                                                var newPoints = photo.annotations[selectedIndex].points
+                                                newPoints[newPoints.count - 1] = imagePoint
+                                                photo.annotations[selectedIndex].points = newPoints
+                                            }
+                                            .onEnded { _ in
+                                                isDraggingArrowEnd = false
+                                                print("🔵 END POINT DRAG ENDED")
+                                            }
+                                    )
+                                
+                                // Delete button (red circle at midpoint - already calculated above)
+                                Button(action: {
+                                    photo.annotations.remove(at: selectedIndex)
+                                    selectedArrowAnnotationIndex = nil
+                                }) {
+                                    Image(systemName: "trash.circle.fill")
+                                        .font(.system(size: 28))
+                                        .foregroundColor(.red)
+                                        .background(Circle().fill(Color.white))
+                                }
+                                .allowsHitTesting(true)  // Override parent to capture hits
+                                .position(x: midX, y: midY)
+                            }
+                        }
+                    }
+                    } // End ZStack in GeometryReader
+                }
+                .onTapGesture { location in
+                    // When tapping in the overlay but not on any interactive element, deselect
+                    print("📱 OVERLAY TAP at \(location)")
+                    if selectedArrowAnnotationIndex != nil {
+                        print("   ❌ Deselecting arrow from overlay tap")
+                        selectedArrowAnnotationIndex = nil
+                    }
+                    if selectedTextAnnotationIndex != nil {
+                        print("   ❌ Deselecting text from overlay tap")
+                        selectedTextAnnotationIndex = nil
+                        editingTextAnnotationIndex = nil
                     }
                 }
-                .allowsHitTesting(true)
             }
         }
     }
@@ -946,9 +1167,13 @@ struct PhotoAnnotationEditor: View {
         guard let image = UIImage(contentsOfFile: photo.fileURL) else { return }
 
         let imageSize = calculateImageSize(for: image, in: size)
+        let scale = imageSize.width / image.size.width
         let point = convertToImageCoordinates(value.location, in: size, imageSize: imageSize, image: image)
 
         if currentAnnotation == nil {
+            // Convert stroke width from screen space to image space
+            let imageSpaceStrokeWidth = strokeWidth / scale
+            
             // Start new annotation
             currentAnnotation = PhotoAnnotation(
                 type: selectedTool.toAnnotationType(),
@@ -956,7 +1181,7 @@ struct PhotoAnnotationEditor: View {
                 text: nil,
                 color: selectedColor.toHex(),
                 position: point,
-                size: strokeWidth
+                size: imageSpaceStrokeWidth  // Store in image space
             )
         } else {
             // Update current annotation
@@ -972,7 +1197,9 @@ struct PhotoAnnotationEditor: View {
     }
 
     private func handleAnnotationDrag(_ value: DragGesture.Value, in containerSize: CGSize) {
-        guard let index = selectedAnnotationIndex, let image = UIImage(contentsOfFile: photo.fileURL) else { return }
+        // Support both old selection system and new arrow selection system
+        let index = selectedAnnotationIndex ?? selectedArrowAnnotationIndex
+        guard let index = index, let image = UIImage(contentsOfFile: photo.fileURL) else { return }
 
         let imageSize = calculateImageSize(for: image, in: containerSize)
         let currentPoint = convertToImageCoordinates(value.location, in: containerSize, imageSize: imageSize, image: image)
@@ -1234,16 +1461,80 @@ struct PhotoAnnotationEditor: View {
         let dx = end.x - start.x
         let dy = end.y - start.y
         let lengthSquared = dx * dx + dy * dy
-
-        if lengthSquared == 0 {
+        
+        // If start and end are the same point (with small epsilon for floating point comparison)
+        if lengthSquared < 0.001 {
             return hypot(point.x - start.x, point.y - start.y)
         }
-
+        
+        // Calculate the parameter t that represents the closest point on the line segment
         let t = max(0, min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared))
-        let projectionX = start.x + t * dx
-        let projectionY = start.y + t * dy
-
-        return hypot(point.x - projectionX, point.y - projectionY)
+        
+        // Find the closest point on the line segment
+        let closestPoint = CGPoint(
+            x: start.x + t * dx,
+            y: start.y + t * dy
+        )
+        
+        // Return the distance from the point to the closest point on the line segment
+        return hypot(point.x - closestPoint.x, point.y - closestPoint.y)
+    }
+    
+    private func findArrowAnnotationAtScreenPoint(screenPoint: CGPoint, containerSize: CGSize, imageSize: CGSize, image: UIImage) -> Int? {
+        print("🏹 findArrowAnnotationAtScreenPoint - screen point: \(screenPoint)")
+        
+        // Calculate scale and offset (same as rendering)
+        let scale = imageSize.width / image.size.width
+        let offset = CGPoint(
+            x: (containerSize.width - imageSize.width) / 2,
+            y: (containerSize.height - imageSize.height) / 2
+        )
+        
+        print("   Scale: \(scale), Offset: \(offset)")
+        
+        // First check if the tap point is even within the image bounds
+        let imageRect = CGRect(x: offset.x, y: offset.y, width: imageSize.width, height: imageSize.height)
+        if !imageRect.contains(screenPoint) {
+            print("   ❌ Tap is outside image bounds")
+            return nil
+        }
+        
+        // Check arrow annotations in reverse order (top-most first)
+        for (index, annotation) in photo.annotations.enumerated().reversed() {
+            guard annotation.type == .arrow else { continue }
+            guard annotation.points.count >= 2 else { continue }
+            
+            let start = annotation.points[0]
+            let end = annotation.points[annotation.points.count - 1]
+            
+            // Convert to screen coordinates
+            let screenStart = CGPoint(
+                x: start.x * scale + offset.x,
+                y: start.y * scale + offset.y
+            )
+            let screenEnd = CGPoint(
+                x: end.x * scale + offset.x,
+                y: end.y * scale + offset.y
+            )
+            
+            // Check if tap is near the arrow line
+            let distance = distanceToLineSegment(point: screenPoint, start: screenStart, end: screenEnd)
+            
+            // Use a balanced tolerance - easier to select but still reasonable
+            let strokeWidth = annotation.size * scale
+            let tolerance: CGFloat = max(12.0, min(20.0, strokeWidth * 2.5))  // Between 12-20 pixels
+            
+            print("   - Index \(index): arrow from \(screenStart) to \(screenEnd)")
+            print("     Distance to arrow: \(String(format: "%.2f", distance))px, tolerance: \(String(format: "%.1f", tolerance))px")
+            
+            if distance <= tolerance {
+                print("   ✅ HIT! Returning index \(index)")
+                return index
+            }
+        }
+        
+        print("   ❌ No arrow hit")
+        return nil
     }
 
     private func handleDragEnded(_ value: DragGesture.Value, in size: CGSize) {
@@ -1253,6 +1544,11 @@ struct PhotoAnnotationEditor: View {
 
         // Finalize annotation
         photo.annotations.append(annotation)
+        
+        // DON'T auto-select arrow after drawing - this causes confusion
+        // Let user explicitly tap to select
+        print("✅ Added new \(annotation.type) annotation at index \(photo.annotations.count - 1)")
+        
         currentAnnotation = nil
     }
 

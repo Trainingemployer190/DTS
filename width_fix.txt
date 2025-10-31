@@ -1,0 +1,19 @@
+SIMPLIFIED WIDTH RESIZE - Replace lines 666-755 with:
+
+                                            let screenDelta = value.translation.width
+                                            let imageDelta = screenDelta / scale
+                                            let newImageWidth = baseWidth + imageDelta
+                                            let clampedImageWidth = max(50, min(2000, newImageWidth))
+
+                                            photo.annotations[selectedIndex].textBoxWidth = clampedImageWidth
+                                            print("🟢 WIDTH: \(String(format: "%.1f", screenDelta))px screen -> \(String(format: "%.1f", clampedImageWidth)) stored")
+                                        }
+                                        .onEnded { value in
+                                            isDraggingWidthHandle = false
+                                            let screenDelta = value.translation.width
+                                            let imageDelta = screenDelta / scale
+                                            let finalWidth = max(50, min(2000, baseWidth + imageDelta))
+                                            photo.annotations[selectedIndex].textBoxWidth = finalWidth
+                                            baseWidth = finalWidth
+                                            print("🟢 WIDTH RESIZE ENDED - Final: \(String(format: "%.1f", finalWidth)) (IMAGE space)")
+                                        }

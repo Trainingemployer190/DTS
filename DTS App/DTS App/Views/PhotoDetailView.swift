@@ -226,8 +226,6 @@ struct PhotoDetailView: View {
         let renderer = UIGraphicsImageRenderer(size: targetSize, format: UIGraphicsImageRendererFormat.default())
 
         // Calculate scale for annotations
-        let displayWidth: CGFloat = 400
-        let annotationScale = targetSize.width / displayWidth
         let imageScale = targetSize.width / baseImage.size.width
 
         return renderer.image { context in
@@ -238,7 +236,8 @@ struct PhotoDetailView: View {
             for annotation in photo.annotations {
                 // Scale annotation coordinates to match resized image
                 let scaledAnnotation = scaleAnnotation(annotation, by: imageScale)
-                drawAnnotationOnContext(scaledAnnotation, in: context.cgContext, scale: annotationScale)
+                // Pass imageScale for arrowhead sizing (which needs to scale proportionally)
+                drawAnnotationOnContext(scaledAnnotation, in: context.cgContext, scale: imageScale)
             }
         }
     }
@@ -247,6 +246,16 @@ struct PhotoDetailView: View {
         var scaled = annotation
         scaled.points = annotation.points.map { CGPoint(x: $0.x * scale, y: $0.y * scale) }
         scaled.position = CGPoint(x: annotation.position.x * scale, y: annotation.position.y * scale)
+        // DO NOT scale size (stroke width) - it's already in the correct units
+        // Scale fontSize and textBoxWidth for text annotations
+        if annotation.type == .text {
+            if let fontSize = annotation.fontSize {
+                scaled.fontSize = fontSize * scale
+            }
+            if let textBoxWidth = annotation.textBoxWidth {
+                scaled.textBoxWidth = textBoxWidth * scale
+            }
+        }
         return scaled
     }
 
@@ -257,8 +266,7 @@ struct PhotoDetailView: View {
         context.setStrokeColor(color.cgColor)
         context.setFillColor(color.cgColor)
 
-        // Scale the stroke width proportionally to image size
-        // annotation.size is in screen points, scale it to match image resolution
+        // annotation.size is in image space, scale it to target image size
         let lineWidth = annotation.size * scale
 
         context.setLineWidth(lineWidth)
@@ -288,7 +296,7 @@ struct PhotoDetailView: View {
 
             // Draw arrowhead - scale proportionally to line width
             let angle = atan2(end.y - start.y, end.x - start.x)
-            let arrowLength: CGFloat = 15 * scale  // Scale arrowhead size
+            let arrowLength: CGFloat = max(15, lineWidth * 5)  // Scale with line width
             let arrowAngle: CGFloat = .pi / 6
 
             let point1 = CGPoint(
@@ -339,20 +347,65 @@ struct PhotoDetailView: View {
         case .text:
             // Draw text annotation
             if let text = annotation.text, !text.isEmpty {
-                let textSize = (annotation.fontSize ?? annotation.size) * scale
+                // fontSize is already scaled by scaleAnnotation(), don't scale again
+                let textSize = annotation.fontSize ?? annotation.size
                 let font = UIFont.boldSystemFont(ofSize: textSize)
                 let attributes: [NSAttributedString.Key: Any] = [
                     .font: font,
                     .foregroundColor: color
                 ]
 
-                let attributedString = NSAttributedString(string: text, attributes: attributes)
-                // Draw at annotation position (already in image coordinates)
-                attributedString.draw(at: annotation.position)
+                // Get text box width (already scaled)
+                let textBoxWidth = annotation.textBoxWidth ?? (textSize * 10)
+                
+                // Wrap text to match editor behavior
+                let wrappedLines = wrapText(text, width: textBoxWidth, fontSize: textSize)
+                
+                // Draw each line
+                var yOffset: CGFloat = 0
+                let lineHeight = textSize * 1.2
+                for line in wrappedLines {
+                    let attributedString = NSAttributedString(string: line, attributes: attributes)
+                    let linePosition = CGPoint(
+                        x: annotation.position.x,
+                        y: annotation.position.y + yOffset
+                    )
+                    attributedString.draw(at: linePosition)
+                    yOffset += lineHeight
+                }
             }
         }
 
         context.restoreGState()
+    }
+    
+    // Text wrapping helper for rendering
+    private func wrapText(_ text: String, width: CGFloat, fontSize: CGFloat) -> [String] {
+        let words = text.split(separator: " ").map(String.init)
+        var lines: [String] = []
+        var currentLine = ""
+
+        let approximateCharWidth = fontSize * 0.6
+        let maxCharsPerLine = Int(width / approximateCharWidth)
+
+        for word in words {
+            let testLine = currentLine.isEmpty ? word : currentLine + " " + word
+
+            if testLine.count <= maxCharsPerLine {
+                currentLine = testLine
+            } else {
+                if !currentLine.isEmpty {
+                    lines.append(currentLine)
+                }
+                currentLine = word
+            }
+        }
+
+        if !currentLine.isEmpty {
+            lines.append(currentLine)
+        }
+
+        return lines.isEmpty ? [text] : lines
     }
 
     private func deletePhoto() {
@@ -416,7 +469,8 @@ struct AnnotatedPhotoView: View {
     private func drawAnnotation(_ annotation: PhotoAnnotation, in context: inout GraphicsContext, scale: CGFloat, offset: CGPoint) {
         let scaledPoints = annotation.points.map { CGPoint(x: $0.x * scale + offset.x, y: $0.y * scale + offset.y) }
         let color = Color(hex: annotation.color) ?? .red
-        let lineWidth = annotation.size
+        // Scale stroke width from image space to screen space
+        let lineWidth = annotation.size * scale
 
         var path = Path()
 
@@ -434,9 +488,9 @@ struct AnnotatedPhotoView: View {
                 path.move(to: start)
                 path.addLine(to: end)
 
-                // Arrow head
+                // Arrow head - scale proportionally to line width
                 let angle = atan2(end.y - start.y, end.x - start.x)
-                let arrowLength: CGFloat = 15
+                let arrowLength: CGFloat = max(15, lineWidth * 5)  // Scale with line width
                 let arrowAngle: CGFloat = .pi / 6
 
                 let point1 = CGPoint(

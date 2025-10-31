@@ -170,7 +170,7 @@ class TextHandlerManager: ObservableObject {
 
         // Height estimate - for wrapped text, estimate based on text length
         // Most single-line text will have height around screenFontSize * 1.2
-        let text = annotation.text ?? "Text"
+        let _ = annotation.text ?? "Text"  // Variable not used, but kept for clarity
         let estimatedLineHeight = screenFontSize * 1.2
 
         // Better estimate: most text in this app is 1-2 lines, so default to 1 line
