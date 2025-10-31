@@ -1050,100 +1050,135 @@ struct PhotoAnnotationEditor: View {
                             let midX = (screenStartX + screenEndX) / 2
                             let midY = (screenStartY + screenEndY) / 2
                             
-                            ZStack {
-                                // Transparent background that doesn't capture hits
-                                Color.clear
-                                    .allowsHitTesting(false)
-                                
-                                // Start point handle (green circle)
-                                Circle()
-                                    .fill(Color.green)
-                                    .frame(width: 24, height: 24)
-                                    .position(x: screenStartX, y: screenStartY)
-                                    .contentShape(Circle())
-                                    .allowsHitTesting(true)  // Override parent to capture hits
-                                    .gesture(
-                                        DragGesture(minimumDistance: 1)
-                                            .onChanged { value in
-                                                print("🟢 START HANDLE DRAG at \(value.location)")
-                                                if !isDraggingArrowStart {
-                                                    isDraggingArrowStart = true
-                                                    print("🟢 START POINT DRAG STARTED")
-                                                }
-                                                
-                                                // Convert screen drag to image coordinates
-                                                let screenPoint = value.location
-                                                let imagePoint = convertToImageCoordinates(
-                                                    screenPoint,
-                                                    in: geometry.size,
-                                                    imageSize: imageSize,
-                                                    image: image
-                                                )
-                                                
-                                                // Update start point while keeping end point
-                                                var newPoints = photo.annotations[selectedIndex].points
-                                                newPoints[0] = imagePoint
-                                                photo.annotations[selectedIndex].points = newPoints
+                            // Start point handle (green circle) - moves entire arrow
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 24, height: 24)
+                                .contentShape(Circle())
+                                .position(x: screenStartX, y: screenStartY)
+                                .gesture(
+                                    DragGesture(coordinateSpace: .named("arrowCanvas"))
+                                        .onChanged { value in
+                                            print("🟢 GREEN HANDLE DRAG")
+                                            print("   👆 Touch location: \(value.location)")
+                                            print("   🎯 Green handle position: (\(screenStartX), \(screenStartY))")
+                                            print("   📏 Distance from green handle: \(hypot(value.location.x - screenStartX, value.location.y - screenStartY))")
+                                            
+                                            if !isDraggingArrowStart {
+                                                isDraggingArrowStart = true
+                                                // Store original points for relative movement
+                                                originalAnnotationPoints = photo.annotations[selectedIndex].points
+                                                originalAnnotationPosition = photo.annotations[selectedIndex].position
+                                                print("🟢 STARTED MOVING ENTIRE ARROW")
+                                                print("   📦 Stored \(originalAnnotationPoints.count) original points")
+                                                print("   📍 Original start: \(originalAnnotationPoints[0])")
+                                                print("   📍 Original end: \(originalAnnotationPoints[originalAnnotationPoints.count - 1])")
                                             }
-                                            .onEnded { _ in
-                                                isDraggingArrowStart = false
-                                                print("🟢 START POINT DRAG ENDED")
+                                            
+                                            // Calculate delta from start of drag in image coordinates
+                                            let currentPoint = convertToImageCoordinates(
+                                                value.location,
+                                                in: geometry.size,
+                                                imageSize: imageSize,
+                                                image: image
+                                            )
+                                            let startPoint = convertToImageCoordinates(
+                                                value.startLocation,
+                                                in: geometry.size,
+                                                imageSize: imageSize,
+                                                image: image
+                                            )
+                                            
+                                            let delta = CGPoint(
+                                                x: currentPoint.x - startPoint.x,
+                                                y: currentPoint.y - startPoint.y
+                                            )
+                                            
+                                            print("   🔄 Delta: (\(String(format: "%.1f", delta.x)), \(String(format: "%.1f", delta.y)))")
+                                            
+                                            // Move all points by the same delta
+                                            photo.annotations[selectedIndex].points = originalAnnotationPoints.map { point in
+                                                CGPoint(x: point.x + delta.x, y: point.y + delta.y)
                                             }
-                                    )
-                                
-                                // End point handle (blue circle)
-                                Circle()
-                                    .fill(Color.blue)
-                                    .frame(width: 24, height: 24)
-                                    .position(x: screenEndX, y: screenEndY)
-                                    .contentShape(Circle())
-                                    .allowsHitTesting(true)  // Override parent to capture hits
-                                    .gesture(
-                                        DragGesture(minimumDistance: 1)
-                                            .onChanged { value in
-                                                print("🔵 END HANDLE DRAG at \(value.location)")
-                                                if !isDraggingArrowEnd {
-                                                    isDraggingArrowEnd = true
-                                                    print("🔵 END POINT DRAG STARTED")
-                                                }
-                                                
-                                                // Convert screen drag to image coordinates
-                                                let screenPoint = value.location
-                                                let imagePoint = convertToImageCoordinates(
-                                                    screenPoint,
-                                                    in: geometry.size,
-                                                    imageSize: imageSize,
-                                                    image: image
-                                                )
-                                                
-                                                // Update end point while keeping start point
-                                                var newPoints = photo.annotations[selectedIndex].points
-                                                newPoints[newPoints.count - 1] = imagePoint
-                                                photo.annotations[selectedIndex].points = newPoints
+                                            
+                                            // Also move position if it exists
+                                            photo.annotations[selectedIndex].position = CGPoint(
+                                                x: originalAnnotationPosition.x + delta.x,
+                                                y: originalAnnotationPosition.y + delta.y
+                                            )
+                                            
+                                            print("   ✅ Moved arrow by delta")
+                                        }
+                                        .onEnded { _ in
+                                            isDraggingArrowStart = false
+                                            print("🟢 GREEN HANDLE - ARROW MOVE ENDED")
+                                        }
+                                )
+                            
+                            // End point handle (blue circle) - adjusts endpoint only
+                            Circle()
+                                .fill(Color.blue)
+                                .frame(width: 24, height: 24)
+                                .contentShape(Circle())
+                                .position(x: screenEndX, y: screenEndY)
+                                .gesture(
+                                    DragGesture(coordinateSpace: .named("arrowCanvas"))
+                                        .onChanged { value in
+                                            print("🔵 BLUE HANDLE DRAG")
+                                            print("   👆 Touch location: \(value.location)")
+                                            print("   🎯 Blue handle position: (\(screenEndX), \(screenEndY))")
+                                            print("   📏 Distance from blue handle: \(hypot(value.location.x - screenEndX, value.location.y - screenEndY))")
+                                            
+                                            if !isDraggingArrowEnd {
+                                                isDraggingArrowEnd = true
+                                                // Store original points to preserve start point
+                                                originalAnnotationPoints = photo.annotations[selectedIndex].points
+                                                print("🔵 STARTED ADJUSTING ENDPOINT")
+                                                print("   📦 Stored \(originalAnnotationPoints.count) original points")
+                                                print("   📍 Will preserve start: \(originalAnnotationPoints[0])")
+                                                print("   📍 Will modify end: \(originalAnnotationPoints[originalAnnotationPoints.count - 1])")
                                             }
-                                            .onEnded { _ in
-                                                isDraggingArrowEnd = false
-                                                print("🔵 END POINT DRAG ENDED")
-                                            }
-                                    )
-                                
-                                // Delete button (red circle at midpoint - already calculated above)
-                                Button(action: {
-                                    photo.annotations.remove(at: selectedIndex)
-                                    selectedArrowAnnotationIndex = nil
-                                }) {
-                                    Image(systemName: "trash.circle.fill")
-                                        .font(.system(size: 28))
-                                        .foregroundColor(.red)
-                                        .background(Circle().fill(Color.white))
-                                }
-                                .allowsHitTesting(true)  // Override parent to capture hits
-                                .position(x: midX, y: midY)
+                                            
+                                            // Convert screen drag to image coordinates
+                                            let screenPoint = value.location
+                                            let imagePoint = convertToImageCoordinates(
+                                                screenPoint,
+                                                in: geometry.size,
+                                                imageSize: imageSize,
+                                                image: image
+                                            )
+                                            
+                                            print("   📍 New endpoint (image coords): \(imagePoint)")
+                                            
+                                            // Update end point while keeping original start point
+                                            var newPoints = originalAnnotationPoints
+                                            newPoints[newPoints.count - 1] = imagePoint
+                                            photo.annotations[selectedIndex].points = newPoints
+                                            
+                                            print("   ✅ Updated endpoint, kept start at: \(newPoints[0])")
+                                        }
+                                        .onEnded { _ in
+                                            isDraggingArrowEnd = false
+                                            print("🔵 BLUE HANDLE - ENDPOINT ADJUST ENDED")
+                                        }
+                                )
+                            
+                            // Delete button (red circle at midpoint)
+                            Button(action: {
+                                photo.annotations.remove(at: selectedIndex)
+                                selectedArrowAnnotationIndex = nil
+                            }) {
+                                Image(systemName: "trash.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(.red)
+                                    .background(Circle().fill(Color.white))
                             }
+                            .position(x: midX, y: midY)
                         }
                     }
                     } // End ZStack in GeometryReader
                 }
+                .coordinateSpace(name: "arrowCanvas")
                 .onTapGesture { location in
                     // When tapping in the overlay but not on any interactive element, deselect
                     print("📱 OVERLAY TAP at \(location)")
