@@ -430,6 +430,12 @@ struct PhotoAnnotationEditor: View {
                     let localScale = imageSize.width / image.size.width
                     baseWidth = imageSpaceWidth * localScale
                     baseFontSize = photo.annotations[index].fontSize ?? 20.0
+                    
+                    // Update selectedColor to match the annotation's color
+                    if let color = Color(hex: photo.annotations[index].color) {
+                        selectedColor = color
+                    }
+                    
                     print("   📏 Base values initialized: imageWidth=\(imageSpaceWidth) → screenWidth=\(baseWidth), fontSize=\(baseFontSize)")
                 }
 
@@ -453,6 +459,11 @@ struct PhotoAnnotationEditor: View {
                     selectedArrowAnnotationIndex = index
                     selectedTextAnnotationIndex = nil  // Deselect text if selected
                     editingTextAnnotationIndex = nil
+                    
+                    // Update selectedColor to match the annotation's color
+                    if let color = Color(hex: photo.annotations[index].color) {
+                        selectedColor = color
+                    }
                     
                     // Don't store original points here - each handle will store them when dragging starts
                     print("   🎯 Arrow selected at index \(index)")
@@ -478,6 +489,11 @@ struct PhotoAnnotationEditor: View {
                     selectedTextAnnotationIndex = nil  // Deselect text if selected
                     selectedArrowAnnotationIndex = nil  // Deselect arrow if selected
                     editingTextAnnotationIndex = nil
+                    
+                    // Update selectedColor to match the annotation's color
+                    if let color = Color(hex: photo.annotations[index].color) {
+                        selectedColor = color
+                    }
                     
                     // Store original points and position for drag operations
                     originalAnnotationPoints = photo.annotations[index].points
@@ -506,6 +522,11 @@ struct PhotoAnnotationEditor: View {
                     selectedArrowAnnotationIndex = nil  // Deselect arrow if selected
                     selectedBoxAnnotationIndex = nil  // Deselect box if selected
                     editingTextAnnotationIndex = nil
+                    
+                    // Update selectedColor to match the annotation's color
+                    if let color = Color(hex: photo.annotations[index].color) {
+                        selectedColor = color
+                    }
                     
                     print("   ⭕ Circle selected at index \(index)")
                 }
@@ -728,6 +749,18 @@ struct PhotoAnnotationEditor: View {
                         ForEach([Color.red, .yellow, .green, .blue, .purple, .white, .black].filter { $0 != selectedColor }, id: \.self) { color in
                             Button(action: { 
                                 selectedColor = color
+                                
+                                // Update color of currently selected annotation
+                                if let index = selectedTextAnnotationIndex {
+                                    photo.annotations[index].color = color.toHex()
+                                } else if let index = selectedArrowAnnotationIndex {
+                                    photo.annotations[index].color = color.toHex()
+                                } else if let index = selectedBoxAnnotationIndex {
+                                    photo.annotations[index].color = color.toHex()
+                                } else if let index = selectedCircleAnnotationIndex {
+                                    photo.annotations[index].color = color.toHex()
+                                }
+                                
                                 withAnimation(.easeInOut(duration: 0.2)) {
                                     isColorPickerExpanded = false
                                 }
