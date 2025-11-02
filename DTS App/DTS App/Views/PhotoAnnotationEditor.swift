@@ -51,6 +51,9 @@ struct PhotoAnnotationEditor: View {
     @State private var selectedCircleAnnotationIndex: Int? = nil
     @State private var isDraggingCircleCenter: Bool = false
     @State private var isDraggingCircleEdge: Bool = false
+    
+    // Color picker dropdown state
+    @State private var isColorPickerExpanded: Bool = false
 
     // MARK: - Helper Functions
 
@@ -696,16 +699,49 @@ struct PhotoAnnotationEditor: View {
                     .frame(width: 30, height: 1)
                     .padding(.vertical, 4)
 
-                // Color picker
-                ForEach([Color.red, .yellow, .green, .blue, .purple, .white, .black], id: \.self) { color in
-                    Button(action: { selectedColor = color }) {
+                // Color picker dropdown
+                VStack(spacing: 8) {
+                    // Selected color button (always visible)
+                    Button(action: { 
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isColorPickerExpanded.toggle()
+                        }
+                    }) {
                         Circle()
-                            .fill(color)
+                            .fill(selectedColor)
                             .frame(width: 32, height: 32)
                             .overlay(
                                 Circle()
-                                    .strokeBorder(selectedColor == color ? Color.white : Color.white.opacity(0.2), lineWidth: selectedColor == color ? 2.5 : 1)
+                                    .strokeBorder(Color.white, lineWidth: 2.5)
                             )
+                            .overlay(
+                                // Small chevron indicator
+                                Image(systemName: isColorPickerExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .offset(y: 16)
+                            )
+                    }
+                    
+                    // Dropdown color options (shown when expanded)
+                    if isColorPickerExpanded {
+                        ForEach([Color.red, .yellow, .green, .blue, .purple, .white, .black].filter { $0 != selectedColor }, id: \.self) { color in
+                            Button(action: { 
+                                selectedColor = color
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    isColorPickerExpanded = false
+                                }
+                            }) {
+                                Circle()
+                                    .fill(color)
+                                    .frame(width: 32, height: 32)
+                                    .overlay(
+                                        Circle()
+                                            .strokeBorder(Color.white.opacity(0.4), lineWidth: 1)
+                                    )
+                            }
+                            .transition(.scale.combined(with: .opacity))
+                        }
                     }
                 }
 
