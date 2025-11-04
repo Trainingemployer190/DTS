@@ -36,22 +36,22 @@ struct PhotoAnnotationEditor: View {
     @State private var widthResizeDragLocation: CGPoint = .zero
     @State private var initialWidthHandlePosition: CGPoint = .zero
     @State private var initialFontHandlePosition: CGPoint = .zero
-    
+
     // Arrow selection states
     @State private var selectedArrowAnnotationIndex: Int? = nil
     @State private var isDraggingArrowStart: Bool = false
     @State private var isDraggingArrowEnd: Bool = false
-    
+
     // Box selection states
     @State private var selectedBoxAnnotationIndex: Int? = nil
     @State private var isDraggingBoxTopLeft: Bool = false
     @State private var isDraggingBoxBottomRight: Bool = false
-    
+
     // Circle selection states
     @State private var selectedCircleAnnotationIndex: Int? = nil
     @State private var isDraggingCircleCenter: Bool = false
     @State private var isDraggingCircleEdge: Bool = false
-    
+
     // Color picker dropdown state
     @State private var isColorPickerExpanded: Bool = false
 
@@ -333,7 +333,7 @@ struct PhotoAnnotationEditor: View {
         if pressStartTime == nil {
             pressStartTime = Date()
             pressStartLocation = value.location
-            
+
             // If an arrow is already selected, store its original state for dragging
             if let selectedIndex = selectedArrowAnnotationIndex {
                 originalAnnotationPoints = photo.annotations[selectedIndex].points
@@ -398,12 +398,12 @@ struct PhotoAnnotationEditor: View {
         // Get hit detection info for all annotation types first
         let imageSize = calculateImageSize(for: image, in: geometry.size)
         print("   📐 Image size: \(imageSize), Container size: \(geometry.size)")
-        
+
         let tappedTextIndex = findTextAnnotationAtScreenPoint(screenPoint: value.location, containerSize: geometry.size, imageSize: imageSize, image: image)
         let tappedArrowIndex = findArrowAnnotationAtScreenPoint(screenPoint: value.location, containerSize: geometry.size, imageSize: imageSize, image: image)
         let tappedBoxIndex = findBoxAnnotationAtScreenPoint(screenPoint: value.location, containerSize: geometry.size, imageSize: imageSize, image: image)
         let tappedCircleIndex = findCircleAnnotationAtScreenPoint(screenPoint: value.location, containerSize: geometry.size, imageSize: imageSize, image: image)
-        
+
         print("   🔍 Hit detection - Text index: \(tappedTextIndex?.description ?? "nil"), Arrow index: \(tappedArrowIndex?.description ?? "nil"), Box index: \(tappedBoxIndex?.description ?? "nil"), Circle index: \(tappedCircleIndex?.description ?? "nil")")
 
         // Check for tap (not drag) interactions
@@ -430,12 +430,12 @@ struct PhotoAnnotationEditor: View {
                     let localScale = imageSize.width / image.size.width
                     baseWidth = imageSpaceWidth * localScale
                     baseFontSize = photo.annotations[index].fontSize ?? 20.0
-                    
+
                     // Update selectedColor to match the annotation's color
                     if let color = Color(hex: photo.annotations[index].color) {
                         selectedColor = color
                     }
-                    
+
                     print("   📏 Base values initialized: imageWidth=\(imageSpaceWidth) → screenWidth=\(baseWidth), fontSize=\(baseFontSize)")
                 }
 
@@ -444,11 +444,11 @@ struct PhotoAnnotationEditor: View {
                 hasMoved = false
                 return
             }
-            
+
             // Handle arrow annotation tap
             if let index = tappedArrowIndex {
                 print("🏹 Found arrow at index: \(index) - handling arrow tap")
-                
+
                 if selectedArrowAnnotationIndex == index {
                     // Already selected - deselect it
                     print("❌ DESELECTING arrow at index \(index)")
@@ -459,25 +459,25 @@ struct PhotoAnnotationEditor: View {
                     selectedArrowAnnotationIndex = index
                     selectedTextAnnotationIndex = nil  // Deselect text if selected
                     editingTextAnnotationIndex = nil
-                    
+
                     // Update selectedColor to match the annotation's color
                     if let color = Color(hex: photo.annotations[index].color) {
                         selectedColor = color
                     }
-                    
+
                     // Don't store original points here - each handle will store them when dragging starts
                     print("   🎯 Arrow selected at index \(index)")
                 }
-                
+
                 pressStartTime = nil  // Clear time but keep location for potential drag
                 hasMoved = false
                 return
             }
-            
+
             // Handle box annotation tap
             if let index = tappedBoxIndex {
                 print("📦 Found box at index: \(index) - handling box tap")
-                
+
                 if selectedBoxAnnotationIndex == index {
                     // Already selected - deselect it
                     print("❌ DESELECTING box at index \(index)")
@@ -489,27 +489,27 @@ struct PhotoAnnotationEditor: View {
                     selectedTextAnnotationIndex = nil  // Deselect text if selected
                     selectedArrowAnnotationIndex = nil  // Deselect arrow if selected
                     editingTextAnnotationIndex = nil
-                    
+
                     // Update selectedColor to match the annotation's color
                     if let color = Color(hex: photo.annotations[index].color) {
                         selectedColor = color
                     }
-                    
+
                     // Store original points and position for drag operations
                     originalAnnotationPoints = photo.annotations[index].points
                     originalAnnotationPosition = photo.annotations[index].position
                     print("   📦 Stored original points for dragging: \(originalAnnotationPoints.count) points")
                 }
-                
+
                 pressStartTime = nil  // Clear time but keep location for potential drag
                 hasMoved = false
                 return
             }
-            
+
             // Handle circle annotation tap
             if let index = tappedCircleIndex {
                 print("⭕ Found circle at index: \(index) - handling circle tap")
-                
+
                 if selectedCircleAnnotationIndex == index {
                     // Already selected - deselect it
                     print("❌ DESELECTING circle at index \(index)")
@@ -522,15 +522,15 @@ struct PhotoAnnotationEditor: View {
                     selectedArrowAnnotationIndex = nil  // Deselect arrow if selected
                     selectedBoxAnnotationIndex = nil  // Deselect box if selected
                     editingTextAnnotationIndex = nil
-                    
+
                     // Update selectedColor to match the annotation's color
                     if let color = Color(hex: photo.annotations[index].color) {
                         selectedColor = color
                     }
-                    
+
                     print("   ⭕ Circle selected at index \(index)")
                 }
-                
+
                 pressStartTime = nil  // Clear time but keep location for potential drag
                 hasMoved = false
                 return
@@ -588,34 +588,34 @@ struct PhotoAnnotationEditor: View {
         // This includes taps outside the image bounds
         if tappedTextIndex == nil && tappedArrowIndex == nil && tappedBoxIndex == nil && tappedCircleIndex == nil {
             print("   ✅ Empty space tap detected - checking for deselections...")
-            
+
             var deselected = false
-            
+
             if selectedArrowAnnotationIndex != nil {
                 print("      ❌ DESELECTING arrow (was at index \(selectedArrowAnnotationIndex!))")
                 selectedArrowAnnotationIndex = nil
                 deselected = true
             }
-            
+
             if selectedBoxAnnotationIndex != nil {
                 print("      ❌ DESELECTING box (was at index \(selectedBoxAnnotationIndex!))")
                 selectedBoxAnnotationIndex = nil
                 deselected = true
             }
-            
+
             if selectedCircleAnnotationIndex != nil {
                 print("      ❌ DESELECTING circle (was at index \(selectedCircleAnnotationIndex!))")
                 selectedCircleAnnotationIndex = nil
                 deselected = true
             }
-            
+
             if selectedTextAnnotationIndex != nil {
                 print("      ❌ DESELECTING text (was at index \(selectedTextAnnotationIndex!))")
                 selectedTextAnnotationIndex = nil
                 editingTextAnnotationIndex = nil
                 deselected = true
             }
-            
+
             if !deselected {
                 print("      ℹ️ Nothing was selected to deselect")
             } else {
@@ -624,11 +624,11 @@ struct PhotoAnnotationEditor: View {
         } else {
             print("   ℹ️ Tapped on an annotation - not deselecting")
         }
-        
+
     } else {
         // Had movement - this was a drag operation
         print("   ℹ️ Gesture had movement (hasMoved=true)")
-        
+
         // Handle annotation dragging completion
         if selectedAnnotationIndex != nil {
             selectedAnnotationIndex = nil
@@ -639,7 +639,7 @@ struct PhotoAnnotationEditor: View {
             // Just finished drawing a new annotation
             handleDragEnded(value, in: geometry.size)
             print("   🔍 Checking for deselection after draw operation...")
-            
+
             // After drawing, check if we should deselect anything
             // This ensures clean state after drawing
             if selectedArrowAnnotationIndex != nil || selectedBoxAnnotationIndex != nil || selectedCircleAnnotationIndex != nil || selectedTextAnnotationIndex != nil {
@@ -652,7 +652,7 @@ struct PhotoAnnotationEditor: View {
             }
         }
     }
-    
+
     // Always reset gesture tracking state
     pressStartTime = nil
     pressStartLocation = nil
@@ -723,7 +723,7 @@ struct PhotoAnnotationEditor: View {
                 // Color picker dropdown
                 VStack(spacing: 8) {
                     // Selected color button (always visible)
-                    Button(action: { 
+                    Button(action: {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             isColorPickerExpanded.toggle()
                         }
@@ -743,13 +743,13 @@ struct PhotoAnnotationEditor: View {
                                     .offset(y: 16)
                             )
                     }
-                    
+
                     // Dropdown color options (shown when expanded)
                     if isColorPickerExpanded {
                         ForEach([Color.red, .yellow, .green, .blue, .purple, .white, .black].filter { $0 != selectedColor }, id: \.self) { color in
-                            Button(action: { 
+                            Button(action: {
                                 selectedColor = color
-                                
+
                                 // Update color of currently selected annotation
                                 if let index = selectedTextAnnotationIndex {
                                     photo.annotations[index].color = color.toHex()
@@ -760,7 +760,7 @@ struct PhotoAnnotationEditor: View {
                                 } else if let index = selectedCircleAnnotationIndex {
                                     photo.annotations[index].color = color.toHex()
                                 }
-                                
+
                                 withAnimation(.easeInOut(duration: 0.2)) {
                                     isColorPickerExpanded = false
                                 }
@@ -1200,7 +1200,7 @@ struct PhotoAnnotationEditor: View {
                                 }
                             }
                         }
-                        
+
                         // Show selection handles for selected arrow
                         if let selectedIndex = selectedArrowAnnotationIndex,
                            selectedIndex < photo.annotations.count,
@@ -1208,20 +1208,20 @@ struct PhotoAnnotationEditor: View {
                            photo.annotations[selectedIndex].points.count >= 2 {
                             let _ = print("🏹 RENDERING ARROW SELECTION HANDLES for index \(selectedIndex)")
                             let annotation = photo.annotations[selectedIndex]
-                            
+
                             let start = annotation.points[0]
                             let end = annotation.points[annotation.points.count - 1]
-                            
+
                             // Convert to screen coordinates
                             let screenStartX = start.x * scale + xOffset
                             let screenStartY = start.y * scale + yOffset
                             let screenEndX = end.x * scale + xOffset
                             let screenEndY = end.y * scale + yOffset
-                            
+
                             // Calculate midpoint for delete button
                             let midX = (screenStartX + screenEndX) / 2
                             let midY = (screenStartY + screenEndY) / 2
-                            
+
                             // Start point handle (green circle) - moves entire arrow
                             Circle()
                                 .fill(Color.green)
@@ -1235,7 +1235,7 @@ struct PhotoAnnotationEditor: View {
                                             print("   👆 Touch location: \(value.location)")
                                             print("   🎯 Green handle position: (\(screenStartX), \(screenStartY))")
                                             print("   📏 Distance from green handle: \(hypot(value.location.x - screenStartX, value.location.y - screenStartY))")
-                                            
+
                                             if !isDraggingArrowStart {
                                                 isDraggingArrowStart = true
                                                 // Store original points for relative movement
@@ -1246,7 +1246,7 @@ struct PhotoAnnotationEditor: View {
                                                 print("   📍 Original start: \(originalAnnotationPoints[0])")
                                                 print("   📍 Original end: \(originalAnnotationPoints[originalAnnotationPoints.count - 1])")
                                             }
-                                            
+
                                             // Calculate delta from start of drag in image coordinates
                                             let currentPoint = convertToImageCoordinates(
                                                 value.location,
@@ -1260,25 +1260,25 @@ struct PhotoAnnotationEditor: View {
                                                 imageSize: imageSize,
                                                 image: image
                                             )
-                                            
+
                                             let delta = CGPoint(
                                                 x: currentPoint.x - startPoint.x,
                                                 y: currentPoint.y - startPoint.y
                                             )
-                                            
+
                                             print("   🔄 Delta: (\(String(format: "%.1f", delta.x)), \(String(format: "%.1f", delta.y)))")
-                                            
+
                                             // Move all points by the same delta
                                             photo.annotations[selectedIndex].points = originalAnnotationPoints.map { point in
                                                 CGPoint(x: point.x + delta.x, y: point.y + delta.y)
                                             }
-                                            
+
                                             // Also move position if it exists
                                             photo.annotations[selectedIndex].position = CGPoint(
                                                 x: originalAnnotationPosition.x + delta.x,
                                                 y: originalAnnotationPosition.y + delta.y
                                             )
-                                            
+
                                             print("   ✅ Moved arrow by delta")
                                         }
                                         .onEnded { _ in
@@ -1286,7 +1286,7 @@ struct PhotoAnnotationEditor: View {
                                             print("🟢 GREEN HANDLE - ARROW MOVE ENDED")
                                         }
                                 )
-                            
+
                             // End point handle (blue circle) - adjusts endpoint only
                             Circle()
                                 .fill(Color.blue)
@@ -1300,7 +1300,7 @@ struct PhotoAnnotationEditor: View {
                                             print("   👆 Touch location: \(value.location)")
                                             print("   🎯 Blue handle position: (\(screenEndX), \(screenEndY))")
                                             print("   📏 Distance from blue handle: \(hypot(value.location.x - screenEndX, value.location.y - screenEndY))")
-                                            
+
                                             if !isDraggingArrowEnd {
                                                 isDraggingArrowEnd = true
                                                 // Store CURRENT points from annotation (not from originalAnnotationPoints variable)
@@ -1312,7 +1312,7 @@ struct PhotoAnnotationEditor: View {
                                                 print("   📍 Will preserve start: \(originalAnnotationPoints[0])")
                                                 print("   📍 Will modify end: \(originalAnnotationPoints[originalAnnotationPoints.count - 1])")
                                             }
-                                            
+
                                             // Convert screen drag to image coordinates
                                             let screenPoint = value.location
                                             let imagePoint = convertToImageCoordinates(
@@ -1321,14 +1321,14 @@ struct PhotoAnnotationEditor: View {
                                                 imageSize: imageSize,
                                                 image: image
                                             )
-                                            
+
                                             print("   📍 New endpoint (image coords): \(imagePoint)")
-                                            
+
                                             // Update end point while keeping original start point
                                             var newPoints = originalAnnotationPoints
                                             newPoints[newPoints.count - 1] = imagePoint
                                             photo.annotations[selectedIndex].points = newPoints
-                                            
+
                                             print("   ✅ Updated endpoint, kept start at: \(newPoints[0])")
                                         }
                                         .onEnded { _ in
@@ -1336,7 +1336,7 @@ struct PhotoAnnotationEditor: View {
                                             print("🔵 BLUE HANDLE - ENDPOINT ADJUST ENDED")
                                         }
                                 )
-                            
+
                             // Delete button (red circle at midpoint)
                             Button(action: {
                                 photo.annotations.remove(at: selectedIndex)
@@ -1349,7 +1349,7 @@ struct PhotoAnnotationEditor: View {
                             }
                             .position(x: midX, y: midY)
                         }
-                        
+
                         // Show selection handles for selected box
                         if let selectedIndex = selectedBoxAnnotationIndex,
                            selectedIndex < photo.annotations.count,
@@ -1357,20 +1357,20 @@ struct PhotoAnnotationEditor: View {
                            photo.annotations[selectedIndex].points.count >= 2 {
                             let _ = print("📦 RENDERING BOX SELECTION HANDLES for index \(selectedIndex)")
                             let annotation = photo.annotations[selectedIndex]
-                            
+
                             let topLeft = annotation.points[0]
                             let bottomRight = annotation.points[1]
-                            
+
                             // Convert to screen coordinates
                             let screenTopLeftX = topLeft.x * scale + xOffset
                             let screenTopLeftY = topLeft.y * scale + yOffset
                             let screenBottomRightX = bottomRight.x * scale + xOffset
                             let screenBottomRightY = bottomRight.y * scale + yOffset
-                            
+
                             // Calculate center for delete button
                             let centerX = (screenTopLeftX + screenBottomRightX) / 2
                             let centerY = (screenTopLeftY + screenBottomRightY) / 2
-                            
+
                             // Top-left corner handle (green circle) - moves entire box
                             Circle()
                                 .fill(Color.green)
@@ -1381,7 +1381,7 @@ struct PhotoAnnotationEditor: View {
                                     DragGesture(coordinateSpace: .named("arrowCanvas"))
                                         .onChanged { value in
                                             print("🟢 GREEN HANDLE DRAG (Box Move)")
-                                            
+
                                             if !isDraggingBoxTopLeft {
                                                 isDraggingBoxTopLeft = true
                                                 // Store original points for relative movement
@@ -1389,7 +1389,7 @@ struct PhotoAnnotationEditor: View {
                                                 originalAnnotationPosition = photo.annotations[selectedIndex].position
                                                 print("🟢 STARTED MOVING ENTIRE BOX")
                                             }
-                                            
+
                                             // Calculate delta from start of drag in image coordinates
                                             let currentPoint = convertToImageCoordinates(
                                                 value.location,
@@ -1403,17 +1403,17 @@ struct PhotoAnnotationEditor: View {
                                                 imageSize: imageSize,
                                                 image: image
                                             )
-                                            
+
                                             let delta = CGPoint(
                                                 x: currentPoint.x - startPoint.x,
                                                 y: currentPoint.y - startPoint.y
                                             )
-                                            
+
                                             // Move all points by the same delta
                                             photo.annotations[selectedIndex].points = originalAnnotationPoints.map { point in
                                                 CGPoint(x: point.x + delta.x, y: point.y + delta.y)
                                             }
-                                            
+
                                             // Also move position if it exists
                                             photo.annotations[selectedIndex].position = CGPoint(
                                                 x: originalAnnotationPosition.x + delta.x,
@@ -1425,7 +1425,7 @@ struct PhotoAnnotationEditor: View {
                                             print("🟢 GREEN HANDLE - BOX MOVE ENDED")
                                         }
                                 )
-                            
+
                             // Bottom-right corner handle (blue circle) - resizes box
                             Circle()
                                 .fill(Color.blue)
@@ -1436,14 +1436,14 @@ struct PhotoAnnotationEditor: View {
                                     DragGesture(coordinateSpace: .named("arrowCanvas"))
                                         .onChanged { value in
                                             print("🔵 BLUE HANDLE DRAG (Box Resize)")
-                                            
+
                                             if !isDraggingBoxBottomRight {
                                                 isDraggingBoxBottomRight = true
                                                 // Store original points to preserve top-left
                                                 originalAnnotationPoints = photo.annotations[selectedIndex].points
                                                 print("🔵 STARTED RESIZING BOX")
                                             }
-                                            
+
                                             // Convert screen drag to image coordinates
                                             let screenPoint = value.location
                                             let imagePoint = convertToImageCoordinates(
@@ -1452,7 +1452,7 @@ struct PhotoAnnotationEditor: View {
                                                 imageSize: imageSize,
                                                 image: image
                                             )
-                                            
+
                                             // Update bottom-right point while keeping top-left
                                             var newPoints = originalAnnotationPoints
                                             newPoints[1] = imagePoint
@@ -1463,7 +1463,7 @@ struct PhotoAnnotationEditor: View {
                                             print("🔵 BLUE HANDLE - BOX RESIZE ENDED")
                                         }
                                 )
-                            
+
                             // Delete button (red circle at center)
                             Button(action: {
                                 photo.annotations.remove(at: selectedIndex)
@@ -1476,7 +1476,7 @@ struct PhotoAnnotationEditor: View {
                             }
                             .position(x: centerX, y: centerY)
                         }
-                        
+
                         // Show selection handles for selected circle
                         if let selectedIndex = selectedCircleAnnotationIndex,
                            selectedIndex < photo.annotations.count,
@@ -1484,24 +1484,24 @@ struct PhotoAnnotationEditor: View {
                            photo.annotations[selectedIndex].points.count >= 2 {
                             let _ = print("⭕ RENDERING CIRCLE SELECTION HANDLES for index \(selectedIndex)")
                             let annotation = photo.annotations[selectedIndex]
-                            
+
                             let start = annotation.points[0]
                             let end = annotation.points[1]
-                            
+
                             // Convert to screen coordinates
                             let screenStartX = start.x * scale + xOffset
                             let screenStartY = start.y * scale + yOffset
                             let screenEndX = end.x * scale + xOffset
                             let screenEndY = end.y * scale + yOffset
-                            
+
                             // Calculate circle center
                             let centerX = (screenStartX + screenEndX) / 2
                             let centerY = (screenStartY + screenEndY) / 2
-                            
+
                             // Calculate edge point (right side of circle)
                             let edgeX = screenEndX
                             let edgeY = centerY
-                            
+
                             // Center handle (green circle) - moves entire circle
                             Circle()
                                 .fill(Color.green)
@@ -1512,7 +1512,7 @@ struct PhotoAnnotationEditor: View {
                                     DragGesture(coordinateSpace: .named("arrowCanvas"))
                                         .onChanged { value in
                                             print("🟢 GREEN HANDLE DRAG (Circle Move)")
-                                            
+
                                             if !isDraggingCircleCenter {
                                                 isDraggingCircleCenter = true
                                                 // Store original points for relative movement
@@ -1520,7 +1520,7 @@ struct PhotoAnnotationEditor: View {
                                                 originalAnnotationPosition = photo.annotations[selectedIndex].position
                                                 print("🟢 STARTED MOVING ENTIRE CIRCLE")
                                             }
-                                            
+
                                             // Calculate delta from start of drag in image coordinates
                                             let currentPoint = convertToImageCoordinates(
                                                 value.location,
@@ -1534,17 +1534,17 @@ struct PhotoAnnotationEditor: View {
                                                 imageSize: imageSize,
                                                 image: image
                                             )
-                                            
+
                                             let delta = CGPoint(
                                                 x: currentPoint.x - startPoint.x,
                                                 y: currentPoint.y - startPoint.y
                                             )
-                                            
+
                                             // Move all points by the same delta
                                             photo.annotations[selectedIndex].points = originalAnnotationPoints.map { point in
                                                 CGPoint(x: point.x + delta.x, y: point.y + delta.y)
                                             }
-                                            
+
                                             // Also move position if it exists
                                             photo.annotations[selectedIndex].position = CGPoint(
                                                 x: originalAnnotationPosition.x + delta.x,
@@ -1556,7 +1556,7 @@ struct PhotoAnnotationEditor: View {
                                             print("🟢 GREEN HANDLE - CIRCLE MOVE ENDED")
                                         }
                                 )
-                            
+
                             // Edge handle (blue circle) - resizes circle
                             Circle()
                                 .fill(Color.blue)
@@ -1567,7 +1567,7 @@ struct PhotoAnnotationEditor: View {
                                     DragGesture(coordinateSpace: .named("arrowCanvas"))
                                         .onChanged { value in
                                             print("🔵 BLUE HANDLE DRAG (Circle Resize)")
-                                            
+
                                             if !isDraggingCircleEdge {
                                                 isDraggingCircleEdge = true
                                                 // Store CURRENT points from annotation
@@ -1575,7 +1575,7 @@ struct PhotoAnnotationEditor: View {
                                                 originalAnnotationPoints = currentPoints
                                                 print("🔵 STARTED RESIZING CIRCLE")
                                             }
-                                            
+
                                             // Convert screen drag to image coordinates
                                             let screenPoint = value.location
                                             let imagePoint = convertToImageCoordinates(
@@ -1584,7 +1584,7 @@ struct PhotoAnnotationEditor: View {
                                                 imageSize: imageSize,
                                                 image: image
                                             )
-                                            
+
                                             // Update end point while keeping start point (defines bounding rect)
                                             var newPoints = originalAnnotationPoints
                                             newPoints[1] = imagePoint
@@ -1595,7 +1595,7 @@ struct PhotoAnnotationEditor: View {
                                             print("🔵 BLUE HANDLE - CIRCLE RESIZE ENDED")
                                         }
                                 )
-                            
+
                             // Delete button (red circle offset from center to avoid overlap)
                             Button(action: {
                                 photo.annotations.remove(at: selectedIndex)
@@ -1649,7 +1649,7 @@ struct PhotoAnnotationEditor: View {
         if currentAnnotation == nil {
             // Convert stroke width from screen space to image space
             let imageSpaceStrokeWidth = strokeWidth / scale
-            
+
             // Start new annotation
             currentAnnotation = PhotoAnnotation(
                 type: selectedTool.toAnnotationType(),
@@ -1937,52 +1937,52 @@ struct PhotoAnnotationEditor: View {
         let dx = end.x - start.x
         let dy = end.y - start.y
         let lengthSquared = dx * dx + dy * dy
-        
+
         // If start and end are the same point (with small epsilon for floating point comparison)
         if lengthSquared < 0.001 {
             return hypot(point.x - start.x, point.y - start.y)
         }
-        
+
         // Calculate the parameter t that represents the closest point on the line segment
         let t = max(0, min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared))
-        
+
         // Find the closest point on the line segment
         let closestPoint = CGPoint(
             x: start.x + t * dx,
             y: start.y + t * dy
         )
-        
+
         // Return the distance from the point to the closest point on the line segment
         return hypot(point.x - closestPoint.x, point.y - closestPoint.y)
     }
-    
+
     private func findArrowAnnotationAtScreenPoint(screenPoint: CGPoint, containerSize: CGSize, imageSize: CGSize, image: UIImage) -> Int? {
         print("🏹 findArrowAnnotationAtScreenPoint - screen point: \(screenPoint)")
-        
+
         // Calculate scale and offset (same as rendering)
         let scale = imageSize.width / image.size.width
         let offset = CGPoint(
             x: (containerSize.width - imageSize.width) / 2,
             y: (containerSize.height - imageSize.height) / 2
         )
-        
+
         print("   Scale: \(scale), Offset: \(offset)")
-        
+
         // First check if the tap point is even within the image bounds
         let imageRect = CGRect(x: offset.x, y: offset.y, width: imageSize.width, height: imageSize.height)
         if !imageRect.contains(screenPoint) {
             print("   ❌ Tap is outside image bounds")
             return nil
         }
-        
+
         // Check arrow annotations in reverse order (top-most first)
         for (index, annotation) in photo.annotations.enumerated().reversed() {
             guard annotation.type == .arrow else { continue }
             guard annotation.points.count >= 2 else { continue }
-            
+
             let start = annotation.points[0]
             let end = annotation.points[annotation.points.count - 1]
-            
+
             // Convert to screen coordinates
             let screenStart = CGPoint(
                 x: start.x * scale + offset.x,
@@ -1992,54 +1992,54 @@ struct PhotoAnnotationEditor: View {
                 x: end.x * scale + offset.x,
                 y: end.y * scale + offset.y
             )
-            
+
             // Check if tap is near the arrow line
             let distance = distanceToLineSegment(point: screenPoint, start: screenStart, end: screenEnd)
-            
+
             // Use a balanced tolerance - easier to select but still reasonable
             let strokeWidth = annotation.size * scale
             let tolerance: CGFloat = max(12.0, min(20.0, strokeWidth * 2.5))  // Between 12-20 pixels
-            
+
             print("   - Index \(index): arrow from \(screenStart) to \(screenEnd)")
             print("     Distance to arrow: \(String(format: "%.2f", distance))px, tolerance: \(String(format: "%.1f", tolerance))px")
-            
+
             if distance <= tolerance {
                 print("   ✅ HIT! Returning index \(index)")
                 return index
             }
         }
-        
+
         print("   ❌ No arrow hit")
         return nil
     }
-    
+
     private func findBoxAnnotationAtScreenPoint(screenPoint: CGPoint, containerSize: CGSize, imageSize: CGSize, image: UIImage) -> Int? {
         print("🔍 Finding box at screen point: \(screenPoint)")
-        
+
         // Calculate scale and offset (same as rendering)
         let scale = imageSize.width / image.size.width
         let offset = CGPoint(
             x: (containerSize.width - imageSize.width) / 2,
             y: (containerSize.height - imageSize.height) / 2
         )
-        
+
         print("   Scale: \(scale), Offset: \(offset)")
-        
+
         // First check if the tap point is even within the image bounds
         let imageRect = CGRect(x: offset.x, y: offset.y, width: imageSize.width, height: imageSize.height)
         if !imageRect.contains(screenPoint) {
             print("   ❌ Tap is outside image bounds")
             return nil
         }
-        
+
         // Check box annotations in reverse order (top-most first)
         for (index, annotation) in photo.annotations.enumerated().reversed() {
             guard annotation.type == .box else { continue }
             guard annotation.points.count >= 2 else { continue }
-            
+
             let topLeft = annotation.points[0]
             let bottomRight = annotation.points[1]
-            
+
             // Convert to screen coordinates
             let screenTopLeft = CGPoint(
                 x: topLeft.x * scale + offset.x,
@@ -2049,63 +2049,63 @@ struct PhotoAnnotationEditor: View {
                 x: bottomRight.x * scale + offset.x,
                 y: bottomRight.y * scale + offset.y
             )
-            
+
             // Create box rect (handle cases where points might be reversed)
             let minX = min(screenTopLeft.x, screenBottomRight.x)
             let maxX = max(screenTopLeft.x, screenBottomRight.x)
             let minY = min(screenTopLeft.y, screenBottomRight.y)
             let maxY = max(screenTopLeft.y, screenBottomRight.y)
             let boxRect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-            
+
             // Check if tap is inside the box or near its border
             let strokeWidth = annotation.size * scale
             let tolerance: CGFloat = max(12.0, min(20.0, strokeWidth * 2.5))  // Between 12-20 pixels
-            
+
             // Expand the box rect by tolerance for easier selection
             let expandedRect = boxRect.insetBy(dx: -tolerance, dy: -tolerance)
-            
+
             print("   - Index \(index): box from \(screenTopLeft) to \(screenBottomRight)")
             print("     Box rect: \(boxRect), Expanded rect: \(expandedRect)")
             print("     Tap point: \(screenPoint), tolerance: \(String(format: "%.1f", tolerance))px")
-            
+
             // Hit if tap is within the expanded box area
             if expandedRect.contains(screenPoint) {
                 print("   ✅ HIT! Returning index \(index)")
                 return index
             }
         }
-        
+
         print("   ❌ No box hit")
         return nil
     }
-    
+
     private func findCircleAnnotationAtScreenPoint(screenPoint: CGPoint, containerSize: CGSize, imageSize: CGSize, image: UIImage) -> Int? {
         print("🔍 Finding circle at screen point: \(screenPoint)")
-        
+
         // Calculate scale and offset (same as rendering)
         let scale = imageSize.width / image.size.width
         let offset = CGPoint(
             x: (containerSize.width - imageSize.width) / 2,
             y: (containerSize.height - imageSize.height) / 2
         )
-        
+
         print("   Scale: \(scale), Offset: \(offset)")
-        
+
         // First check if the tap point is even within the image bounds
         let imageRect = CGRect(x: offset.x, y: offset.y, width: imageSize.width, height: imageSize.height)
         if !imageRect.contains(screenPoint) {
             print("   ❌ Tap is outside image bounds")
             return nil
         }
-        
+
         // Check circle annotations in reverse order (top-most first)
         for (index, annotation) in photo.annotations.enumerated().reversed() {
             guard annotation.type == .circle else { continue }
             guard annotation.points.count >= 2 else { continue }
-            
+
             let start = annotation.points[0]
             let end = annotation.points[1]
-            
+
             // Convert to screen coordinates
             let screenStart = CGPoint(
                 x: start.x * scale + offset.x,
@@ -2115,31 +2115,31 @@ struct PhotoAnnotationEditor: View {
                 x: end.x * scale + offset.x,
                 y: end.y * scale + offset.y
             )
-            
+
             // Calculate circle center and radius (circles are drawn from bounding rect)
             let centerX = (screenStart.x + screenEnd.x) / 2
             let centerY = (screenStart.y + screenEnd.y) / 2
             let radiusX = abs(screenEnd.x - screenStart.x) / 2
             let radiusY = abs(screenEnd.y - screenStart.y) / 2
             let radius = max(radiusX, radiusY)  // Use the larger radius for hit detection
-            
+
             // Calculate distance from tap to circle center
             let distanceToCenter = hypot(screenPoint.x - centerX, screenPoint.y - centerY)
-            
+
             // Check if tap is inside the circle or near its border
             let strokeWidth = annotation.size * scale
             let tolerance: CGFloat = max(12.0, min(20.0, strokeWidth * 2.5))  // Between 12-20 pixels
-            
+
             print("   - Index \(index): circle center (\(centerX), \(centerY)), radius \(radius)")
             print("     Distance to center: \(String(format: "%.1f", distanceToCenter))px, radius + tolerance: \(String(format: "%.1f", radius + tolerance))px")
-            
+
             // Hit if tap is within the circle plus tolerance
             if distanceToCenter <= radius + tolerance {
                 print("   ✅ HIT! Returning index \(index)")
                 return index
             }
         }
-        
+
         print("   ❌ No circle hit")
         return nil
     }
@@ -2151,11 +2151,11 @@ struct PhotoAnnotationEditor: View {
 
         // Finalize annotation
         photo.annotations.append(annotation)
-        
+
         // DON'T auto-select arrow after drawing - this causes confusion
         // Let user explicitly tap to select
         print("✅ Added new \(annotation.type) annotation at index \(photo.annotations.count - 1)")
-        
+
         currentAnnotation = nil
     }
 

@@ -357,10 +357,10 @@ struct PhotoDetailView: View {
 
                 // Get text box width (already scaled)
                 let textBoxWidth = annotation.textBoxWidth ?? (textSize * 10)
-                
+
                 // Wrap text to match editor behavior
                 let wrappedLines = wrapText(text, width: textBoxWidth, fontSize: textSize)
-                
+
                 // Draw each line
                 var yOffset: CGFloat = 0
                 let lineHeight = textSize * 1.2
@@ -378,7 +378,7 @@ struct PhotoDetailView: View {
 
         context.restoreGState()
     }
-    
+
     // Text wrapping helper for rendering
     private func wrapText(_ text: String, width: CGFloat, fontSize: CGFloat) -> [String] {
         let words = text.split(separator: " ").map(String.init)
