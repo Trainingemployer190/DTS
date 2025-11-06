@@ -382,8 +382,11 @@ struct PhotoAnnotationEditor: View {
         if hasMoved {
             // Only allow moving arrows via their green handle (isDraggingArrowStart flag)
             // Don't move arrows when dragging on the canvas
-            if selectedAnnotationIndex != nil || selectedBoxAnnotationIndex != nil || selectedCircleAnnotationIndex != nil {
-                // Move selected annotation (old system, box, or circle)
+            if selectedAnnotationIndex != nil || selectedBoxAnnotationIndex != nil {
+                // Move selected annotation (old system, box)
+                handleAnnotationDrag(value, in: geometry.size)
+            } else if selectedCircleAnnotationIndex != nil && !isDraggingCircleEdge {
+                // Move circle if selected, but NOT if dragging the blue resize handle
                 handleAnnotationDrag(value, in: geometry.size)
             } else if selectedArrowAnnotationIndex != nil && isDraggingArrowStart {
                 // Only move arrow if dragging from the green handle
