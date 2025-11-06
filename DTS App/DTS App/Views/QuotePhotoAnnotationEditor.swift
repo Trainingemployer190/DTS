@@ -1230,7 +1230,7 @@ struct QuotePhotoAnnotationEditor: View {
                             Circle()
                                 .fill(Color.green)
                                 .frame(width: 24, height: 24)
-                                .contentShape(Circle())
+                                .contentShape(Circle().inset(by: -12))  // Expanded hit area: 48x48 (24 + 12*2)
                                 .position(x: screenStartX, y: screenStartY)
                                 .gesture(
                                     DragGesture(coordinateSpace: .named("arrowCanvas"))
@@ -1295,7 +1295,7 @@ struct QuotePhotoAnnotationEditor: View {
                             Circle()
                                 .fill(Color.blue)
                                 .frame(width: 24, height: 24)
-                                .contentShape(Circle())
+                                .contentShape(Circle().inset(by: -12))  // Expanded hit area: 48x48 (24 + 12*2)
                                 .position(x: screenEndX, y: screenEndY)
                                 .gesture(
                                     DragGesture(coordinateSpace: .named("arrowCanvas"))
