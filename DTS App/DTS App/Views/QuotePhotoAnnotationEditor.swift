@@ -42,6 +42,7 @@ struct QuotePhotoAnnotationEditor: View {
     @State private var widthResizeDragLocation: CGPoint = .zero
     @State private var initialWidthHandlePosition: CGPoint = .zero
     @State private var initialFontHandlePosition: CGPoint = .zero
+    @State private var overlayDidHandleTap: Bool = false  // Tracks if overlay just closed editor
 
     // Arrow selection states
     @State private var selectedArrowAnnotationIndex: Int? = nil
@@ -424,6 +425,7 @@ struct QuotePhotoAnnotationEditor: View {
         print("🏁 GESTURE ENDED - Tool: \(selectedTool), Moved: \(hasMoved)")
         print("   📍 Tap location: \(value.location)")
         print("   🎯 Current selections - Arrow: \(selectedArrowAnnotationIndex?.description ?? "nil"), Box: \(selectedBoxAnnotationIndex?.description ?? "nil"), Circle: \(selectedCircleAnnotationIndex?.description ?? "nil"), Text: \(selectedTextAnnotationIndex?.description ?? "nil")")
+        print("   🚩 overlayDidHandleTap flag: \(overlayDidHandleTap)")
 
         // Get hit detection info for all annotation types first
         let imageSize = calculateImageSize(for: image, in: geometry.size)
@@ -566,8 +568,9 @@ struct QuotePhotoAnnotationEditor: View {
                 return
             }
 
-        // Priority 3: Handle text tool tap for creating new text (only if text tool is active)
-        if selectedTool == .text && tappedTextIndex == nil && tappedArrowIndex == nil {
+        // Priority 3: Handle text tool tap for creating new text (only if text tool is active AND nothing is selected AND not currently editing AND overlay didn't just close editor)
+        if selectedTool == .text && tappedTextIndex == nil && tappedArrowIndex == nil && editingTextAnnotationIndex == nil && !overlayDidHandleTap 
+            && selectedTextAnnotationIndex == nil && selectedArrowAnnotationIndex == nil {
             print("✅ TEXT TAP DETECTED on empty space with text tool")
             let imagePoint = convertToImageCoordinates(value.location, in: geometry.size, imageSize: imageSize, image: image)
             print("📍 Converted to image coordinates: \(imagePoint)")
@@ -1156,7 +1159,7 @@ struct QuotePhotoAnnotationEditor: View {
                                             let paddedTextRect = textBoxRect.insetBy(dx: -20, dy: -20)
 
                                             if !paddedTextRect.contains(location) {
-                                                print("🎯 Tap outside text box - saving text")
+                                                print("🎯 Tap outside text box - saving text and setting overlay flag")
                                                 let newText = textInput.isEmpty ? "Text" : textInput
                                                 annotations[editIndex].text = newText
 
@@ -1172,8 +1175,16 @@ struct QuotePhotoAnnotationEditor: View {
 
                                                 annotations[editIndex].textBoxWidth = clampedImageWidth
 
+                                                // Set flag to prevent canvas from creating new text
+                                                overlayDidHandleTap = true
+                                                
                                                 editingTextAnnotationIndex = nil
                                                 selectedTextAnnotationIndex = editIndex
+                                                
+                                                // Reset flag after a brief delay
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                                    overlayDidHandleTap = false
+                                                }
                                             } else {
                                                 print("🎯 Tap inside text box area - keeping editor open")
                                             }
