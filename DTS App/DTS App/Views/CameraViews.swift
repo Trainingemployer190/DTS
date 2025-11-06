@@ -355,7 +355,7 @@ class NativeCameraViewController: UIViewController {
 
             // Switch camera button (top right)
             switchCameraButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
-            switchCameraButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            switchCameraButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
             switchCameraButton.widthAnchor.constraint(equalToConstant: 44),
             switchCameraButton.heightAnchor.constraint(equalToConstant: 44),
 
