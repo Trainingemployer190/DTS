@@ -1727,13 +1727,20 @@ struct QuotePhotoAnnotationEditor: View {
         var lines: [String] = []
         var currentLine = ""
 
-        let approximateCharWidth = fontSize * 0.6
-        let maxCharsPerLine = Int(width / approximateCharWidth)
+        // Use actual text measurement instead of character approximation
+        let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font]
 
         for word in words {
             let testLine = currentLine.isEmpty ? word : currentLine + " " + word
+            let testString = NSAttributedString(string: testLine, attributes: attributes)
+            let testWidth = testString.boundingRect(
+                with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin],
+                context: nil
+            ).width
 
-            if testLine.count <= maxCharsPerLine {
+            if testWidth <= width {
                 currentLine = testLine
             } else {
                 if !currentLine.isEmpty {
