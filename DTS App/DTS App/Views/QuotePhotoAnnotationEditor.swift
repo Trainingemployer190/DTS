@@ -43,6 +43,8 @@ struct QuotePhotoAnnotationEditor: View {
     @State private var initialWidthHandlePosition: CGPoint = .zero
     @State private var initialFontHandlePosition: CGPoint = .zero
     @State private var overlayDidHandleTap: Bool = false  // Tracks if overlay just closed editor
+    @State private var initialTextBoxWidth: CGFloat = 0  // Width when drag started
+    @State private var initialTextBoxHeight: CGFloat = 0  // Height when drag started
 
     // Arrow selection states
     @State private var selectedArrowAnnotationIndex: Int? = nil
@@ -569,7 +571,7 @@ struct QuotePhotoAnnotationEditor: View {
             }
 
         // Priority 3: Handle text tool tap for creating new text (only if text tool is active AND nothing is selected AND not currently editing AND overlay didn't just close editor)
-        if selectedTool == .text && tappedTextIndex == nil && tappedArrowIndex == nil && editingTextAnnotationIndex == nil && !overlayDidHandleTap 
+        if selectedTool == .text && tappedTextIndex == nil && tappedArrowIndex == nil && editingTextAnnotationIndex == nil && !overlayDidHandleTap
             && selectedTextAnnotationIndex == nil && selectedArrowAnnotationIndex == nil {
             print("✅ TEXT TAP DETECTED on empty space with text tool")
             let imagePoint = convertToImageCoordinates(value.location, in: geometry.size, imageSize: imageSize, image: image)
@@ -963,7 +965,7 @@ struct QuotePhotoAnnotationEditor: View {
                                 .position(x: deleteButtonX, y: deleteButtonY)
 
                                 // Right edge resize handle (middle-right for width adjustment)
-                                // Clamp handle positions to stay within screen bounds (with 30px margin)
+                                // Always use current dimensions so handle moves with the text box
                                 let rawWidthHandleX = screenX + screenTextBoxWidth
                                 let rawWidthHandleY = screenY + screenTextBoxHeight/2
                                 let widthHandleX = max(30, min(geometry.size.width - 30, rawWidthHandleX))
@@ -975,10 +977,6 @@ struct QuotePhotoAnnotationEditor: View {
                                     .contentShape(Circle().inset(by: -12))
                                     .allowsHitTesting(true)  // Override parent to capture hits
                                     .position(x: widthHandleX, y: widthHandleY)
-                                    .offset(
-                                        x: isDraggingWidthHandle ? widthResizeDragLocation.x - initialWidthHandlePosition.x : 0,
-                                        y: 0  // Only horizontal movement for width handle
-                                    )
                                 .gesture(
                                     DragGesture(minimumDistance: 1)
                                         .onChanged { value in
@@ -988,6 +986,8 @@ struct QuotePhotoAnnotationEditor: View {
                                                 widthResizeDragLocation = CGPoint(x: widthHandleX, y: widthHandleY)
                                                 let currentImageWidth = annotations[selectedIndex].textBoxWidth ?? 200.0
                                                 baseWidth = currentImageWidth  // Store IMAGE space width
+                                                // Store initial height to keep handle at same vertical position during drag
+                                                initialTextBoxHeight = screenTextBoxHeight
                                                 print("🟢 WIDTH RESIZE STARTED - baseWidth (IMAGE): \(String(format: "%.1f", baseWidth))")
                                             }
 
@@ -1027,8 +1027,7 @@ struct QuotePhotoAnnotationEditor: View {
                                 )
 
                                 // Bottom-right corner resize handle (for font size)
-                                // Recalculate position based on CURRENT height
-                                // Clamp handle positions to stay within screen bounds (with 30px margin)
+                                // Always use current dimensions so handle moves with the text box
                                 let rawFontHandleX = screenX + screenTextBoxWidth
                                 let rawFontHandleY = screenY + screenTextBoxHeight
                                 let fontHandleX = max(30, min(geometry.size.width - 30, rawFontHandleX))
@@ -1040,10 +1039,6 @@ struct QuotePhotoAnnotationEditor: View {
                                     .contentShape(Circle().inset(by: -12))
                                     .allowsHitTesting(true)  // Override parent to capture hits
                                     .position(x: fontHandleX, y: fontHandleY)
-                                    .offset(
-                                        x: isDraggingFontHandle ? fontResizeDragLocation.x - initialFontHandlePosition.x : 0,
-                                        y: isDraggingFontHandle ? fontResizeDragLocation.y - initialFontHandlePosition.y : 0
-                                    )
                                     // Ensure the blue font handle wins hit-testing when zones overlap
                                     .zIndex(1)
                                     .highPriorityGesture(  // Use highPriority so font resize wins when both handles overlap
@@ -1060,6 +1055,9 @@ struct QuotePhotoAnnotationEditor: View {
                                                 baseFontSize = currentStoredFontSize  // Store IMAGE space value
                                                 // ALSO store initial width to scale proportionally with font
                                                 baseWidth = annotations[selectedIndex].textBoxWidth ?? 200.0
+                                                // Store initial dimensions to keep handle base position fixed during drag
+                                                initialTextBoxWidth = screenTextBoxWidth
+                                                initialTextBoxHeight = screenTextBoxHeight
                                                 print("� FONT RESIZE STARTED")
                                                 print("   📍 Initial handle position: (\(String(format: "%.1f", fontHandleX)), \(String(format: "%.1f", fontHandleY)))")
                                                 print("   🎯 Initial baseFontSize (IMAGE space): \(String(format: "%.1f", baseFontSize))pt")
@@ -1177,10 +1175,10 @@ struct QuotePhotoAnnotationEditor: View {
 
                                                 // Set flag to prevent canvas from creating new text
                                                 overlayDidHandleTap = true
-                                                
+
                                                 editingTextAnnotationIndex = nil
                                                 selectedTextAnnotationIndex = editIndex
-                                                
+
                                                 // Reset flag after a brief delay
                                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                                                     overlayDidHandleTap = false
