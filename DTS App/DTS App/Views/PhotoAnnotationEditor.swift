@@ -1380,7 +1380,7 @@ struct PhotoAnnotationEditor: View {
                             Circle()
                                 .fill(Color.green)
                                 .frame(width: 24, height: 24)
-                                .contentShape(Circle())
+                                .contentShape(Circle().inset(by: -12))  // Expanded hit area: 48x48 (24 + 12*2)
                                 .position(x: screenTopLeftX, y: screenTopLeftY)
                                 .gesture(
                                     DragGesture(coordinateSpace: .named("arrowCanvas"))
@@ -1435,7 +1435,7 @@ struct PhotoAnnotationEditor: View {
                             Circle()
                                 .fill(Color.blue)
                                 .frame(width: 24, height: 24)
-                                .contentShape(Circle())
+                                .contentShape(Circle().inset(by: -12))  // Expanded hit area: 48x48 (24 + 12*2)
                                 .position(x: screenBottomRightX, y: screenBottomRightY)
                                 .gesture(
                                     DragGesture(coordinateSpace: .named("arrowCanvas"))
@@ -1511,7 +1511,7 @@ struct PhotoAnnotationEditor: View {
                             Circle()
                                 .fill(Color.green)
                                 .frame(width: 24, height: 24)
-                                .contentShape(Circle())
+                                .contentShape(Circle().inset(by: -12))  // Expanded hit area: 48x48 (24 + 12*2)
                                 .position(x: centerX, y: centerY)
                                 .gesture(
                                     DragGesture(coordinateSpace: .named("arrowCanvas"))
@@ -1566,7 +1566,7 @@ struct PhotoAnnotationEditor: View {
                             Circle()
                                 .fill(Color.blue)
                                 .frame(width: 24, height: 24)
-                                .contentShape(Circle())
+                                .contentShape(Circle().inset(by: -12))  // Expanded hit area: 48x48 (24 + 12*2)
                                 .position(x: edgeX, y: edgeY)
                                 .gesture(
                                     DragGesture(coordinateSpace: .named("arrowCanvas"))
