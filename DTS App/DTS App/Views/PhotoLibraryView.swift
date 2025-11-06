@@ -162,12 +162,9 @@ struct PhotoLibraryView: View {
                 }
             }
             .sheet(isPresented: $showingPhotoLibrary) {
-                ImagePicker(
-                    sourceType: .photoLibrary,
-                    onImagePicked: { image in
-                        handlePhotoLibraryImage(image)
-                    }
-                )
+                MultiImagePicker { images in
+                    handleMultiplePhotoLibraryImages(images)
+                }
             }
             .sheet(item: $selectedPhoto) { (photo: PhotoRecord) in
                 PhotoDetailView(photo: photo)
@@ -490,6 +487,36 @@ struct PhotoLibraryView: View {
 
             modelContext.insert(photoRecord)
             try? modelContext.save()
+        }
+    }
+
+    private func handleMultiplePhotoLibraryImages(_ images: [UIImage]) {
+        print("📸 Processing \(images.count) photos from library...")
+
+        for (index, image) in images.enumerated() {
+            // Add watermark if location available
+            let watermarkedImage = addWatermarkToImage(image)
+
+            // Save to documents
+            if let savedURL = saveImageToDocuments(watermarkedImage) {
+                let photoRecord = PhotoRecord(fileURL: savedURL)
+                photoRecord.latitude = photoCaptureManager.currentLocation?.coordinate.latitude
+                photoRecord.longitude = photoCaptureManager.currentLocation?.coordinate.longitude
+
+                modelContext.insert(photoRecord)
+
+                print("✅ Added photo \(index + 1)/\(images.count)")
+            } else {
+                print("❌ Failed to save photo \(index + 1)/\(images.count)")
+            }
+        }
+
+        // Save all changes at once
+        do {
+            try modelContext.save()
+            print("✅ Successfully saved \(images.count) photos to library")
+        } catch {
+            print("❌ Failed to save photos: \(error)")
         }
     }
 
