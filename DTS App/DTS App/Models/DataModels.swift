@@ -39,11 +39,11 @@ final class AppSettings {
     var defaultMarkupPercent: Double = 0.538  // Calculated from 35% margin: 0.35/(1-0.35)
     var defaultProfitMarginPercent: Double = 0.35
     var defaultSalesCommissionPercent: Double = 0.03
-    var gutterGuardMarkupPercent: Double = 0.538  // Calculated from 35% margin: 0.35/(1-0.35)
-    var gutterGuardProfitMarginPercent: Double = 0.35
+    var gutterGuardMarkupPercent: Double = 1.00  // 100% markup for 50% margin
+    var gutterGuardProfitMarginPercent: Double = 0.50
 
     // Tax and currency
-    var taxRate: Double = 0.08
+    var taxRate: Double = 0.0
     var currency: String = "USD"
 
     // Jobber integration
