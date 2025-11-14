@@ -20,6 +20,10 @@ struct QuoteHistoryView: View {
     @State private var jobberSubmissionError: String?
     @State private var showingCleanupConfirmation = false
     @State private var orphanedPhotoCount = 0
+    @StateObject private var networkMonitor = NetworkMonitor.shared
+    @State private var isBatchSyncing = false
+    @State private var showingBatchSyncSheet = false
+    @State private var batchSyncResults: String?
 
     private var settings: AppSettings {
         settingsArray.first ?? AppSettings()
@@ -45,6 +49,15 @@ struct QuoteHistoryView: View {
             }
         }
     }
+    
+    // Count of quotes pending sync
+    var pendingSyncQuotes: [QuoteDraft] {
+        allRelevantQuotes.filter { quote in
+            (quote.syncState == .pending || quote.syncState == .failed) && 
+            quote.jobId != nil && 
+            quote.syncAttemptCount < 10
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -58,6 +71,20 @@ struct QuoteHistoryView: View {
             .navigationTitle("Quote History")
             .searchable(text: $searchText, prompt: "Search quotes...")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    if !pendingSyncQuotes.isEmpty {
+                        Button {
+                            showingBatchSyncSheet = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.clockwise.icloud")
+                                Text("Sync Pending (\(pendingSyncQuotes.count))")
+                            }
+                        }
+                        .disabled(!networkMonitor.isConnected || isBatchSyncing)
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button("Storage Info", systemImage: "info.circle") {
@@ -70,6 +97,9 @@ struct QuoteHistoryView: View {
             }
             .sheet(isPresented: $showingStorageInfo) {
                 storageInfoView
+            }
+            .sheet(isPresented: $showingBatchSyncSheet) {
+                batchSyncView
             }
             .navigationDestination(for: QuoteDraft.self) { quote in
                 QuoteDetailView(quote: quote)
@@ -115,13 +145,13 @@ struct QuoteHistoryView: View {
                     deleteQuote(quote)
                 }
 
-                // Add "Send to Jobber" option for quotes that haven't been saved to Jobber yet
-                if !quote.savedToJobber && quote.jobId != nil {
-                    Button(sendingQuoteId == quote.localId ? "Sending..." : "Send to Jobber") {
+                // Add "Upload to Jobber" or "Retry Upload" for quotes not synced
+                if quote.syncState != .synced && quote.jobId != nil {
+                    Button(sendingQuoteId == quote.localId ? "Uploading..." : (quote.syncState == .failed ? "Retry Upload" : "Upload to Jobber")) {
                         sendQuoteToJobber(quote)
                     }
-                    .tint(.blue)
-                    .disabled(isSendingToJobber)
+                    .tint(quote.syncState == .failed ? .orange : .blue)
+                    .disabled(isSendingToJobber || quote.syncAttemptCount >= 10)
                 }
             }
         }
@@ -330,6 +360,146 @@ struct QuoteHistoryView: View {
         }
     }
 
+    // Batch sync view
+    private var batchSyncView: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                if isBatchSyncing {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                    Text("Syncing quotes...")
+                        .font(.headline)
+                        .padding()
+                } else if let results = batchSyncResults {
+                    VStack(spacing: 16) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 60))
+                            .foregroundColor(.green)
+                        
+                        Text("Sync Complete")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        
+                        Text(results)
+                            .multilineTextAlignment(.center)
+                            .padding()
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Sync Pending Quotes")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        
+                        Text("Upload \(pendingSyncQuotes.count) pending quote\(pendingSyncQuotes.count == 1 ? "" : "s") to Jobber?")
+                            .foregroundColor(.secondary)
+                        
+                        if networkMonitor.isCellular {
+                            HStack {
+                                Image(systemName: "antenna.radiowaves.left.and.right")
+                                    .foregroundColor(.orange)
+                                Text("You're on cellular data. Photos may use significant data.")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                            }
+                            .padding()
+                            .background(Color.orange.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                        
+                        Divider()
+                        
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(pendingSyncQuotes) { quote in
+                                    HStack {
+                                        VStack(alignment: .leading) {
+                                            Text(quote.clientName)
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                            Text("$\(quote.finalTotal, specifier: "%.2f")")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Spacer()
+                                        if quote.syncState == .failed {
+                                            Text("Retry \(quote.syncAttemptCount)/10")
+                                                .font(.caption2)
+                                                .foregroundColor(.orange)
+                                        }
+                                    }
+                                    .padding(.vertical, 4)
+                                    Divider()
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 200)
+                        
+                        Button(action: syncAllPending) {
+                            HStack {
+                                Image(systemName: "arrow.clockwise.icloud")
+                                Text("Sync All")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
+                    }
+                    .padding()
+                }
+            }
+            .navigationTitle("Batch Sync")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(batchSyncResults != nil ? "Done" : "Cancel") {
+                        showingBatchSyncSheet = false
+                        batchSyncResults = nil
+                    }
+                }
+            }
+        }
+    }
+    
+    private func syncAllPending() {
+        isBatchSyncing = true
+        
+        Task {
+            var successCount = 0
+            var failedCount = 0
+            let quotesToSync = pendingSyncQuotes
+            
+            for quote in quotesToSync {
+                // Sync each quote sequentially to avoid overwhelming network
+                await MainActor.run {
+                    sendQuoteToJobber(quote)
+                }
+                
+                // Wait for sync to complete (check every 0.5s for up to 30s)
+                var attempts = 0
+                while isSendingToJobber && attempts < 60 {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    attempts += 1
+                }
+                
+                // Check result
+                await MainActor.run {
+                    if quote.syncState == .synced {
+                        successCount += 1
+                    } else {
+                        failedCount += 1
+                    }
+                }
+            }
+            
+            await MainActor.run {
+                batchSyncResults = "\(successCount) of \(quotesToSync.count) quotes synced successfully.\(failedCount > 0 ? "\n\n\(failedCount) failed - you can retry them individually from Quote History." : "")"
+                isBatchSyncing = false
+            }
+        }
+    }
+
     private func sendQuoteToJobber(_ quote: QuoteDraft) {
         // Check if authenticated
         guard jobberAPI.isAuthenticated else {
@@ -342,11 +512,31 @@ struct QuoteHistoryView: View {
             jobberSubmissionError = "This quote is not linked to a Jobber assessment. Only quotes created from scheduled assessments can be sent to Jobber."
             return
         }
+        
+        // Check network connectivity
+        guard networkMonitor.isConnected else {
+            jobberSubmissionError = "No internet connection. Please check your network and try again."
+            return
+        }
+        
+        // Check max attempts
+        if quote.syncAttemptCount >= 10 {
+            jobberSubmissionError = "Maximum upload attempts (10) reached for this quote. Please contact support for assistance."
+            return
+        }
 
         isSendingToJobber = true
         sendingQuoteId = quote.localId
 
         Task {
+            // Update sync state to syncing
+            await MainActor.run {
+                quote.syncState = .syncing
+                quote.lastSyncAttempt = Date()
+                quote.syncAttemptCount += 1
+                try? modelContext.save()
+            }
+            
             do {
                 // Find the corresponding job from our fetched jobs
                 guard let job = jobberAPI.jobs.first(where: { $0.jobId == jobId }) else {
@@ -356,16 +546,24 @@ struct QuoteHistoryView: View {
                 guard let requestId = job.requestId else {
                     throw JobberAPIError.invalidRequest("No request ID available for this assessment")
                 }
+                
+                print("📤 Uploading quote to Jobber (Attempt \(quote.syncAttemptCount) of 10)...")
 
                 // Calculate pricing
                 let breakdown = PricingEngine.calculatePrice(quote: quote, settings: settings)
+
+                // Load photos properly from PhotoRecord fileURL
+                let photos = quote.photos.compactMap { photoRecord in
+                    UIImage(contentsOfFile: photoRecord.fileURL)
+                }
+                print("📸 Loaded \(photos.count) photos from PhotoRecord array for Jobber upload")
 
                 // Submit quote as note to Jobber
                 let noteResult = await jobberAPI.submitQuoteAsNote(
                     requestId: requestId,
                     quote: quote,
                     breakdown: breakdown,
-                    photos: quote.photos.map { _ in UIImage() } // Convert PhotoRecord to UIImage if needed
+                    photos: photos
                 )
 
                 // Create actual quote in Jobber
@@ -398,12 +596,20 @@ struct QuoteHistoryView: View {
                     }
 
                     if hasError {
+                        // Mark as failed and save error
+                        quote.syncState = .failed
+                        quote.syncErrorMessage = errorMessages.joined(separator: "\n")
+                        try? modelContext.save()
+                        
                         jobberSubmissionError = errorMessages.joined(separator: "\n")
                     } else {
-                        // Mark quote as completed since it was successfully sent
+                        // Mark quote as completed and synced
                         quote.quoteStatus = .completed
                         quote.completedAt = Date()
-                        quote.savedToJobber = true // Mark as saved to Jobber
+                        quote.savedToJobber = true
+                        quote.syncState = .synced
+                        quote.syncErrorMessage = nil
+                        quote.syncAttemptCount = 0 // Reset on success
 
                         do {
                             try modelContext.save()
@@ -418,6 +624,11 @@ struct QuoteHistoryView: View {
                 }
             } catch {
                 await MainActor.run {
+                    // Mark as failed and save error
+                    quote.syncState = .failed
+                    quote.syncErrorMessage = error.localizedDescription
+                    try? modelContext.save()
+                    
                     jobberSubmissionError = error.localizedDescription
                     isSendingToJobber = false
                     sendingQuoteId = nil
@@ -463,16 +674,65 @@ struct QuoteHistoryRow: View {
                             .foregroundColor(.white)
                             .cornerRadius(4)
 
-                        // Jobber saved indicator
-                        if quote.savedToJobber {
-                            Text("JOBBER")
+                        // Sync state badge
+                        switch quote.syncState {
+                        case .synced:
+                            Text("✓ SYNCED")
                                 .font(.caption2)
                                 .fontWeight(.medium)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color.blue)
+                                .background(Color.green)
                                 .foregroundColor(.white)
                                 .cornerRadius(4)
+                        case .pending:
+                            Text("⏱ PENDING")
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.orange)
+                                .foregroundColor(.white)
+                                .cornerRadius(4)
+                        case .failed:
+                            if quote.syncAttemptCount >= 10 {
+                                Text("⚠ FAILED (MAX)")
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.red)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(4)
+                                    .onTapGesture {
+                                        // Show error details
+                                    }
+                            } else {
+                                Text("⚠ FAILED (\(quote.syncAttemptCount)/10)")
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.red)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(4)
+                                    .onTapGesture {
+                                        // Show error details
+                                    }
+                            }
+                        case .syncing:
+                            HStack(spacing: 4) {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                                Text("SYNCING")
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(4)
                         }
                     }
 

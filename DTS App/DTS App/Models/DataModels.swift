@@ -185,6 +185,11 @@ final class QuoteDraft: ObservableObject {
     var createdAt: Date = Date()
     var completedAt: Date? // Track when quote was completed
     var savedToJobber: Bool = false // Track if quote was saved to Jobber
+    
+    // Sync tracking fields
+    var lastSyncAttempt: Date? // Last time upload was attempted
+    var syncErrorMessage: String? // Error message from last failed sync
+    var syncAttemptCount: Int = 0 // Number of upload attempts (max 10)
 
     // Computed totals (stored for audit)
     var materialsTotal: Double = 0
@@ -291,6 +296,10 @@ final class PhotoRecord {
     var latitude: Double?
     var longitude: Double?
     var uploaded: Bool = false
+    
+    // Upload tracking
+    var uploadAttempts: Int = 0
+    var lastUploadError: String?
 
     // Annotation features
     var title: String = ""
@@ -381,22 +390,6 @@ struct PhotoAnnotation: Codable {
         self.fontSize = fontSize
         self.textBoxWidth = textBoxWidth
         self.hasExplicitWidth = hasExplicitWidth
-    }
-}
-
-@Model
-final class OutboxOperation {
-    var id: UUID = UUID()
-    var operationType: String // "createQuote", "uploadPhoto", etc.
-    var payload: Data // JSON encoded operation data
-    var retryCount: Int = 0
-    var createdAt: Date = Date()
-    var lastAttemptAt: Date?
-    var errorMessage: String?
-
-    init(operationType: String, payload: Data) {
-        self.operationType = operationType
-        self.payload = payload
     }
 }
 

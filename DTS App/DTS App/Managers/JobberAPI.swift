@@ -1884,13 +1884,13 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
 
     // MARK: - Image Upload (imgbb)
 
-    /// Uploads image to imgbb and returns the direct URL
-    func uploadImageToImgbb(_ image: UIImage) async -> Result<String, Error> {
+    /// Uploads image to imgbb and returns the direct URL with retry logic
+    func uploadImageToImgbb(_ image: UIImage, maxRetries: Int = 3) async -> Result<String, Error> {
         let apiKey = "5e439e5a4e3c937ef15899d5efd99b30"
         let uploadURL = "https://api.imgbb.com/1/upload?key=\(apiKey)"
 
-        // Convert image to JPEG with good quality
-        guard let imageData = image.jpegData(compressionQuality: 0.9) else {
+        // Convert image to JPEG with reduced quality for faster uploads
+        guard let imageData = image.jpegData(compressionQuality: 0.7) else {
             print("❌ Failed to convert image to JPEG")
             return .failure(APIError.invalidResponse)
         }
@@ -1919,56 +1919,141 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
 
         request.httpBody = body
 
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                return .failure(APIError.invalidResponse)
-            }
-
-            guard httpResponse.statusCode == 200 else {
-                print("❌ imgbb upload failed with status: \(httpResponse.statusCode)")
-                if let errorString = String(data: data, encoding: .utf8) {
-                    print("❌ imgbb error: \(errorString)")
+        // Retry loop with exponential backoff
+        var lastError: Error?
+        for attempt in 0..<maxRetries {
+            do {
+                if attempt > 0 {
+                    let delay = UInt64(pow(2.0, Double(attempt)) * 1_000_000_000) // 1s, 2s, 4s
+                    print("⏱ Waiting \(Int(pow(2.0, Double(attempt))))s before retry...")
+                    try await Task.sleep(nanoseconds: delay)
                 }
-                return .failure(APIError.graphQLError("Upload failed with status \(httpResponse.statusCode)"))
+                
+                print("📤 Upload attempt \(attempt + 1) of \(maxRetries)...")
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
+                }
+
+                // Retry on 5xx server errors, but not 4xx client errors
+                if httpResponse.statusCode >= 500 {
+                    print("❌ Server error (\(httpResponse.statusCode)), will retry...")
+                    lastError = APIError.graphQLError("Server error \(httpResponse.statusCode)")
+                    continue
+                }
+                
+                guard httpResponse.statusCode == 200 else {
+                    print("❌ imgbb upload failed with status: \(httpResponse.statusCode)")
+                    if let errorString = String(data: data, encoding: .utf8) {
+                        print("❌ imgbb error: \(errorString)")
+                    }
+                    return .failure(APIError.graphQLError("Upload failed with status \(httpResponse.statusCode)"))
+                }
+
+                // Parse response
+                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                guard let dataDict = json?["data"] as? [String: Any],
+                      let imageURL = dataDict["url"] as? String else {
+                    print("❌ Failed to parse imgbb response")
+                    throw APIError.invalidResponse
+                }
+
+                print("✅ Image uploaded to imgbb: \(imageURL)")
+                return .success(imageURL)
+
+            } catch {
+                print("❌ Upload attempt \(attempt + 1) failed: \(error.localizedDescription)")
+                lastError = error
+                
+                // Don't retry on certain errors
+                if let urlError = error as? URLError {
+                    switch urlError.code {
+                    case .badURL, .unsupportedURL:
+                        return .failure(error) // Don't retry on permanent errors
+                    default:
+                        break // Retry on network errors
+                    }
+                }
             }
-
-            // Parse response
-            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            guard let dataDict = json?["data"] as? [String: Any],
-                  let imageURL = dataDict["url"] as? String else {
-                print("❌ Failed to parse imgbb response")
-                return .failure(APIError.invalidResponse)
-            }
-
-            print("✅ Image uploaded to imgbb: \(imageURL)")
-            return .success(imageURL)
-
-        } catch {
-            print("❌ imgbb upload error: \(error)")
-            return .failure(error)
         }
+        
+        print("❌ All \(maxRetries) upload attempts failed")
+        return .failure(lastError ?? APIError.graphQLError("Upload failed after \(maxRetries) attempts"))
     }
 
-    /// Uploads multiple images to imgbb and returns array of URLs
-    func uploadImagesToImgbb(_ images: [UIImage]) async -> [String] {
-        var imageURLs: [String] = []
-
-        for (index, image) in images.enumerated() {
-            print("📸 Uploading image \(index + 1) of \(images.count) to imgbb...")
-            let result = await uploadImageToImgbb(image)
-
-            switch result {
-            case .success(let url):
-                imageURLs.append(url)
-                print("✅ Image \(index + 1) uploaded successfully")
-            case .failure(let error):
-                print("❌ Failed to upload image \(index + 1): \(error.localizedDescription)")
+    /// Uploads multiple images to imgbb in parallel with retry logic
+    func uploadImagesToImgbb(_ images: [UIImage]) async throws -> [String] {
+        guard !images.isEmpty else { return [] }
+        
+        print("📸 Starting parallel upload of \(images.count) photo(s) to imgbb...")
+        
+        // Upload with limited parallelism (max 3 concurrent uploads)
+        let imageURLs = await withTaskGroup(of: (index: Int, result: Result<String, Error>).self, returning: [String].self) { group in
+            var activeUploads = 0
+            let maxConcurrent = 3
+            var pendingIndices = Array(images.indices)
+            var results: [(Int, Result<String, Error>)] = []
+            
+            // Start initial batch
+            while activeUploads < maxConcurrent && !pendingIndices.isEmpty {
+                let index = pendingIndices.removeFirst()
+                let image = images[index]
+                activeUploads += 1
+                
+                group.addTask {
+                    print("📤 Starting upload \(index + 1) of \(images.count)...")
+                    let result = await self.uploadImageToImgbb(image)
+                    return (index, result)
+                }
             }
+            
+            // Process results and start new uploads
+            for await (index, result) in group {
+                activeUploads -= 1
+                results.append((index, result))
+                
+                switch result {
+                case .success(let url):
+                    print("✅ Photo \(index + 1) uploaded successfully")
+                case .failure(let error):
+                    print("❌ Photo \(index + 1) failed: \(error.localizedDescription)")
+                }
+                
+                // Start next upload if available
+                if !pendingIndices.isEmpty {
+                    let nextIndex = pendingIndices.removeFirst()
+                    let nextImage = images[nextIndex]
+                    activeUploads += 1
+                    
+                    group.addTask {
+                        print("📤 Starting upload \(nextIndex + 1) of \(images.count)...")
+                        let result = await self.uploadImageToImgbb(nextImage)
+                        return (nextIndex, result)
+                    }
+                }
+            }
+            
+            // Sort by index and extract successful URLs
+            results.sort { $0.0 < $1.0 }
+            let successfulURLs = results.compactMap { index, result -> String? in
+                if case .success(let url) = result {
+                    return url
+                }
+                return nil
+            }
+            
+            return successfulURLs
         }
-
-        print("📸 Successfully uploaded \(imageURLs.count) of \(images.count) images")
+        
+        print("📸 Upload complete: \(imageURLs.count) of \(images.count) photos succeeded")
+        
+        // Validate all photos uploaded successfully
+        guard imageURLs.count == images.count else {
+            let failedCount = images.count - imageURLs.count
+            throw APIError.graphQLError("Failed to upload \(failedCount) of \(images.count) photos. Please check your internet connection and try again.")
+        }
+        
         return imageURLs
     }
 
@@ -1986,8 +2071,17 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         // Step 1: Upload photos to imgbb and get URLs
         var photoURLs: [String] = []
         if !photos.isEmpty {
-            photoURLs = await uploadImagesToImgbb(photos)
-            print("📸 Got \(photoURLs.count) photo URLs from imgbb")
+            do {
+                photoURLs = try await uploadImagesToImgbb(photos)
+                print("✅ Uploaded \(photoURLs.count) photos successfully")
+                
+                // Add delay to ensure imgbb URLs are propagated
+                print("⏱ Waiting 1.5s for URL propagation...")
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+            } catch {
+                print("❌ Photo upload failed: \(error.localizedDescription)")
+                return .failure(.graphQLError(error.localizedDescription))
+            }
         }
 
         // Step 2: Create note with attachments

@@ -22,10 +22,13 @@ struct QuoteFormView: View {
     @State private var showingJobberSuccess = false
     @State private var jobberSubmissionError: String?
     @StateObject private var photoCaptureManager = PhotoCaptureManager()
+    @StateObject private var networkMonitor = NetworkMonitor.shared
     @State private var showingPhotoGallery = false
     @State private var generatedPDFURL: URL?
     @State private var showingShareSheet = false
     @State private var showingPDFAlert = false
+    @State private var showingEditLockAlert = false
+    @State private var editLockMessage = ""
 
     // Calculator state
     @State private var showingCalculator = false
@@ -474,11 +477,54 @@ struct QuoteFormView: View {
                 Text("Your quote has been added as a note to the Jobber assessment and created as an official quote with proper line items and pricing.")
             }
             .alert("Submission Failed", isPresented: .constant(jobberSubmissionError != nil)) {
-                Button("OK") {
+                // Show retry option if network is available and under max attempts
+                if networkMonitor.isConnected && quoteDraft.syncAttemptCount < 10 {
+                    Button("Retry Now") {
+                        jobberSubmissionError = nil
+                        saveQuoteToJobber()
+                    }
+                }
+                
+                Button("View in History") {
+                    jobberSubmissionError = nil
+                    router.selectedTab = 2 // Navigate to Quote History tab
+                    dismiss()
+                }
+                
+                Button("Cancel", role: .cancel) {
                     jobberSubmissionError = nil
                 }
             } message: {
-                Text(jobberSubmissionError ?? "Unknown error occurred")
+                if quoteDraft.syncAttemptCount >= 10 {
+                    Text("Maximum upload attempts (10) reached. Quote saved locally. Please contact support for assistance.")
+                } else if !networkMonitor.isConnected {
+                    Text("No internet connection. Quote saved locally. You can upload it from Quote History when online.")
+                } else {
+                    Text("\\(jobberSubmissionError ?? "Unknown error occurred")\\n\\nAttempt \\(quoteDraft.syncAttemptCount) of 10. Quote saved locally and can be uploaded from Quote History.")
+                }
+            }
+            .alert("Quote Not Uploaded", isPresented: $showingEditLockAlert) {
+                if quoteDraft.syncState == .syncing {
+                    // Can't edit while syncing
+                    Button("OK") {
+                        dismiss()
+                    }
+                } else {
+                    // For pending/failed, allow editing with warning
+                    Button("Edit Anyway") {
+                        // Reset sync state to pending when editing
+                        quoteDraft.syncState = .pending
+                        quoteDraft.syncErrorMessage = nil
+                        quoteDraft.syncAttemptCount = 0
+                        try? modelContext.save()
+                    }
+                    
+                    Button("Cancel", role: .cancel) {
+                        dismiss()
+                    }
+                }
+            } message: {
+                Text(editLockMessage)
             }
             .sheet(isPresented: $showingShareSheet) {
                 if let pdfURL = generatedPDFURL {
@@ -523,6 +569,15 @@ struct QuoteFormView: View {
         .onAppear {
             // If we have an existing quote (editing mode), use it
             if let existingQuote = existingQuote {
+                // Check if quote is currently syncing or failed
+                if existingQuote.syncState == .syncing {
+                    editLockMessage = "This quote is currently uploading to Jobber. Please wait for the upload to complete before editing."
+                    showingEditLockAlert = true
+                } else if existingQuote.syncState == .failed || existingQuote.syncState == .pending {
+                    editLockMessage = "This quote has not been uploaded to Jobber yet (\(existingQuote.syncState == .failed ? "upload failed" : "pending upload")).\n\nEditing will reset the upload status. You can:\n• Edit now (upload will need to be retried)\n• Upload first from Quote History, then edit"
+                    showingEditLockAlert = true
+                }
+                
                 quoteDraft = existingQuote
                 print("Editing existing quote for client: \(existingQuote.clientName)")
                 loadExistingPhotos()
@@ -1245,9 +1300,39 @@ struct QuoteFormView: View {
 
         // Generate PDF
         generateQuotePDF(breakdown: breakdown)
+        
+        // Check network connectivity before attempting upload
+        guard networkMonitor.isConnected else {
+            print("📡 No network connection - saving quote for later upload")
+            quoteDraft.syncState = .pending
+            quoteDraft.lastSyncAttempt = Date()
+            quoteDraft.syncAttemptCount = 0
+            quoteDraft.syncErrorMessage = "No internet connection"
+            try? modelContext.save()
+            
+            jobberSubmissionError = "No internet connection. Quote saved locally. You can upload it from Quote History when online."
+            isSavingToJobber = false
+            return
+        }
+        
+        // Check max attempts
+        if quoteDraft.syncAttemptCount >= 10 {
+            print("❌ Max sync attempts (10) reached for quote")
+            jobberSubmissionError = "Maximum upload attempts (10) reached. Please contact support for assistance."
+            isSavingToJobber = false
+            return
+        }
 
         // Then submit to Jobber as note AND create a quote
         Task {
+            // Update sync state to syncing
+            await MainActor.run {
+                quoteDraft.syncState = .syncing
+                quoteDraft.lastSyncAttempt = Date()
+                quoteDraft.syncAttemptCount += 1
+                try? modelContext.save()
+            }
+            
             do {
                 guard let job = job else {
                     throw JobberAPIError.invalidRequest("No job available")
@@ -1260,7 +1345,7 @@ struct QuoteFormView: View {
                     throw JobberAPIError.invalidRequest("No request ID available for this assessment - this assessment might not be linked to a request")
                 }
 
-                print("📤 Submitting quote to Jobber with requestId: \(requestId)")
+                print("📤 Submitting quote to Jobber with requestId: \(requestId) (Attempt \(quoteDraft.syncAttemptCount) of 10)")
 
                 // Get photos from the persisted PhotoRecord array (saved to disk)
                 let photos = quoteDraft.photos.compactMap { photoRecord in
@@ -1307,16 +1392,25 @@ struct QuoteFormView: View {
                     }
 
                     if hasError {
+                        // Mark as failed and save error
+                        quoteDraft.syncState = .failed
+                        quoteDraft.syncErrorMessage = errorMessages.joined(separator: "\n")
+                        try? modelContext.save()
+                        
                         jobberSubmissionError = errorMessages.joined(separator: "\n")
                     } else {
-                        // Mark as saved to Jobber when successful
+                        // Mark as synced and saved to Jobber when successful
+                        quoteDraft.syncState = .synced
                         quoteDraft.savedToJobber = true
+                        quoteDraft.syncErrorMessage = nil
+                        quoteDraft.syncAttemptCount = 0 // Reset on success
+                        try? modelContext.save()
 
                         // Clear submitted photos from PhotoCaptureManager to prevent duplicates
                         photoCaptureManager.capturedImages.removeAll { photo in
                             photo.quoteDraftId == quoteDraft.localId
                         }
-                        print("📸 Cleared \(quoteDraftPhotos.count) photos from PhotoCaptureManager after successful submission")
+                        print("📸 Cleared photos from PhotoCaptureManager after successful submission")
 
                         // Show success message
                         showingJobberSuccess = true
@@ -1335,6 +1429,11 @@ struct QuoteFormView: View {
                 }
             } catch {
                 await MainActor.run {
+                    // Mark as failed and save error
+                    quoteDraft.syncState = .failed
+                    quoteDraft.syncErrorMessage = error.localizedDescription
+                    try? modelContext.save()
+                    
                     jobberSubmissionError = error.localizedDescription
                     isSavingToJobber = false
                 }
