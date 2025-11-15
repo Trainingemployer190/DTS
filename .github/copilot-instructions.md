@@ -281,6 +281,14 @@ private let redirectURI = "https://trainingemployer190.github.io/dtsapp-oauth-re
 - **Photo Library:** New 4th tab with search, selection mode, share/delete functionality
 - **Text Interactions:** Tap-to-select, drag-to-move, tap-again-to-edit pattern for text annotations
 
+## Git Workflow Rules
+**CRITICAL:** AI agent must NEVER commit code autonomously. Only commit when user explicitly requests it with commands like:
+- "commit this"
+- "commit these changes"
+- "make a commit"
+
+User has full control over when commits happen. Wait for explicit instructions before using git commit commands.
+
 ## Documentation References
 - `README.md` - Setup, tasks, Jobber API configuration
 - `CHANGELOG.md` - Version history, critical bug fixes
@@ -295,3 +303,4 @@ private let redirectURI = "https://trainingemployer190.github.io/dtsapp-oauth-re
 ---
 
 **When in doubt:** Search the GraphQL schema first, follow existing patterns in `JobberAPI.swift`, and test pricing calculations against `PricingEngine` logic.
+

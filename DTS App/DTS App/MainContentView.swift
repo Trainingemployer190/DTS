@@ -69,5 +69,5 @@ struct MainContentView: View {
 #Preview {
     MainContentView()
         .environmentObject(AppRouter())
-        .modelContainer(for: [AppSettings.self, QuoteDraft.self, LineItem.self, PhotoRecord.self, OutboxOperation.self])
+        .modelContainer(for: [AppSettings.self, QuoteDraft.self, LineItem.self, PhotoRecord.self])
 }

@@ -61,7 +61,7 @@ struct DTSApp: App {
                     }
             } else {
                 MainContentView()
-                    .modelContainer(for: [AppSettings.self, QuoteDraft.self, PhotoRecord.self, LineItem.self, OutboxOperation.self])
+                    .modelContainer(for: [AppSettings.self, QuoteDraft.self, PhotoRecord.self, LineItem.self])
                     .environmentObject(jobberAPI)
                     .environmentObject(router)
                     .onOpenURL { url in

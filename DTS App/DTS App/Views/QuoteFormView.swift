@@ -484,13 +484,13 @@ struct QuoteFormView: View {
                         saveQuoteToJobber()
                     }
                 }
-                
+
                 Button("View in History") {
                     jobberSubmissionError = nil
                     router.selectedTab = 2 // Navigate to Quote History tab
                     dismiss()
                 }
-                
+
                 Button("Cancel", role: .cancel) {
                     jobberSubmissionError = nil
                 }
@@ -500,7 +500,7 @@ struct QuoteFormView: View {
                 } else if !networkMonitor.isConnected {
                     Text("No internet connection. Quote saved locally. You can upload it from Quote History when online.")
                 } else {
-                    Text("\\(jobberSubmissionError ?? "Unknown error occurred")\\n\\nAttempt \\(quoteDraft.syncAttemptCount) of 10. Quote saved locally and can be uploaded from Quote History.")
+                    Text("\(jobberSubmissionError ?? "Unknown error occurred")\n\nAttempt \(quoteDraft.syncAttemptCount) of 10. Quote saved locally and can be uploaded from Quote History.")
                 }
             }
             .alert("Quote Not Uploaded", isPresented: $showingEditLockAlert) {
@@ -518,7 +518,7 @@ struct QuoteFormView: View {
                         quoteDraft.syncAttemptCount = 0
                         try? modelContext.save()
                     }
-                    
+
                     Button("Cancel", role: .cancel) {
                         dismiss()
                     }
@@ -577,7 +577,7 @@ struct QuoteFormView: View {
                     editLockMessage = "This quote has not been uploaded to Jobber yet (\(existingQuote.syncState == .failed ? "upload failed" : "pending upload")).\n\nEditing will reset the upload status. You can:\n• Edit now (upload will need to be retried)\n• Upload first from Quote History, then edit"
                     showingEditLockAlert = true
                 }
-                
+
                 quoteDraft = existingQuote
                 print("Editing existing quote for client: \(existingQuote.clientName)")
                 loadExistingPhotos()
@@ -1300,7 +1300,7 @@ struct QuoteFormView: View {
 
         // Generate PDF
         generateQuotePDF(breakdown: breakdown)
-        
+
         // Check network connectivity before attempting upload
         guard networkMonitor.isConnected else {
             print("📡 No network connection - saving quote for later upload")
@@ -1309,12 +1309,12 @@ struct QuoteFormView: View {
             quoteDraft.syncAttemptCount = 0
             quoteDraft.syncErrorMessage = "No internet connection"
             try? modelContext.save()
-            
+
             jobberSubmissionError = "No internet connection. Quote saved locally. You can upload it from Quote History when online."
             isSavingToJobber = false
             return
         }
-        
+
         // Check max attempts
         if quoteDraft.syncAttemptCount >= 10 {
             print("❌ Max sync attempts (10) reached for quote")
@@ -1332,7 +1332,7 @@ struct QuoteFormView: View {
                 quoteDraft.syncAttemptCount += 1
                 try? modelContext.save()
             }
-            
+
             do {
                 guard let job = job else {
                     throw JobberAPIError.invalidRequest("No job available")
@@ -1396,7 +1396,7 @@ struct QuoteFormView: View {
                         quoteDraft.syncState = .failed
                         quoteDraft.syncErrorMessage = errorMessages.joined(separator: "\n")
                         try? modelContext.save()
-                        
+
                         jobberSubmissionError = errorMessages.joined(separator: "\n")
                     } else {
                         // Mark as synced and saved to Jobber when successful
@@ -1433,7 +1433,7 @@ struct QuoteFormView: View {
                     quoteDraft.syncState = .failed
                     quoteDraft.syncErrorMessage = error.localizedDescription
                     try? modelContext.save()
-                    
+
                     jobberSubmissionError = error.localizedDescription
                     isSavingToJobber = false
                 }

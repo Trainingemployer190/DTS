@@ -15,8 +15,7 @@ struct DTS_AppApp: App {
             AppSettings.self,
             QuoteDraft.self,
             LineItem.self,
-            PhotoRecord.self,
-            OutboxOperation.self
+            PhotoRecord.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

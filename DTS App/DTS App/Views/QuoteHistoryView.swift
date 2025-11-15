@@ -49,12 +49,12 @@ struct QuoteHistoryView: View {
             }
         }
     }
-    
+
     // Count of quotes pending sync
     var pendingSyncQuotes: [QuoteDraft] {
         allRelevantQuotes.filter { quote in
-            (quote.syncState == .pending || quote.syncState == .failed) && 
-            quote.jobId != nil && 
+            (quote.syncState == .pending || quote.syncState == .failed) &&
+            quote.jobId != nil &&
             quote.syncAttemptCount < 10
         }
     }
@@ -84,7 +84,7 @@ struct QuoteHistoryView: View {
                         .disabled(!networkMonitor.isConnected || isBatchSyncing)
                     }
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button("Storage Info", systemImage: "info.circle") {
@@ -375,11 +375,11 @@ struct QuoteHistoryView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 60))
                             .foregroundColor(.green)
-                        
+
                         Text("Sync Complete")
                             .font(.title2)
                             .fontWeight(.bold)
-                        
+
                         Text(results)
                             .multilineTextAlignment(.center)
                             .padding()
@@ -389,10 +389,10 @@ struct QuoteHistoryView: View {
                         Text("Sync Pending Quotes")
                             .font(.title2)
                             .fontWeight(.bold)
-                        
+
                         Text("Upload \(pendingSyncQuotes.count) pending quote\(pendingSyncQuotes.count == 1 ? "" : "s") to Jobber?")
                             .foregroundColor(.secondary)
-                        
+
                         if networkMonitor.isCellular {
                             HStack {
                                 Image(systemName: "antenna.radiowaves.left.and.right")
@@ -405,9 +405,9 @@ struct QuoteHistoryView: View {
                             .background(Color.orange.opacity(0.1))
                             .cornerRadius(8)
                         }
-                        
+
                         Divider()
-                        
+
                         ScrollView {
                             VStack(alignment: .leading, spacing: 8) {
                                 ForEach(pendingSyncQuotes) { quote in
@@ -433,7 +433,7 @@ struct QuoteHistoryView: View {
                             }
                         }
                         .frame(maxHeight: 200)
-                        
+
                         Button(action: syncAllPending) {
                             HStack {
                                 Image(systemName: "arrow.clockwise.icloud")
@@ -461,28 +461,28 @@ struct QuoteHistoryView: View {
             }
         }
     }
-    
+
     private func syncAllPending() {
         isBatchSyncing = true
-        
+
         Task {
             var successCount = 0
             var failedCount = 0
             let quotesToSync = pendingSyncQuotes
-            
+
             for quote in quotesToSync {
                 // Sync each quote sequentially to avoid overwhelming network
                 await MainActor.run {
                     sendQuoteToJobber(quote)
                 }
-                
+
                 // Wait for sync to complete (check every 0.5s for up to 30s)
                 var attempts = 0
                 while isSendingToJobber && attempts < 60 {
                     try? await Task.sleep(nanoseconds: 500_000_000)
                     attempts += 1
                 }
-                
+
                 // Check result
                 await MainActor.run {
                     if quote.syncState == .synced {
@@ -492,7 +492,7 @@ struct QuoteHistoryView: View {
                     }
                 }
             }
-            
+
             await MainActor.run {
                 batchSyncResults = "\(successCount) of \(quotesToSync.count) quotes synced successfully.\(failedCount > 0 ? "\n\n\(failedCount) failed - you can retry them individually from Quote History." : "")"
                 isBatchSyncing = false
@@ -512,13 +512,13 @@ struct QuoteHistoryView: View {
             jobberSubmissionError = "This quote is not linked to a Jobber assessment. Only quotes created from scheduled assessments can be sent to Jobber."
             return
         }
-        
+
         // Check network connectivity
         guard networkMonitor.isConnected else {
             jobberSubmissionError = "No internet connection. Please check your network and try again."
             return
         }
-        
+
         // Check max attempts
         if quote.syncAttemptCount >= 10 {
             jobberSubmissionError = "Maximum upload attempts (10) reached for this quote. Please contact support for assistance."
@@ -536,7 +536,7 @@ struct QuoteHistoryView: View {
                 quote.syncAttemptCount += 1
                 try? modelContext.save()
             }
-            
+
             do {
                 // Find the corresponding job from our fetched jobs
                 guard let job = jobberAPI.jobs.first(where: { $0.jobId == jobId }) else {
@@ -546,7 +546,7 @@ struct QuoteHistoryView: View {
                 guard let requestId = job.requestId else {
                     throw JobberAPIError.invalidRequest("No request ID available for this assessment")
                 }
-                
+
                 print("📤 Uploading quote to Jobber (Attempt \(quote.syncAttemptCount) of 10)...")
 
                 // Calculate pricing
@@ -600,7 +600,7 @@ struct QuoteHistoryView: View {
                         quote.syncState = .failed
                         quote.syncErrorMessage = errorMessages.joined(separator: "\n")
                         try? modelContext.save()
-                        
+
                         jobberSubmissionError = errorMessages.joined(separator: "\n")
                     } else {
                         // Mark quote as completed and synced
@@ -628,7 +628,7 @@ struct QuoteHistoryView: View {
                     quote.syncState = .failed
                     quote.syncErrorMessage = error.localizedDescription
                     try? modelContext.save()
-                    
+
                     jobberSubmissionError = error.localizedDescription
                     isSendingToJobber = false
                     sendingQuoteId = nil

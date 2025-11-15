@@ -922,7 +922,7 @@ struct PhotoAnnotationEditor: View {
 
                             let screenX = annotation.position.x * scale + xOffset
                             let screenY = annotation.position.y * scale + yOffset
-                            
+
                             let _ = print("📍 TEXT BOX POSITION: screenX=\(String(format: "%.1f", screenX)), screenY=\(String(format: "%.1f", screenY))")
 
                             ZStack {
@@ -940,7 +940,7 @@ struct PhotoAnnotationEditor: View {
                                 let lineHeight = screenFontSize * 1.2
                                 let actualLineCount = wrappedLines.count
                                 let screenTextBoxHeight = CGFloat(actualLineCount) * lineHeight
-                                
+
                                 let _ = print("📦 TEXT BOX: width=\(String(format: "%.1f", screenTextBoxWidth)), height=\(String(format: "%.1f", screenTextBoxHeight)), lines=\(actualLineCount)")
 
                                 // Dotted border around text box - this will now update position during font resize
@@ -976,7 +976,7 @@ struct PhotoAnnotationEditor: View {
                                 let rawWidthHandleY = screenY + screenTextBoxHeight/2
                                 let widthHandleX = max(30, min(geometry.size.width - 30, rawWidthHandleX))
                                 let widthHandleY = max(30, min(geometry.size.height - 30, rawWidthHandleY))
-                                
+
                                 let _ = print("🟢 GREEN HANDLE: x=\(String(format: "%.1f", widthHandleX)), y=\(String(format: "%.1f", widthHandleY)) [dragging=\(isDraggingWidthHandle)]")
 
                                 Circle()
@@ -1042,7 +1042,7 @@ struct PhotoAnnotationEditor: View {
                                 let rawFontHandleY = screenY + screenTextBoxHeight
                                 let fontHandleX = max(30, min(geometry.size.width - 30, rawFontHandleX))
                                 let fontHandleY = max(30, min(geometry.size.height - 30, rawFontHandleY))
-                                
+
                                 let _ = print("🔵 BLUE HANDLE: x=\(String(format: "%.1f", fontHandleX)), y=\(String(format: "%.1f", fontHandleY)) [dragging=\(isDraggingFontHandle)]")
 
                                 Circle()

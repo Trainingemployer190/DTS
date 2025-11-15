@@ -185,7 +185,7 @@ final class QuoteDraft: ObservableObject {
     var createdAt: Date = Date()
     var completedAt: Date? // Track when quote was completed
     var savedToJobber: Bool = false // Track if quote was saved to Jobber
-    
+
     // Sync tracking fields
     var lastSyncAttempt: Date? // Last time upload was attempted
     var syncErrorMessage: String? // Error message from last failed sync
@@ -296,7 +296,7 @@ final class PhotoRecord {
     var latitude: Double?
     var longitude: Double?
     var uploaded: Bool = false
-    
+
     // Upload tracking
     var uploadAttempts: Int = 0
     var lastUploadError: String?
