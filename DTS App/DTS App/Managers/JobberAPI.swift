@@ -1833,9 +1833,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         message += "Gutter: \(String(format: "%.0f", quote.gutterFeet))ft\n"
         message += "Downspout: \(String(format: "%.0f", quote.downspoutFeet))ft \(quote.isRoundDownspout ? "(Round)" : "(Standard)")\n"
 
-        // Calculate gutter guard footage (assuming it matches gutter footage)
-        let gutterGuardFeet = quote.gutterFeet
-        message += "Gutter Guard: \(String(format: "%.0f", gutterGuardFeet))ft\n"
+        message += "Gutter Guard: \(String(format: "%.0f", quote.gutterGuardFeet))ft\n"
         message += "A Elbows: \(quote.aElbows)\n"
         message += "B Elbows: \(quote.bElbows)\n"
         message += "2\" Crimp: \(quote.twoCrimp)\n"

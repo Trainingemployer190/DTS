@@ -1407,10 +1407,13 @@ struct QuoteFormView: View {
                         try? modelContext.save()
 
                         // Clear submitted photos from PhotoCaptureManager to prevent duplicates
-                        photoCaptureManager.capturedImages.removeAll { photo in
-                            photo.quoteDraftId == quoteDraft.localId
+                        // Use filter instead of removeAll to avoid index out of range during UI updates
+                        DispatchQueue.main.async {
+                            photoCaptureManager.capturedImages = photoCaptureManager.capturedImages.filter { photo in
+                                photo.quoteDraftId != quoteDraft.localId
+                            }
+                            print("📸 Cleared photos from PhotoCaptureManager after successful submission")
                         }
-                        print("📸 Cleared photos from PhotoCaptureManager after successful submission")
 
                         // Show success message
                         showingJobberSuccess = true
@@ -1525,10 +1528,13 @@ struct QuoteFormView: View {
                         try? modelContext.save()
 
                         // Clear submitted photos from PhotoCaptureManager to prevent duplicates
-                        photoCaptureManager.capturedImages.removeAll { photo in
-                            photo.quoteDraftId == quoteDraft.localId
+                        // Use filter instead of removeAll to avoid index out of range during UI updates
+                        DispatchQueue.main.async {
+                            photoCaptureManager.capturedImages = photoCaptureManager.capturedImages.filter { photo in
+                                photo.quoteDraftId != quoteDraft.localId
+                            }
+                            print("📸 Cleared photos from PhotoCaptureManager after successful submission")
                         }
-                        print("📸 Cleared photos from PhotoCaptureManager after successful submission")
 
                         // Show success message
                         showingJobberSuccess = true
