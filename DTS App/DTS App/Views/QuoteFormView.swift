@@ -21,6 +21,8 @@ struct QuoteFormView: View {
     @State private var isSavingToJobber = false
     @State private var showingJobberSuccess = false
     @State private var jobberSubmissionError: String?
+    @State private var uploadProgress: String = ""
+    @State private var showingUploadProgress = false
     @StateObject private var photoCaptureManager = PhotoCaptureManager()
     @StateObject private var networkMonitor = NetworkMonitor.shared
     @State private var showingPhotoGallery = false
@@ -472,7 +474,11 @@ struct QuoteFormView: View {
                 }
             }
             .alert("Quote Submitted Successfully!", isPresented: $showingJobberSuccess) {
-                Button("OK") { }
+                Button("OK") {
+                    // Navigate to Home after user acknowledges success
+                    router.selectedTab = 0
+                    dismiss()
+                }
             } message: {
                 Text("Your quote has been added as a note to the Jobber assessment and created as an official quote with proper line items and pricing.")
             }
@@ -564,6 +570,11 @@ struct QuoteFormView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 actionButtonsBar
+            }
+            .overlay {
+                if showingUploadProgress {
+                    UploadProgressOverlay(progress: uploadProgress)
+                }
             }
         }
         .onAppear {
@@ -998,12 +1009,11 @@ struct QuoteFormView: View {
         if !quoteDraftPhotos.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    ForEach(0..<min(quoteDraftPhotos.count, 3), id: \.self) { index in
-                        let image = quoteDraftPhotos[index].image
+                    ForEach(Array(quoteDraftPhotos.prefix(3)), id: \.id) { photo in
                         Button(action: {
                             showingPhotoGallery = true
                         }) {
-                            Image(uiImage: image)
+                            Image(uiImage: photo.image)
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                                 .frame(width: 80, height: 80)
@@ -1283,6 +1293,8 @@ struct QuoteFormView: View {
 
     private func saveQuoteToJobber() {
         isSavingToJobber = true
+        showingUploadProgress = true
+        uploadProgress = "Preparing quote..."
 
         // Save photos to disk first
         savePhotosToQuote()
@@ -1310,6 +1322,7 @@ struct QuoteFormView: View {
             quoteDraft.syncErrorMessage = "No internet connection"
             try? modelContext.save()
 
+            showingUploadProgress = false
             jobberSubmissionError = "No internet connection. Quote saved locally. You can upload it from Quote History when online."
             isSavingToJobber = false
             return
@@ -1318,6 +1331,7 @@ struct QuoteFormView: View {
         // Check max attempts
         if quoteDraft.syncAttemptCount >= 10 {
             print("❌ Max sync attempts (10) reached for quote")
+            showingUploadProgress = false
             jobberSubmissionError = "Maximum upload attempts (10) reached. Please contact support for assistance."
             isSavingToJobber = false
             return
@@ -1327,6 +1341,7 @@ struct QuoteFormView: View {
         Task {
             // Update sync state to syncing
             await MainActor.run {
+                uploadProgress = "Uploading to Jobber...\n\nPlease keep the app open."
                 quoteDraft.syncState = .syncing
                 quoteDraft.lastSyncAttempt = Date()
                 quoteDraft.syncAttemptCount += 1
@@ -1353,13 +1368,28 @@ struct QuoteFormView: View {
                 }
                 print("📸 Loaded \(photos.count) photos from PhotoRecord array for Jobber upload")
 
+                // Update progress
+                await MainActor.run {
+                    uploadProgress = "Uploading \(photos.count) photo(s)...\n\nPlease keep the app open."
+                }
+
                 // Step 1: Submit quote as note to Jobber (with photo attachments)
                 let noteResult = await jobberAPI.submitQuoteAsNote(
                     requestId: requestId,
                     quote: quoteDraft,
                     breakdown: breakdown,
-                    photos: photos
+                    photos: photos,
+                    progressCallback: { completed, total in
+                        Task { @MainActor in
+                            uploadProgress = "Uploaded \(completed) of \(total) photo(s)...\n\nPlease keep the app open."
+                        }
+                    }
                 )
+
+                // Update progress
+                await MainActor.run {
+                    uploadProgress = "Creating quote in Jobber...\n\nPlease keep the app open."
+                }
 
                 // Step 2: Create actual quote in Jobber with proper line items
                 let quoteResult = await jobberAPI.createQuoteFromJobWithMeasurements(
@@ -1397,6 +1427,7 @@ struct QuoteFormView: View {
                         quoteDraft.syncErrorMessage = errorMessages.joined(separator: "\n")
                         try? modelContext.save()
 
+                        showingUploadProgress = false
                         jobberSubmissionError = errorMessages.joined(separator: "\n")
                     } else {
                         // Mark as synced and saved to Jobber when successful
@@ -1415,17 +1446,13 @@ struct QuoteFormView: View {
                             print("📸 Cleared photos from PhotoCaptureManager after successful submission")
                         }
 
-                        // Show success message
+                        // Hide progress and show success message
+                        showingUploadProgress = false
                         showingJobberSuccess = true
+
                         // Provide haptic feedback
                         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                         impactFeedback.impactOccurred()
-
-                        // Navigate to Home after successful submission
-                        DispatchQueue.main.async {
-                            router.selectedTab = 0
-                            dismiss()
-                        }
                     }
 
                     isSavingToJobber = false
@@ -1437,6 +1464,7 @@ struct QuoteFormView: View {
                     quoteDraft.syncErrorMessage = error.localizedDescription
                     try? modelContext.save()
 
+                    showingUploadProgress = false
                     jobberSubmissionError = error.localizedDescription
                     isSavingToJobber = false
                 }
@@ -1446,6 +1474,8 @@ struct QuoteFormView: View {
 
     private func saveEditedQuoteToJobber() {
         isSavingToJobber = true
+        showingUploadProgress = true
+        uploadProgress = "Preparing quote..."
 
         // First save the quote locally with any changes
         let breakdown = PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
@@ -1464,6 +1494,11 @@ struct QuoteFormView: View {
 
         // Submit to Jobber
         Task {
+            // Update progress
+            await MainActor.run {
+                uploadProgress = "Uploading to Jobber...\n\nPlease keep the app open."
+            }
+
             do {
                 // Find the job from jobId since we're editing an existing quote
                 guard let jobId = quoteDraft.jobId,
@@ -1482,13 +1517,28 @@ struct QuoteFormView: View {
                     UIImage(contentsOfFile: photoRecord.fileURL)
                 }
 
+                // Update progress
+                await MainActor.run {
+                    uploadProgress = "Uploading \(photos.count) photo(s)...\n\nPlease keep the app open."
+                }
+
                 // Step 1: Submit quote as note to Jobber
                 let noteResult = await jobberAPI.submitQuoteAsNote(
                     requestId: requestId,
                     quote: quoteDraft,
                     breakdown: breakdown,
-                    photos: photos
+                    photos: photos,
+                    progressCallback: { completed, total in
+                        Task { @MainActor in
+                            uploadProgress = "Uploaded \(completed) of \(total) photo(s)...\n\nPlease keep the app open."
+                        }
+                    }
                 )
+
+                // Update progress
+                await MainActor.run {
+                    uploadProgress = "Creating quote in Jobber...\n\nPlease keep the app open."
+                }
 
                 // Step 2: Create actual quote in Jobber with proper line items
                 let quoteResult = await jobberAPI.createQuoteFromJobWithMeasurements(
@@ -1521,6 +1571,7 @@ struct QuoteFormView: View {
                     }
 
                     if hasError {
+                        showingUploadProgress = false
                         jobberSubmissionError = errorMessages.joined(separator: "\n")
                     } else {
                         // Mark as saved to Jobber when successful
@@ -1536,7 +1587,8 @@ struct QuoteFormView: View {
                             print("📸 Cleared photos from PhotoCaptureManager after successful submission")
                         }
 
-                        // Show success message
+                        // Hide progress and show success message
+                        showingUploadProgress = false
                         showingJobberSuccess = true
 
                         // Provide haptic feedback
@@ -1548,6 +1600,7 @@ struct QuoteFormView: View {
                 }
             } catch {
                 await MainActor.run {
+                    showingUploadProgress = false
                     jobberSubmissionError = error.localizedDescription
                     isSavingToJobber = false
                 }
@@ -1770,6 +1823,36 @@ struct QuoteFormView: View {
 
         print("📸 PhotoCaptureManager now has \(photoCaptureManager.capturedImages.count) total photos")
         #endif
+    }
+}
+
+// MARK: - Upload Progress Overlay
+struct UploadProgressOverlay: View {
+    let progress: String
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                ProgressView()
+                    .scaleEffect(1.5)
+                    .tint(.white)
+
+                Text(progress)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+            }
+            .padding(30)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(.systemGray6))
+                    .shadow(radius: 10)
+            )
+        }
     }
 }
 

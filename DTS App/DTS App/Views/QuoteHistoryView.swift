@@ -71,20 +71,6 @@ struct QuoteHistoryView: View {
             .navigationTitle("Quote History")
             .searchable(text: $searchText, prompt: "Search quotes...")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    if !pendingSyncQuotes.isEmpty {
-                        Button {
-                            showingBatchSyncSheet = true
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrow.clockwise.icloud")
-                                Text("Sync Pending (\(pendingSyncQuotes.count))")
-                            }
-                        }
-                        .disabled(!networkMonitor.isConnected || isBatchSyncing)
-                    }
-                }
-
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button("Storage Info", systemImage: "info.circle") {
@@ -138,20 +124,18 @@ struct QuoteHistoryView: View {
     private var quotesList: some View {
         List(filteredQuotes) { quote in
             NavigationLink(value: quote) {
-                QuoteHistoryRow(quote: quote)
+                QuoteHistoryRow(
+                    quote: quote,
+                    onSync: {
+                        sendQuoteToJobber(quote)
+                    },
+                    isSyncing: sendingQuoteId == quote.localId,
+                    isNetworkConnected: networkMonitor.isConnected
+                )
             }
             .swipeActions(edge: .trailing) {
                 Button("Delete", role: .destructive) {
                     deleteQuote(quote)
-                }
-
-                // Add "Upload to Jobber" or "Retry Upload" for quotes not synced
-                if quote.syncState != .synced && quote.jobId != nil {
-                    Button(sendingQuoteId == quote.localId ? "Uploading..." : (quote.syncState == .failed ? "Retry Upload" : "Upload to Jobber")) {
-                        sendQuoteToJobber(quote)
-                    }
-                    .tint(quote.syncState == .failed ? .orange : .blue)
-                    .disabled(isSendingToJobber || quote.syncAttemptCount >= 10)
                 }
             }
         }
@@ -640,24 +624,28 @@ struct QuoteHistoryView: View {
 
 struct QuoteHistoryRow: View {
     let quote: QuoteDraft
+    let onSync: (() -> Void)?
+    let isSyncing: Bool
+    let isNetworkConnected: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(quote.clientName.isEmpty ? "Unknown Client" : quote.clientName)
-                        .font(.headline)
+        HStack {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(quote.clientName.isEmpty ? "Unknown Client" : quote.clientName)
+                            .font(.headline)
 
-                    if !quote.clientAddress.isEmpty {
-                        Text(quote.clientAddress)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                        if !quote.clientAddress.isEmpty {
+                            Text(quote.clientAddress)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
                     }
-                }
 
-                Spacer()
+                    Spacer()
 
-                VStack(alignment: .trailing, spacing: 4) {
+                    VStack(alignment: .trailing, spacing: 4) {
                     Text("$\(quote.finalTotal, specifier: "%.2f")")
                         .font(.headline)
                         .fontWeight(.semibold)
@@ -750,29 +738,48 @@ struct QuoteHistoryRow: View {
                 }
             }
 
-            HStack(spacing: 16) {
-                if quote.gutterFeet > 0 {
-                    Label("\(Int(quote.gutterFeet))' gutter", systemImage: "house")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                HStack(spacing: 16) {
+                    if quote.gutterFeet > 0 {
+                        Label("\(Int(quote.gutterFeet))' gutter", systemImage: "house")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
 
-                if quote.includeGutterGuard {
-                    Label("Guard", systemImage: "shield")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                    if quote.includeGutterGuard {
+                        Label("Guard", systemImage: "shield")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
 
-                if !quote.photos.isEmpty {
-                    Label("\(quote.photos.count)", systemImage: "photo")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                    if !quote.photos.isEmpty {
+                        Label("\(quote.photos.count)", systemImage: "photo")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
 
-                Spacer()
+                    Spacer()
+                }
+            }
+            .padding(.vertical, 4)
+
+            // Sync button for unsynced quotes
+            if quote.syncState != .synced && quote.jobId != nil && quote.syncAttemptCount < 10 {
+                Button(action: {
+                    onSync?()
+                }) {
+                    if isSyncing {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: quote.syncState == .failed ? "arrow.clockwise.circle.fill" : "icloud.and.arrow.up")
+                            .font(.title2)
+                            .foregroundColor(quote.syncState == .failed ? .orange : .blue)
+                    }
+                }
+                .disabled(!isNetworkConnected || isSyncing)
+                .buttonStyle(.plain)
             }
         }
-        .padding(.vertical, 4)
     }
 }
 

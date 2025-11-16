@@ -1859,11 +1859,32 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         message += "Profit: \(breakdown.markupAmount.toCurrency())\n"
         message += "Commission: \(breakdown.commissionAmount.toCurrency())\n\n"
 
-        // Calculate price per foot (total price divided by total linear feet)
-        let totalLinearFeet = quote.gutterFeet + quote.downspoutFeet
-        let pricePerFoot = totalLinearFeet > 0 ? breakdown.totalPrice / totalLinearFeet : 0
+        // Calculate component totals (matching the PDF and UI display)
+        let gutterBaseCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost + breakdown.gutterLaborCost
+        let guardBaseCost = breakdown.gutterGuardCost + breakdown.gutterGuardLaborCost
 
-        message += "Price/ft: \(pricePerFoot.toCurrency())\n"
+        let gutterTotalBeforeAddOns = gutterBaseCost + breakdown.gutterMarkupAmount
+        let guardTotalBeforeAddOns = guardBaseCost + breakdown.guardMarkupAmount
+
+        let additionalCosts = breakdown.commissionAmount + breakdown.taxAmount
+        let totalBeforeAddOns = gutterTotalBeforeAddOns + guardTotalBeforeAddOns
+        let gutterShare = totalBeforeAddOns > 0 ? gutterTotalBeforeAddOns / totalBeforeAddOns : 0.5
+        let guardShare = 1.0 - gutterShare
+
+        let gutterTotalCost = gutterTotalBeforeAddOns + additionalCosts * gutterShare
+        let guardTotalCost = guardTotalBeforeAddOns + additionalCosts * guardShare
+
+        // Calculate price per foot using component totals
+        if quote.gutterFeet > 0 {
+            let gutterPricePerFoot = gutterTotalCost / (quote.gutterFeet + quote.downspoutFeet)
+            message += "Gutter Price/ft: \(gutterPricePerFoot.toCurrency())\n"
+        }
+
+        if quote.includeGutterGuard && quote.gutterGuardFeet > 0 {
+            let guardPricePerFoot = guardTotalCost / quote.gutterGuardFeet
+            message += "Guard Price/ft: \(guardPricePerFoot.toCurrency())\n"
+        }
+
         message += "Total Price: \(breakdown.totalPrice.toCurrency())\n\n"
 
         // App signature
@@ -1981,7 +2002,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     }
 
     /// Uploads multiple images to imgbb in parallel with retry logic
-    func uploadImagesToImgbb(_ images: [UIImage]) async throws -> [String] {
+    func uploadImagesToImgbb(_ images: [UIImage], progressCallback: ((Int, Int) -> Void)? = nil) async throws -> [String] {
         guard !images.isEmpty else { return [] }
 
         print("📸 Starting parallel upload of \(images.count) photo(s) to imgbb...")
@@ -2014,6 +2035,10 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
                 switch result {
                 case .success(_):
                     print("✅ Photo \(index + 1) uploaded successfully")
+                    // Notify progress callback on main actor
+                    Task { @MainActor in
+                        progressCallback?(results.count, images.count)
+                    }
                 case .failure(let error):
                     print("❌ Photo \(index + 1) failed: \(error.localizedDescription)")
                 }
@@ -2060,7 +2085,8 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         requestId: String,
         quote: QuoteDraft,
         breakdown: PricingEngine.PriceBreakdown,
-        photos: [UIImage] = []
+        photos: [UIImage] = [],
+        progressCallback: ((Int, Int) -> Void)? = nil
     ) async -> Result<RequestNote, APIError> {
 
         print("📝 submitQuoteAsNote called with requestId: \(requestId)")
@@ -2070,7 +2096,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         var photoURLs: [String] = []
         if !photos.isEmpty {
             do {
-                photoURLs = try await uploadImagesToImgbb(photos)
+                photoURLs = try await uploadImagesToImgbb(photos, progressCallback: progressCallback)
                 print("✅ Uploaded \(photoURLs.count) photos successfully")
 
                 // Add delay to ensure imgbb URLs are propagated
