@@ -9,6 +9,8 @@ import SwiftUI
 import CoreLocation
 import AVFoundation
 import Photos
+import ImageIO
+import UniformTypeIdentifiers
 
 // Import UIKit for iOS platform
 #if os(iOS)
@@ -44,6 +46,10 @@ class PhotoCaptureManager: NSObject, ObservableObject {
     private var cachedAddress: String?
     private let geocodingInterval: TimeInterval = 5.0 // Minimum 5 seconds between requests
     private let locationChangeThreshold: CLLocationDistance = 100.0 // Minimum 100 meters change
+
+    // EXIF-based geocoding cache (persistent)
+    private let geocodingCacheKey = "com.dtsapp.geocodingCache"
+    private let geocodingCacheRadius: CLLocationDistance = 30.0 // 30m precision for exact property matching
 
     override init() {
         super.init()
@@ -195,12 +201,24 @@ class PhotoCaptureManager: NSObject, ObservableObject {
         }
     }
 
-    func processImage(_ image: UIImage, jobId: String? = nil, quoteDraftId: UUID? = nil) {
+    func processImage(
+        _ image: UIImage,
+        jobId: String? = nil,
+        quoteDraftId: UUID? = nil,
+        exifTimestamp: Date? = nil,
+        exifCoordinate: CLLocationCoordinate2D? = nil,
+        preGeocodedAddress: String? = nil
+    ) {
         // First compress the image to reduce memory usage
         let compressedImage = compressImage(image)
 
         autoreleasepool {
-            let watermarkedImage = addWatermark(to: compressedImage)
+            let watermarkedImage = addWatermark(
+                to: compressedImage,
+                timestamp: exifTimestamp,
+                coordinate: exifCoordinate,
+                address: preGeocodedAddress
+            )
 
             // Save to Photos app disabled to avoid duplicates
             // Photos are already in the app and can be exported if needed
@@ -296,7 +314,12 @@ class PhotoCaptureManager: NSObject, ObservableObject {
         }
     }
 
-    private func addWatermark(to image: UIImage) -> UIImage {
+    private func addWatermark(
+        to image: UIImage,
+        timestamp: Date? = nil,
+        coordinate: CLLocationCoordinate2D? = nil,
+        address: String? = nil
+    ) -> UIImage {
         // Use autoreleasepool to manage memory during rendering
         return autoreleasepool {
             let format = UIGraphicsImageRendererFormat()
@@ -311,11 +334,25 @@ class PhotoCaptureManager: NSObject, ObservableObject {
                 let dateFormatter = DateFormatter()
                 dateFormatter.dateFormat = "MMM dd, yyyy 'at' h:mm a"
 
-                let timestamp = dateFormatter.string(from: Date())
-                let locationText = formatLocationText()
+                // Use provided timestamp or current time
+                let timestampText = dateFormatter.string(from: timestamp ?? Date())
+
+                // Use provided address, or generate location text
+                let locationText: String
+                if let address = address, !address.isEmpty {
+                    locationText = "📍 \(address)"
+                } else if let coordinate = coordinate {
+                    // Use EXIF coordinates if provided
+                    let latitude = String(format: "%.6f", coordinate.latitude)
+                    let longitude = String(format: "%.6f", coordinate.longitude)
+                    locationText = "📍 \(latitude), \(longitude)"
+                } else {
+                    // Fall back to current location
+                    locationText = formatLocationText()
+                }
 
                 // Simple watermark with just timestamp and location
-                let watermarkText = "\(timestamp)\n\(locationText)"
+                let watermarkText = "\(timestampText)\n\(locationText)"
 
                 // Configure text attributes with smaller font to reduce memory
                 let textColor = UIColor.white
@@ -418,6 +455,353 @@ class PhotoCaptureManager: NSObject, ObservableObject {
             }
         @unknown default:
             return "📍 Location status unknown"
+        }
+    }
+
+    // MARK: - EXIF Metadata Extraction
+
+    /// Extract GPS coordinates and timestamp from photo EXIF data
+    nonisolated static func extractEXIFMetadata(from imageData: Data) -> (coordinate: CLLocationCoordinate2D?, timestamp: Date?) {
+        guard let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil),
+              let imageProperties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any] else {
+            print("❌ Failed to read image properties")
+            return (nil, nil)
+        }
+
+        var coordinate: CLLocationCoordinate2D?
+        var timestamp: Date?
+
+        // Extract GPS coordinates
+        if let gpsDict = imageProperties[kCGImagePropertyGPSDictionary as String] as? [String: Any] {
+            let latitudeRef = gpsDict[kCGImagePropertyGPSLatitudeRef as String] as? String
+            let longitudeRef = gpsDict[kCGImagePropertyGPSLongitudeRef as String] as? String
+
+            if let latitude = gpsDict[kCGImagePropertyGPSLatitude as String] as? Double,
+               let longitude = gpsDict[kCGImagePropertyGPSLongitude as String] as? Double {
+
+                // Convert to signed coordinates based on hemisphere
+                let signedLatitude = (latitudeRef == "S") ? -latitude : latitude
+                let signedLongitude = (longitudeRef == "W") ? -longitude : longitude
+
+                coordinate = CLLocationCoordinate2D(latitude: signedLatitude, longitude: signedLongitude)
+                print("✅ Extracted EXIF GPS: \(signedLatitude), \(signedLongitude)")
+            }
+        }
+
+        // Extract timestamp from EXIF
+        if let exifDict = imageProperties[kCGImagePropertyExifDictionary as String] as? [String: Any],
+           let dateTimeOriginal = exifDict[kCGImagePropertyExifDateTimeOriginal as String] as? String {
+
+            // EXIF date format: "yyyy:MM:dd HH:mm:ss"
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateFormatter.timeZone = TimeZone.current
+
+            if let parsedDate = dateFormatter.date(from: dateTimeOriginal) {
+                timestamp = parsedDate
+                print("✅ Extracted EXIF timestamp: \(parsedDate)")
+            }
+        }
+
+        // If no EXIF timestamp, try TIFF timestamp
+        if timestamp == nil, let tiffDict = imageProperties[kCGImagePropertyTIFFDictionary as String] as? [String: Any],
+           let dateTime = tiffDict[kCGImagePropertyTIFFDateTime as String] as? String {
+
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateFormatter.timeZone = TimeZone.current
+
+            if let parsedDate = dateFormatter.date(from: dateTime) {
+                timestamp = parsedDate
+                print("✅ Extracted TIFF timestamp: \(parsedDate)")
+            }
+        }
+
+        return (coordinate, timestamp)
+    }
+
+    // MARK: - Persistent Geocoding Cache
+
+    /// Save geocoded address to persistent cache
+    private func saveToDiskCache(coordinate: CLLocationCoordinate2D, address: String) {
+        let key = cacheKey(for: coordinate)
+        let cacheEntry: [String: Any] = [
+            "address": address,
+            "timestamp": Date(),
+            "latitude": coordinate.latitude,
+            "longitude": coordinate.longitude
+        ]
+
+        var cache = UserDefaults.standard.dictionary(forKey: geocodingCacheKey) ?? [:]
+        cache[key] = cacheEntry
+        UserDefaults.standard.set(cache, forKey: geocodingCacheKey)
+
+        print("💾 Saved to geocoding cache: \(address) at \(coordinate.latitude), \(coordinate.longitude)")
+    }
+
+    /// Load address from cache if within radius
+    private func loadFromDiskCache(coordinate: CLLocationCoordinate2D, maxRadius: CLLocationDistance = 30.0) -> String? {
+        guard let cache = UserDefaults.standard.dictionary(forKey: geocodingCacheKey) else {
+            return nil
+        }
+
+        let searchLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+
+        // Find closest cached location within radius
+        var closestMatch: (address: String, distance: CLLocationDistance)?
+
+        for (_, value) in cache {
+            guard let entry = value as? [String: Any],
+                  let cachedLat = entry["latitude"] as? Double,
+                  let cachedLon = entry["longitude"] as? Double,
+                  let address = entry["address"] as? String else {
+                continue
+            }
+
+            let cachedLocation = CLLocation(latitude: cachedLat, longitude: cachedLon)
+            let distance = searchLocation.distance(from: cachedLocation)
+
+            if distance <= maxRadius {
+                if closestMatch == nil || distance < closestMatch!.distance {
+                    closestMatch = (address, distance)
+                }
+            }
+        }
+
+        if let match = closestMatch {
+            print("🎯 Cache hit: \(match.address) (distance: \(Int(match.distance))m)")
+            return match.address
+        }
+
+        print("❌ Cache miss for coordinate: \(coordinate.latitude), \(coordinate.longitude)")
+        return nil
+    }
+
+    /// Generate cache key for coordinate (rounded to 5 decimal places ~1m precision)
+    private func cacheKey(for coordinate: CLLocationCoordinate2D) -> String {
+        let lat = String(format: "%.5f", coordinate.latitude)
+        let lon = String(format: "%.5f", coordinate.longitude)
+        return "geocache_\(lat)_\(lon)"
+    }
+
+    // MARK: - Batch Location Selection Logic
+
+    /// Select best location for batch of photos based on priority rules
+    /// Returns: (address: String?, coordinateToGeocode: CLLocationCoordinate2D?)
+    private func selectBestLocationForBatch(
+        photos: [(image: UIImage, coordinate: CLLocationCoordinate2D?, timestamp: Date?)],
+        currentLocation: CLLocation?,
+        jobAddress: String?
+    ) -> (address: String?, coordinateToGeocode: CLLocationCoordinate2D?) {
+
+        // Priority 1: Use job address if available and not empty
+        if let jobAddress = jobAddress, !jobAddress.isEmpty {
+            print("✅ Using job address: \(jobAddress)")
+            return (jobAddress, nil)
+        }
+
+        // Extract valid coordinates from photos
+        let coordinates = photos.compactMap { $0.coordinate }
+
+        guard !coordinates.isEmpty else {
+            print("⚠️ No EXIF coordinates found, will use current location")
+            return (nil, nil)
+        }
+
+        // Priority 2: For 2 photos with different EXIF locations, choose one >500m from current location
+        if coordinates.count == 2, let current = currentLocation {
+            let loc1 = CLLocation(latitude: coordinates[0].latitude, longitude: coordinates[0].longitude)
+            let loc2 = CLLocation(latitude: coordinates[1].latitude, longitude: coordinates[1].longitude)
+
+            let dist1 = current.distance(from: loc1)
+            let dist2 = current.distance(from: loc2)
+
+            // If both are far from current location, use the one taken first (or cluster center)
+            if dist1 > 500 && dist2 > 500 {
+                print("✅ Both photos >500m from current location, using first EXIF coordinate")
+                return (nil, coordinates[0])
+            }
+
+            // Choose the one farther from current location
+            let chosenCoordinate = dist1 > dist2 ? coordinates[0] : coordinates[1]
+            print("✅ Selected EXIF coordinate \(Int(max(dist1, dist2)))m from current location")
+            return (nil, chosenCoordinate)
+        }
+
+        // Priority 3: For 3+ photos, cluster by 100m radius and use largest cluster
+        if coordinates.count >= 3 {
+            let clusters = clusterCoordinates(coordinates, threshold: 100.0)
+
+            // Find largest cluster
+            if let largestCluster = clusters.max(by: { $0.count < $1.count }) {
+                let centroid = calculateCentroid(largestCluster)
+                print("✅ Using centroid of largest cluster (\(largestCluster.count) photos)")
+                return (nil, centroid)
+            }
+        }
+
+        // Priority 4: Single photo or fallback - use first EXIF coordinate
+        if let firstCoordinate = coordinates.first {
+            print("✅ Using EXIF coordinate from photo")
+            return (nil, firstCoordinate)
+        }
+
+        print("⚠️ No valid location found, will use current location")
+        return (nil, nil)
+    }
+
+    /// Cluster coordinates within threshold distance
+    private func clusterCoordinates(_ coordinates: [CLLocationCoordinate2D], threshold: CLLocationDistance) -> [[CLLocationCoordinate2D]] {
+        var clusters: [[CLLocationCoordinate2D]] = []
+        var remaining = coordinates
+
+        while !remaining.isEmpty {
+            let seed = remaining.removeFirst()
+            var cluster = [seed]
+
+            let seedLocation = CLLocation(latitude: seed.latitude, longitude: seed.longitude)
+
+            remaining.removeAll { coordinate in
+                let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+                let distance = seedLocation.distance(from: location)
+
+                if distance <= threshold {
+                    cluster.append(coordinate)
+                    return true
+                }
+                return false
+            }
+
+            clusters.append(cluster)
+        }
+
+        return clusters
+    }
+
+    /// Calculate centroid (average) of coordinates
+    private func calculateCentroid(_ coordinates: [CLLocationCoordinate2D]) -> CLLocationCoordinate2D {
+        let avgLat = coordinates.map { $0.latitude }.reduce(0, +) / Double(coordinates.count)
+        let avgLon = coordinates.map { $0.longitude }.reduce(0, +) / Double(coordinates.count)
+        return CLLocationCoordinate2D(latitude: avgLat, longitude: avgLon)
+    }
+
+    // MARK: - Batch Image Processing
+
+    /// Process multiple images with EXIF metadata extraction and smart location selection
+    func processBatchImages(
+        _ photosWithMetadata: [(image: UIImage, coordinate: CLLocationCoordinate2D?, timestamp: Date?)],
+        quoteDraftId: UUID? = nil,
+        jobId: String? = nil,
+        jobAddress: String? = nil
+    ) async {
+        print("📸 Processing batch of \(photosWithMetadata.count) photos...")
+
+        // Select best location using priority rules
+        let (preGeocodedAddress, coordinateToGeocode) = selectBestLocationForBatch(
+            photos: photosWithMetadata,
+            currentLocation: currentLocation,
+            jobAddress: jobAddress
+        )
+
+        var finalAddress: String? = preGeocodedAddress
+
+        // If we have a coordinate to geocode and no pre-geocoded address
+        if let coordinate = coordinateToGeocode, finalAddress == nil {
+            // Check cache first (30m radius for exact property matching)
+            if let cachedAddress = loadFromDiskCache(coordinate: coordinate, maxRadius: geocodingCacheRadius) {
+                finalAddress = cachedAddress
+                print("✅ Using cached address: \(cachedAddress)")
+            } else {
+                // Perform geocoding with timeout
+                print("🌐 Geocoding coordinate: \(coordinate.latitude), \(coordinate.longitude)")
+
+                let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+
+                do {
+                    let address = try await withTimeout(seconds: 5.0) {
+                        try await self.reverseGeocode(location: location)
+                    }
+
+                    finalAddress = address
+                    saveToDiskCache(coordinate: coordinate, address: address)
+                    print("✅ Geocoded address: \(address)")
+
+                } catch {
+                    print("⚠️ Geocoding failed or timed out: \(error.localizedDescription)")
+                    // Will fall back to coordinates in watermark
+                }
+            }
+        }
+
+        // Process all photos with the determined address
+        await MainActor.run {
+            for (index, photo) in photosWithMetadata.enumerated() {
+                print("📸 Processing photo \(index + 1)/\(photosWithMetadata.count)")
+                processImage(
+                    photo.image,
+                    jobId: jobId,
+                    quoteDraftId: quoteDraftId,
+                    exifTimestamp: photo.timestamp,
+                    exifCoordinate: photo.coordinate,
+                    preGeocodedAddress: finalAddress
+                )
+            }
+        }
+
+        print("✅ Batch processing complete")
+    }
+
+    /// Reverse geocode a location with CLGeocoder
+    private func reverseGeocode(location: CLLocation) async throws -> String {
+        return try await withCheckedThrowingContinuation { continuation in
+            geocoder.reverseGeocodeLocation(location) { placemarks, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                if let placemark = placemarks?.first {
+                    var addressComponents: [String] = []
+
+                    if let streetNumber = placemark.subThoroughfare {
+                        addressComponents.append(streetNumber)
+                    }
+                    if let streetName = placemark.thoroughfare {
+                        addressComponents.append(streetName)
+                    }
+                    if let city = placemark.locality {
+                        addressComponents.append(city)
+                    }
+                    if let state = placemark.administrativeArea {
+                        addressComponents.append(state)
+                    }
+
+                    let address = addressComponents.joined(separator: " ")
+                    continuation.resume(returning: address)
+                } else {
+                    continuation.resume(throwing: NSError(domain: "Geocoding", code: -1, userInfo: [NSLocalizedDescriptionKey: "No address found"]))
+                }
+            }
+        }
+    }
+
+    /// Helper to add timeout to async operations
+    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw NSError(domain: "Timeout", code: -1, userInfo: [NSLocalizedDescriptionKey: "Operation timed out"])
+            }
+
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
         }
     }
 }

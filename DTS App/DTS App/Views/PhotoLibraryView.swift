@@ -24,6 +24,7 @@ struct PhotoLibraryView: View {
     @State private var showingPhotoLibrary = false
     @State private var captureCount = 0
     @State private var showingDeleteConfirmation = false
+    @State private var isProcessingPhotos = false
 
     // Selection mode
     @State private var isSelectionMode = false
@@ -162,8 +163,61 @@ struct PhotoLibraryView: View {
                 }
             }
             .sheet(isPresented: $showingPhotoLibrary) {
-                MultiImagePicker { images in
-                    handleMultiplePhotoLibraryImages(images)
+                MultiImagePicker { photosWithMetadata in
+                    Task {
+                        isProcessingPhotos = true
+
+                        // Process photos with EXIF metadata and smart geocoding
+                        await photoCaptureManager.processBatchImages(
+                            photosWithMetadata,
+                            quoteDraftId: nil,
+                            jobId: nil,
+                            jobAddress: nil
+                        )
+
+                        // Save PhotoRecord entries for each processed photo
+                        await MainActor.run {
+                            // Get the most recently captured photos
+                            let recentPhotos = photoCaptureManager.capturedImages.suffix(photosWithMetadata.count)
+
+                            for capturedPhoto in recentPhotos {
+                                // Find the saved file URL from Documents directory
+                                if let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                                    // The file was saved by processImage, we need to find it
+                                    // Since we don't have the exact filename, we'll re-save it
+                                    if let imageData = capturedPhoto.image.jpegData(compressionQuality: 0.7) {
+                                        let fileName = "photo_\(Date().timeIntervalSince1970)_\(UUID().uuidString.prefix(8)).jpg"
+                                        let fileURL = documentsPath.appendingPathComponent(fileName)
+
+                                        do {
+                                            try imageData.write(to: fileURL)
+
+                                            let photoRecord = PhotoRecord(fileURL: fileURL.path)
+
+                                            // Parse location from locationString if available
+                                            if let locationString = capturedPhoto.location {
+                                                let components = locationString.split(separator: ",")
+                                                if components.count == 2,
+                                                   let lat = Double(components[0]),
+                                                   let lon = Double(components[1]) {
+                                                    photoRecord.latitude = lat
+                                                    photoRecord.longitude = lon
+                                                }
+                                            }
+
+                                            modelContext.insert(photoRecord)
+                                        } catch {
+                                            print("❌ Error saving photo to library: \(error)")
+                                        }
+                                    }
+                                }
+                            }
+
+                            try? modelContext.save()
+                        }
+
+                        isProcessingPhotos = false
+                    }
                 }
             }
             .sheet(item: $selectedPhoto) { (photo: PhotoRecord) in
@@ -187,6 +241,36 @@ struct PhotoLibraryView: View {
             .safeAreaInset(edge: .bottom) {
                 if isSelectionMode && !selectedPhotos.isEmpty {
                     selectionActionBar
+                }
+            }
+            .overlay {
+                if isProcessingPhotos {
+                    ZStack {
+                        Color.black.opacity(0.4)
+                            .ignoresSafeArea()
+
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .tint(.white)
+
+                            Text("Processing photos...")
+                                .font(.headline)
+                                .foregroundColor(.white)
+
+                            Text("Extracting location data and applying watermarks")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.8))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        }
+                        .padding(32)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color(.systemGray6))
+                                .opacity(0.95)
+                        )
+                    }
                 }
             }
         }

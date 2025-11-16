@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import CoreLocation
+import UniformTypeIdentifiers
 
 #if canImport(UIKit)
 import UIKit
@@ -54,7 +56,7 @@ struct ImagePicker: UIViewControllerRepresentable {
 // Multiple image picker (for photo library)
 struct MultiImagePicker: UIViewControllerRepresentable {
     @Environment(\.dismiss) private var dismiss
-    var onImagesPicked: ([UIImage]) -> Void
+    var onImagesPicked: ([(image: UIImage, coordinate: CLLocationCoordinate2D?, timestamp: Date?)]) -> Void
 
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var configuration = PHPickerConfiguration()
@@ -84,21 +86,51 @@ struct MultiImagePicker: UIViewControllerRepresentable {
 
             guard !results.isEmpty else { return }
 
-            var images: [UIImage] = []
+            var photosWithMetadata: [(image: UIImage, coordinate: CLLocationCoordinate2D?, timestamp: Date?)] = []
             let group = DispatchGroup()
 
             for result in results {
                 group.enter()
-                result.itemProvider.loadObject(ofClass: UIImage.self) { object, error in
+
+                // Use loadFileRepresentation to preserve EXIF data
+                result.itemProvider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { url, error in
                     defer { group.leave() }
-                    if let image = object as? UIImage {
-                        images.append(image)
+
+                    guard let url = url, error == nil else {
+                        print("❌ Failed to load file representation: \(error?.localizedDescription ?? "unknown error")")
+                        return
+                    }
+
+                    do {
+                        // Read image data
+                        let imageData = try Data(contentsOf: url)
+
+                        // Create UIImage
+                        guard let image = UIImage(data: imageData) else {
+                            print("❌ Failed to create UIImage from data")
+                            return
+                        }
+
+                        // Extract EXIF metadata
+                        let metadata = PhotoCaptureManager.extractEXIFMetadata(from: imageData)
+
+                        // Add to results
+                        DispatchQueue.main.async {
+                            photosWithMetadata.append((
+                                image: image,
+                                coordinate: metadata.coordinate,
+                                timestamp: metadata.timestamp
+                            ))
+                        }
+
+                    } catch {
+                        print("❌ Error processing image: \(error.localizedDescription)")
                     }
                 }
             }
 
             group.notify(queue: .main) {
-                self.parent.onImagesPicked(images)
+                self.parent.onImagesPicked(photosWithMetadata)
             }
         }
     }

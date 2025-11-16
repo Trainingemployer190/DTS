@@ -31,6 +31,7 @@ struct QuoteFormView: View {
     @State private var showingPDFAlert = false
     @State private var showingEditLockAlert = false
     @State private var editLockMessage = ""
+    @State private var isProcessingPhotos = false
 
     // Calculator state
     @State private var showingCalculator = false
@@ -548,9 +549,21 @@ struct QuoteFormView: View {
                 }
             }
             .sheet(isPresented: $photoCaptureManager.showingPhotoLibrary) {
-                MultiImagePicker { images in
-                    for image in images {
-                        photoCaptureManager.processImage(image, quoteDraftId: quoteDraft.localId)
+                MultiImagePicker { photosWithMetadata in
+                    Task {
+                        isProcessingPhotos = true
+
+                        // Extract job address if available
+                        let jobAddress = job?.address
+
+                        await photoCaptureManager.processBatchImages(
+                            photosWithMetadata,
+                            quoteDraftId: quoteDraft.localId,
+                            jobId: job?.jobId,
+                            jobAddress: jobAddress
+                        )
+
+                        isProcessingPhotos = false
                     }
                 }
             }
@@ -563,6 +576,36 @@ struct QuoteFormView: View {
                             handlePhotoAnnotated(at: index, with: annotatedImage)
                         }
                     )
+                }
+            }
+            .overlay {
+                if isProcessingPhotos {
+                    ZStack {
+                        Color.black.opacity(0.4)
+                            .ignoresSafeArea()
+
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .tint(.white)
+
+                            Text("Processing photos...")
+                                .font(.headline)
+                                .foregroundColor(.white)
+
+                            Text("Extracting location data and applying watermarks")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.8))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        }
+                        .padding(32)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color(.systemGray6))
+                                .opacity(0.95)
+                        )
+                    }
                 }
             }
             .safeAreaInset(edge: .top) {
