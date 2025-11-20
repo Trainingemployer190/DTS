@@ -626,6 +626,14 @@ struct StatusBadge: View {
 
 struct JobInfoSection: View {
     let job: JobberJob
+    @AppStorage("hasSeenJobberAppSearchTip") private var hasSeenJobberAppSearchTip = false
+    @State private var showingJobberAppTip = false
+    @Query private var quoteDrafts: [QuoteDraft]
+
+    // Find quote associated with this job
+    private var associatedQuote: QuoteDraft? {
+        quoteDrafts.first { $0.jobId == job.jobId && $0.jobberQuoteId != nil }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -665,6 +673,12 @@ struct JobInfoSection: View {
                     print("🔗 Raw Client ID: '\(job.clientId)'")
                     print("🔗 Raw Request ID: '\(job.requestId ?? "none")'")
 
+                    // Check if there's a saved quote for this job
+                    if let quote = associatedQuote, let quoteId = quote.jobberQuoteId {
+                        print("🔗 Found saved quote ID: \(quoteId)")
+                        job.quoteId = quoteId // Update job with saved quote ID
+                    }
+
                     // Try to decode the IDs to show the extracted numeric values
                     if let requestId = job.requestId,
                        let data = Data(base64Encoded: requestId),
@@ -682,7 +696,7 @@ struct JobInfoSection: View {
                         return
                     }
 
-                    print("✅ Opening Jobber URL: \(jobberURL)")
+                    print("✅ Opening Jobber Web URL: \(jobberURL)")
 
                     if let url = URL(string: jobberURL) {
                         #if canImport(UIKit)
@@ -692,8 +706,44 @@ struct JobInfoSection: View {
                         print("❌ Failed to create URL from string: \(jobberURL)")
                     }
                 }) {
-                    Label("View in Jobber", systemImage: "link")
+                    Label("View in Jobber Web", systemImage: "link")
                         .foregroundColor(.blue)
+                }
+
+                // Button to copy client info and open Jobber app
+                Button(action: {
+                    print("🔍 Copying client name and opening Jobber app...")
+                    print("🔍 hasSeenJobberAppSearchTip: \(hasSeenJobberAppSearchTip)")
+
+                    // Copy client name to clipboard for easy search
+                    #if canImport(UIKit)
+                    UIPasteboard.general.string = job.clientName
+                    #endif
+
+                    print("✅ Copied to clipboard: \(job.clientName)")
+
+                    // Show tip on first use, otherwise open immediately
+                    if !hasSeenJobberAppSearchTip {
+                        print("📱 Showing tip alert for first time")
+                        showingJobberAppTip = true
+                        hasSeenJobberAppSearchTip = true
+                    } else {
+                        print("📱 Opening Jobber app directly (user has seen tip)")
+                        // Open Jobber app immediately
+                        openJobberApp()
+                    }
+                }) {
+                    Label("Open Jobber", systemImage: "magnifyingglass")
+                        .foregroundColor(.blue)
+                }
+                .buttonStyle(.plain)
+                .alert("Tip: Search in Jobber", isPresented: $showingJobberAppTip) {
+                    Button("Got it", role: .cancel) {
+                        // Open Jobber app after user dismisses alert
+                        openJobberApp()
+                    }
+                } message: {
+                    Text("The client name has been copied to your clipboard. Paste it into the Jobber app's search bar to find this job.")
                 }
 
                 // Debug info for development
@@ -716,6 +766,26 @@ struct JobInfoSection: View {
         .padding()
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func openJobberApp() {
+        #if canImport(UIKit)
+        if let jobberAppURL = job.jobberAppURL,
+           let url = URL(string: jobberAppURL) {
+            UIApplication.shared.open(url, options: [:]) { success in
+                if success {
+                    print("✅ Opened Jobber app - client name copied to clipboard")
+                } else {
+                    print("❌ Failed to open Jobber app")
+                }
+            }
+        } else {
+            // If no app URL, just open the app via scheme
+            if let url = URL(string: "jobber://") {
+                UIApplication.shared.open(url)
+            }
+        }
+        #endif
     }
 }
 

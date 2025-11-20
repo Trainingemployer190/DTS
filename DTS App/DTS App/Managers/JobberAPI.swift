@@ -1814,12 +1814,12 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
     // MARK: - Quote to Note Conversion
 
     /// Creates a formatted note message from quote data
-    func formatQuoteForNote(quote: QuoteDraft, breakdown: PricingEngine.PriceBreakdown, photoCount: Int = 0) -> String {
+    func formatQuoteForNote(quote: QuoteDraft, breakdown: PricingEngine.PriceBreakdown, settings: AppSettings, photoCount: Int = 0) -> String {
         var message = "DTS APP QUOTE SUMMARY\n\n"
 
         // Photo note if photos exist
         if photoCount > 0 {
-            message += "📸 \(photoCount) photo\(photoCount == 1 ? "" : "s") saved in DTS App\n\n"
+            message += "📸 \(photoCount) photo\(photoCount == 1 ? "" : "s") attached\n\n"
         }
 
         // Notes section if available
@@ -1829,11 +1829,13 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         }
 
         // Materials
-        message += "MATERIAL\n"
+        message += "MATERIALS\n"
         message += "Gutter: \(String(format: "%.0f", quote.gutterFeet))ft\n"
         message += "Downspout: \(String(format: "%.0f", quote.downspoutFeet))ft \(quote.isRoundDownspout ? "(Round)" : "(Standard)")\n"
 
-        message += "Gutter Guard: \(String(format: "%.0f", quote.gutterGuardFeet))ft\n"
+        if quote.includeGutterGuard {
+            message += "Gutter Guard: \(String(format: "%.0f", quote.gutterGuardFeet))ft\n"
+        }
         message += "A Elbows: \(quote.aElbows)\n"
         message += "B Elbows: \(quote.bElbows)\n"
         message += "2\" Crimp: \(quote.twoCrimp)\n"
@@ -1850,42 +1852,88 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
             message += "\n"
         }
 
-        // Pricing Breakdown
-        let totalMaterialCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost + breakdown.gutterGuardCost
-
+        // Pricing Breakdown - Match PDF format exactly
         message += "PRICING BREAKDOWN\n"
-        message += "Material: \(totalMaterialCost.toCurrency())\n"
+        message += "Materials: \(breakdown.materialsCost.toCurrency())\n"
         message += "Labor: \(breakdown.laborCost.toCurrency())\n"
-        message += "Profit: \(breakdown.markupAmount.toCurrency())\n"
-        message += "Commission: \(breakdown.commissionAmount.toCurrency())\n\n"
 
-        // Calculate component totals (matching the PDF and UI display)
-        let gutterBaseCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost + breakdown.gutterLaborCost
-        let guardBaseCost = breakdown.gutterGuardCost + breakdown.gutterGuardLaborCost
-
-        let gutterTotalBeforeAddOns = gutterBaseCost + breakdown.gutterMarkupAmount
-        let guardTotalBeforeAddOns = guardBaseCost + breakdown.guardMarkupAmount
-
-        let additionalCosts = breakdown.commissionAmount + breakdown.taxAmount
-        let totalBeforeAddOns = gutterTotalBeforeAddOns + guardTotalBeforeAddOns
-        let gutterShare = totalBeforeAddOns > 0 ? gutterTotalBeforeAddOns / totalBeforeAddOns : 0.5
-        let guardShare = 1.0 - gutterShare
-
-        let gutterTotalCost = gutterTotalBeforeAddOns + additionalCosts * gutterShare
-        let guardTotalCost = guardTotalBeforeAddOns + additionalCosts * guardShare
-
-        // Calculate price per foot using component totals
-        if quote.gutterFeet > 0 {
-            let gutterPricePerFoot = gutterTotalCost / (quote.gutterFeet + quote.downspoutFeet)
-            message += "Gutter Price/ft: \(gutterPricePerFoot.toCurrency())\n"
+        if breakdown.additionalItemsCost > 0.001 {
+            message += "Additional Items: \(breakdown.additionalItemsCost.toCurrency())\n"
         }
 
+        message += "Subtotal: \(breakdown.subtotal.toCurrency())\n"
+        message += "Markup (\(String(format: "%.1f", quote.markupPercent * 100))%): \(breakdown.markupAmount.toCurrency())\n"
+        message += "Commission (\(String(format: "%.1f", quote.salesCommissionPercent * 100))%): \(breakdown.commissionAmount.toCurrency())\n"
+
+        let preTaxSubtotal = breakdown.subtotal + breakdown.markupAmount + breakdown.commissionAmount
+        message += "Pre-Tax Subtotal: \(preTaxSubtotal.toCurrency())\n"
+
+        if breakdown.taxAmount > 0.001 {
+            message += "Tax: \(breakdown.taxAmount.toCurrency())\n"
+        }
+
+        message += "\n"
+
+        // Price per foot analysis (matching PDF calculation exactly)
         if quote.includeGutterGuard && quote.gutterGuardFeet > 0 {
-            let guardPricePerFoot = guardTotalCost / quote.gutterGuardFeet
-            message += "Guard Price/ft: \(guardPricePerFoot.toCurrency())\n"
+            // Calculate effective footage including fittings (matching PDF)
+            let effectiveGutterFeet = quote.gutterFeet + quote.downspoutFeet +
+                Double(quote.aElbows + quote.bElbows + quote.twoCrimp + quote.fourCrimp)
+            let guardFeet = quote.gutterGuardFeet
+
+            // Calculate elbows and hangers costs (matching PDF)
+            let totalElbows = quote.aElbows + quote.bElbows + quote.twoCrimp + quote.fourCrimp
+            let elbowUnitCost = quote.isRoundDownspout ? settings.costPerRoundElbow : settings.costPerElbow
+            let elbowsCost = Double(totalElbows) * elbowUnitCost
+            let hangersCost = Double(quote.hangersCount) * settings.costPerHanger
+
+            // Calculate component totals exactly as PDF does
+            let gutterMaterialsCost = breakdown.gutterMaterialsCost + breakdown.downspoutMaterialsCost
+            let guardMaterialsCost = breakdown.gutterGuardCost
+
+            let actualGutterLabor = breakdown.gutterLaborCost
+            let actualGuardLabor = breakdown.gutterGuardLaborCost
+
+            // Include elbows, hangers, and additional items in gutter component (matching PDF)
+            let gutterBaseCost = gutterMaterialsCost + actualGutterLabor + elbowsCost + hangersCost + breakdown.additionalItemsCost
+            let guardBaseCost = guardMaterialsCost + actualGuardLabor
+
+            // Add markup per component
+            let gutterTotalBeforeAddOns = gutterBaseCost + breakdown.gutterMarkupAmount
+            let guardTotalBeforeAddOns = guardBaseCost + breakdown.guardMarkupAmount
+
+            // Distribute commission and tax proportionally
+            let additionalCosts = breakdown.commissionAmount + breakdown.taxAmount
+            let totalBaseWithMarkup = gutterTotalBeforeAddOns + guardTotalBeforeAddOns
+            let gutterProportion = totalBaseWithMarkup > 0 ? gutterTotalBeforeAddOns / totalBaseWithMarkup : 0.5
+            let guardProportion = 1.0 - gutterProportion
+
+            let gutterTotalCost = gutterTotalBeforeAddOns + (additionalCosts * gutterProportion)
+            let guardTotalCost = guardTotalBeforeAddOns + (additionalCosts * guardProportion)
+
+            message += "PRICE ANALYSIS\n"
+
+            if effectiveGutterFeet > 0 {
+                let gutterPricePerFoot = gutterTotalCost / effectiveGutterFeet
+                message += "Gutters: \(gutterPricePerFoot.toCurrency())/ft (\(String(format: "%.1f", effectiveGutterFeet))ft effective)\n"
+            }
+
+            if guardFeet > 0 {
+                let guardPricePerFoot = guardTotalCost / guardFeet
+                message += "Guard: \(guardPricePerFoot.toCurrency())/ft (\(String(format: "%.1f", guardFeet))ft)\n"
+            }
+            message += "\n"
+        } else {
+            // Single price per foot for gutters only
+            message += "PRICE ANALYSIS\n"
+            if quote.gutterFeet + quote.downspoutFeet > 0 {
+                let totalFeet = quote.gutterFeet + quote.downspoutFeet
+                let pricePerFoot = breakdown.totalPrice / totalFeet
+                message += "Price per foot: \(pricePerFoot.toCurrency())/ft\n\n"
+            }
         }
 
-        message += "Total Price: \(breakdown.totalPrice.toCurrency())\n\n"
+        message += "TOTAL PRICE: \(breakdown.totalPrice.toCurrency())\n\n"
 
         // App signature
         message += "Generated by DTS App\n"
@@ -2085,6 +2133,7 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         requestId: String,
         quote: QuoteDraft,
         breakdown: PricingEngine.PriceBreakdown,
+        settings: AppSettings,
         photos: [UIImage] = [],
         progressCallback: ((Int, Int) -> Void)? = nil
     ) async -> Result<RequestNote, APIError> {
@@ -2109,7 +2158,8 @@ class JobberAPI: NSObject, ObservableObject, ASWebAuthenticationPresentationCont
         }
 
         // Step 2: Create note with attachments
-        let message = formatQuoteForNote(quote: quote, breakdown: breakdown, photoCount: photoURLs.count)
+        // Note: settings must be passed from caller context
+        let message = formatQuoteForNote(quote: quote, breakdown: breakdown, settings: settings, photoCount: photoURLs.count)
 
         // Convert URLs to NoteAttachmentAttributes
         let attachments = photoURLs.isEmpty ? nil : photoURLs.map { NoteAttachmentAttributes(url: $0) }

@@ -58,6 +58,7 @@ final class JobberJob: Identifiable {
     var id: String { jobId } // Conforms to Identifiable
     var jobId: String
     var requestId: String? // Add request ID for note creation
+    var quoteId: String? // Quote ID if a quote has been created
     var clientId: String // Required for quote creation
     var propertyId: String? // Required for quote creation if no requestId
     var clientName: String
@@ -93,23 +94,15 @@ final class JobberJob: Identifiable {
 
     // Computed property for the best Jobber URL to use
     var assessmentURL: String? {
-        // Priority 1: Use numeric client ID for client page (matches working Zapier format)
-        if !clientId.isEmpty && clientId != "unknown",
-           let numericClientId = extractNumericId(from: clientId) {
-            let url = "https://secure.getjobber.com/clients/\(numericClientId)"
-            print("🔗 Using client URL: \(url)")
+        // Priority 1: Use quote ID if a quote has been created
+        if let quoteId = quoteId, !quoteId.isEmpty,
+           let numericQuoteId = extractNumericId(from: quoteId) {
+            let url = "https://secure.getjobber.com/quotes/\(numericQuoteId)"
+            print("🔗 Using quote URL: \(url)")
             return url
         }
 
-        // Priority 2: Use numeric request ID for work orders page
-        if let requestId = requestId, !requestId.isEmpty,
-           let numericRequestId = extractNumericId(from: requestId) {
-            let url = "https://secure.getjobber.com/app/work_orders/\(numericRequestId)"
-            print("🔗 Using work order URL: \(url)")
-            return url
-        }
-
-        // Priority 3: Use numeric request ID for requests page
+        // Priority 2: Use numeric request ID for requests page
         if let requestId = requestId, !requestId.isEmpty,
            let numericRequestId = extractNumericId(from: requestId) {
             let url = "https://secure.getjobber.com/requests/\(numericRequestId)"
@@ -117,13 +110,44 @@ final class JobberJob: Identifiable {
             return url
         }
 
+        // Priority 3: Fallback to client page if no request ID available
+        if !clientId.isEmpty && clientId != "unknown",
+           let numericClientId = extractNumericId(from: clientId) {
+            let url = "https://secure.getjobber.com/clients/\(numericClientId)"
+            print("🔗 Using client URL: \(url)")
+            return url
+        }
+
         print("❌ No valid IDs available for Jobber URL")
         return nil
     }
 
-    init(jobId: String, requestId: String? = nil, clientId: String, propertyId: String? = nil, clientName: String, clientPhone: String?, address: String, scheduledAt: Date, status: String, serviceTitle: String? = nil, instructions: String? = nil, serviceInformation: String? = nil, serviceSpecifications: String? = nil) {
+    // Computed property for Jobber app deep link
+    var jobberAppURL: String? {
+        // Priority 1: Try client path (most likely to work - shows all client jobs/requests)
+        if !clientId.isEmpty && clientId != "unknown",
+           let numericClientId = extractNumericId(from: clientId) {
+            let appURL = "jobber://clients/\(numericClientId)"
+            print("🔗 Attempting Jobber client app URL: \(appURL)")
+            return appURL
+        }
+
+        // Priority 2: Try request/work order path
+        if let requestId = requestId, !requestId.isEmpty,
+           let numericRequestId = extractNumericId(from: requestId) {
+            let appURL = "jobber://work_orders/\(numericRequestId)"
+            print("🔗 Attempting Jobber work order app URL: \(appURL)")
+            return appURL
+        }
+
+        print("❌ No valid IDs available for Jobber app URL")
+        return nil
+    }
+
+    init(jobId: String, requestId: String? = nil, quoteId: String? = nil, clientId: String, propertyId: String? = nil, clientName: String, clientPhone: String?, address: String, scheduledAt: Date, status: String, serviceTitle: String? = nil, instructions: String? = nil, serviceInformation: String? = nil, serviceSpecifications: String? = nil) {
         self.jobId = jobId
         self.requestId = requestId
+        self.quoteId = quoteId
         self.clientId = clientId
         self.propertyId = propertyId
         self.clientName = clientName
@@ -155,6 +179,7 @@ enum QuoteStatus: String, Codable, CaseIterable {
 final class QuoteDraft: ObservableObject {
     var localId: UUID = UUID()
     var jobId: String?
+    var jobberQuoteId: String? // Store the Jobber quote ID when created
     var clientId: String?
     var clientName: String = ""
     var clientAddress: String = "" // Add address for history display

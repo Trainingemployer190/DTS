@@ -461,10 +461,20 @@ struct QuoteFormView: View {
         return PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
     }
 
+    private var navigationTitle: String {
+        if existingQuote != nil {
+            return "Edit Quote"
+        } else if job != nil {
+            return "Create Quote"
+        } else {
+            return "Standalone Quote"
+        }
+    }
+
     var body: some View {
         NavigationStack {
             formContent
-            .navigationTitle(existingQuote != nil ? "Edit Quote" : (job != nil ? "Create Quote" : "Standalone Quote"))
+            .navigationTitle(navigationTitle)
             .toolbar {
                 if existingQuote != nil {
                     ToolbarItem(placement: .navigationBarLeading) {
@@ -574,6 +584,9 @@ struct QuoteFormView: View {
                         initialIndex: 0,
                         onPhotoAnnotated: { index, annotatedImage in
                             handlePhotoAnnotated(at: index, with: annotatedImage)
+                        },
+                        onPhotoDeleted: { index in
+                            deletePhoto(at: index)
                         }
                     )
                 }
@@ -645,18 +658,41 @@ struct QuoteFormView: View {
                 // Clear notes to start fresh (prevent carrying over old quote notes)
                 quoteDraft.notes = ""
                 loadExistingPhotos()
-            }
+            } else if let job = job {
+                // Check if there's an existing unsaved draft for this job
+                let jobIdToFind = job.jobId
 
-            // Populate client information from job if available
-            if let job = job {
+                // Fetch all unsynced drafts
+                let descriptor = FetchDescriptor<QuoteDraft>(
+                    sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+                )
+
+                if let allDrafts = try? modelContext.fetch(descriptor) {
+                    // Filter for this job ID and not synced
+                    let matchingDrafts = allDrafts.filter { draft in
+                        draft.jobId == jobIdToFind && draft.syncState == .pending
+                    }
+
+                    if let mostRecentDraft = matchingDrafts.first {
+                        // Use the existing draft so changes persist
+                        quoteDraft = mostRecentDraft
+                        print("Restored existing draft for job: \(job.clientName)")
+                        loadExistingPhotos()
+                        return
+                    }
+                }
+
+                // No existing draft - create a new one and save it immediately
                 quoteDraft.clientName = job.clientName
                 quoteDraft.clientAddress = job.address
                 quoteDraft.clientId = job.clientId
-                // Clear notes when creating new quote from job
-                if prefilledQuoteDraft == nil {
-                    quoteDraft.notes = ""
-                }
-                print("Populated client info from job: \(job.clientName) at \(job.address)")
+                quoteDraft.jobId = job.jobId
+                quoteDraft.notes = ""
+
+                // Save the draft to SwiftData so it persists across navigation
+                modelContext.insert(quoteDraft)
+                try? modelContext.save()
+                print("Created and saved new draft for job: \(job.clientName)")
             }
 
             // Initialize with default values from settings
@@ -1421,6 +1457,7 @@ struct QuoteFormView: View {
                     requestId: requestId,
                     quote: quoteDraft,
                     breakdown: breakdown,
+                    settings: settings,
                     photos: photos,
                     progressCallback: { completed, total in
                         Task { @MainActor in
@@ -1459,6 +1496,11 @@ struct QuoteFormView: View {
                     switch quoteResult {
                     case .success(let quoteId):
                         print("✅ Quote created successfully with ID: \(quoteId)")
+                        // Store quote ID in the quote draft for persistence
+                        quoteDraft.jobberQuoteId = quoteId
+                        // Store quote ID in the job for immediate access
+                        job.quoteId = quoteId
+                        print("✅ Quote ID saved to both quote draft and job")
                     case .failure(let error):
                         hasError = true
                         errorMessages.append("Quote creation failed: \(error.localizedDescription)")
@@ -1570,6 +1612,7 @@ struct QuoteFormView: View {
                     requestId: requestId,
                     quote: quoteDraft,
                     breakdown: breakdown,
+                    settings: settings,
                     photos: photos,
                     progressCallback: { completed, total in
                         Task { @MainActor in
@@ -1608,6 +1651,11 @@ struct QuoteFormView: View {
                     switch quoteResult {
                     case .success(let quoteId):
                         print("✅ Quote created successfully with ID: \(quoteId)")
+                        // Store quote ID in the quote draft for persistence
+                        quoteDraft.jobberQuoteId = quoteId
+                        // Store quote ID in the job for immediate access
+                        job.quoteId = quoteId
+                        print("✅ Quote ID saved to both quote draft and job")
                     case .failure(let error):
                         hasError = true
                         errorMessages.append("Quote creation failed: \(error.localizedDescription)")
@@ -1768,6 +1816,24 @@ struct QuoteFormView: View {
             photoCaptureManager.capturedImages[capturedIndex] = annotatedPhoto
 
             print("✏️ Replaced photo at index \(capturedIndex) with annotated version")
+        }
+        #endif
+    }
+
+    private func deletePhoto(at index: Int) {
+        #if canImport(UIKit)
+        // Find the photo in capturedImages that matches the quote draft
+        let quoteDraftPhotos = photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId }
+
+        guard index < quoteDraftPhotos.count else { return }
+
+        // Get the photo to delete
+        let photoToDelete = quoteDraftPhotos[index]
+
+        // Find its index in the full capturedImages array and remove it
+        if let capturedIndex = photoCaptureManager.capturedImages.firstIndex(where: { $0.id == photoToDelete.id }) {
+            photoCaptureManager.capturedImages.remove(at: capturedIndex)
+            print("🗑️ Deleted photo at index \(capturedIndex)")
         }
         #endif
     }

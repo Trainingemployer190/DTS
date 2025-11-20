@@ -213,8 +213,10 @@ struct CreateQuoteView: View {
                 Task { @MainActor in
                     switch result {
                     case .success(let quoteId):
-                        // Show success message
+                        // Store quote ID in the job for future reference
+                        job.quoteId = quoteId
                         print("✅ Quote created in Jobber with ID: \(quoteId)")
+                        print("✅ Quote ID saved to job - View in Jobber Web will now open the quote page")
                         // Optionally show success alert or navigate somewhere
                     case .failure(let error):
                         print("❌ Failed to create quote in Jobber: \(error.localizedDescription)")

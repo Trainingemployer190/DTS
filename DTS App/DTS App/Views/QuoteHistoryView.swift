@@ -547,6 +547,7 @@ struct QuoteHistoryView: View {
                     requestId: requestId,
                     quote: quote,
                     breakdown: breakdown,
+                    settings: settings,
                     photos: photos
                 )
 

@@ -15,14 +15,18 @@ struct PhotoGalleryView: View {
     let photos: [CapturedPhoto]
     @State private var selectedIndex: Int
     @State private var showingAnnotationEditor = false
+    @State private var showingDeleteAlert = false
 
     // Callback to handle annotated image
     var onPhotoAnnotated: ((Int, UIImage) -> Void)?
+    // Callback to handle photo deletion
+    var onPhotoDeleted: ((Int) -> Void)?
 
-    init(photos: [CapturedPhoto], initialIndex: Int = 0, onPhotoAnnotated: ((Int, UIImage) -> Void)? = nil) {
+    init(photos: [CapturedPhoto], initialIndex: Int = 0, onPhotoAnnotated: ((Int, UIImage) -> Void)? = nil, onPhotoDeleted: ((Int) -> Void)? = nil) {
         self.photos = photos
         _selectedIndex = State(initialValue: initialIndex)
         self.onPhotoAnnotated = onPhotoAnnotated
+        self.onPhotoDeleted = onPhotoDeleted
     }
 
     var body: some View {
@@ -65,14 +69,23 @@ struct PhotoGalleryView: View {
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showingAnnotationEditor = true
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "pencil.tip.crop.circle")
-                            Text("Annotate")
+                    HStack(spacing: 16) {
+                        Button(action: {
+                            showingDeleteAlert = true
+                        }) {
+                            Image(systemName: "trash")
+                                .foregroundColor(.red)
                         }
-                        .foregroundColor(.white)
+
+                        Button(action: {
+                            showingAnnotationEditor = true
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "pencil.tip.crop.circle")
+                                Text("Annotate")
+                            }
+                            .foregroundColor(.white)
+                        }
                     }
                 }
             }
@@ -89,6 +102,19 @@ struct PhotoGalleryView: View {
                         }
                     )
                 }
+            }
+            .alert("Delete Photo", isPresented: $showingDeleteAlert) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    onPhotoDeleted?(selectedIndex)
+                    if photos.count <= 1 {
+                        dismiss()
+                    } else if selectedIndex >= photos.count - 1 {
+                        selectedIndex = max(0, selectedIndex - 1)
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete this photo? This action cannot be undone.")
             }
         }
     }
