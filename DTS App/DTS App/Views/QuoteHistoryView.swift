@@ -262,9 +262,9 @@ struct QuoteHistoryView: View {
             }
         }
 
-        // Check documents directory
-        let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        if let photoFiles = try? FileManager.default.contentsOfDirectory(at: documentsDir, includingPropertiesForKeys: nil) {
+        // Check shared container directory
+        let storageDir = SharedContainerHelper.photosStorageDirectory
+        if let photoFiles = try? FileManager.default.contentsOfDirectory(at: storageDir, includingPropertiesForKeys: nil) {
             for fileURL in photoFiles where fileURL.pathExtension.lowercased() == "jpg" || fileURL.pathExtension.lowercased() == "jpeg" {
                 if !validPhotoURLs.contains(fileURL.path) {
                     orphanedPhotos.append(fileURL)

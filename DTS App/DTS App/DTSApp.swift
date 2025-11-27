@@ -9,6 +9,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: "com.dtsapp.token-refresh", using: nil) { task in
             self.handleTokenRefreshTask(task: task as! BGAppRefreshTask)
         }
+        
+        // Migrate photos from old Documents location to shared container
+        migratePhotosIfNeeded()
+        
         return true
     }
 
@@ -37,6 +41,30 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             let success = await jobberAPI.ensureValidAccessToken()
             print("🔄 Background token refresh completed: \(success ? "success" : "failed")")
             task.setTaskCompleted(success: success)
+        }
+    }
+    
+    private func migratePhotosIfNeeded() {
+        // Check if migration is needed and has not been done before
+        let migrationKey = "com.dtsapp.photoMigrationCompleted"
+        let hasMigrated = UserDefaults.standard.bool(forKey: migrationKey)
+        
+        if !hasMigrated && SharedContainerHelper.needsMigration() {
+            print("📦 Starting photo migration to shared container...")
+            SharedContainerHelper.migrateExistingPhotos { count, errors in
+                if errors.isEmpty {
+                    print("✅ Successfully migrated \(count) photos")
+                    UserDefaults.standard.set(true, forKey: migrationKey)
+                } else {
+                    print("⚠️ Migrated \(count) photos with \(errors.count) errors")
+                    // Still mark as migrated to avoid repeated attempts
+                    UserDefaults.standard.set(true, forKey: migrationKey)
+                }
+            }
+        } else if hasMigrated {
+            print("✅ Photo migration already completed")
+        } else {
+            print("✅ No photos to migrate")
         }
     }
 }

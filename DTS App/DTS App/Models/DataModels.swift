@@ -320,6 +320,7 @@ final class PhotoRecord {
     var createdAt: Date = Date()
     var latitude: Double?
     var longitude: Double?
+    var address: String? // Client address for grouping
     var uploaded: Bool = false
 
     // Upload tracking
@@ -334,10 +335,11 @@ final class PhotoRecord {
     var annotations: [PhotoAnnotation] = [] // Drawing/text annotations (custom system)
     var pencilKitDrawingData: Data? = nil  // PencilKit drawing data (prototype)
 
-    init(fileURL: String, jobId: String? = nil, quoteDraftId: UUID? = nil) {
+    init(fileURL: String, jobId: String? = nil, quoteDraftId: UUID? = nil, address: String? = nil) {
         self.fileURL = fileURL
         self.jobId = jobId
         self.quoteDraftId = quoteDraftId
+        self.address = address
     }
 }
 
@@ -450,14 +452,16 @@ struct CapturedPhoto: Identifiable {
     #endif
     let timestamp: Date
     let location: String?
+    let address: String?
     let quoteDraftId: UUID?
     let jobId: String?
 
     #if canImport(UIKit)
-    init(image: UIImage, location: String? = nil, quoteDraftId: UUID? = nil, jobId: String? = nil) {
+    init(image: UIImage, location: String? = nil, address: String? = nil, quoteDraftId: UUID? = nil, jobId: String? = nil) {
         self.image = image
         self.timestamp = Date()
         self.location = location
+        self.address = address
         self.quoteDraftId = quoteDraftId
         self.jobId = jobId
     }

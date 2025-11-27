@@ -30,6 +30,9 @@ struct PhotoLibraryView: View {
     @State private var isSelectionMode = false
     @State private var selectedPhotos = Set<UUID>()
     @State private var showingActionSheet = false
+    
+    // Grouping mode
+    @State private var isGroupedByAddress = false
 
     var filteredPhotos: [PhotoRecord] {
         if searchText.isEmpty {
@@ -38,7 +41,60 @@ struct PhotoLibraryView: View {
         return allPhotos.filter { photo in
             photo.title.localizedCaseInsensitiveContains(searchText) ||
             photo.notes.localizedCaseInsensitiveContains(searchText) ||
-            photo.tags.contains { $0.localizedCaseInsensitiveContains(searchText) }
+            photo.tags.contains { $0.localizedCaseInsensitiveContains(searchText) } ||
+            (photo.address?.localizedCaseInsensitiveContains(searchText) ?? false)
+        }
+    }
+    
+    var groupedPhotos: [String: [PhotoRecord]] {
+        let grouped = Dictionary(grouping: filteredPhotos) { photo in
+            photo.address ?? "No Address"
+        }
+        print("📊 Grouped photos by address: \(grouped.keys.sorted())")
+        return grouped
+    }
+    
+    @ViewBuilder
+    var photoGridView: some View {
+        ScrollView {
+            if isGroupedByAddress {
+                // Grouped view by address
+                VStack(alignment: .leading, spacing: 20) {
+                    ForEach(groupedPhotos.keys.sorted(), id: \.self) { address in
+                        if let photos = groupedPhotos[address] {
+                            GroupedAddressSection(
+                                address: address,
+                                photos: photos,
+                                isSelectionMode: isSelectionMode,
+                                selectedPhotos: $selectedPhotos,
+                                selectedPhoto: $selectedPhoto
+                            )
+                        }
+                    }
+                }
+                .padding(.vertical)
+            } else {
+                // Ungrouped view
+                LazyVGrid(columns: [
+                    GridItem(.adaptive(minimum: 100), spacing: 8)
+                ], spacing: 8) {
+                    ForEach(filteredPhotos, id: \.localId) { photo in
+                        PhotoThumbnailCard(
+                            photo: photo,
+                            isSelectionMode: isSelectionMode,
+                            isSelected: selectedPhotos.contains(photo.localId)
+                        )
+                        .onTapGesture {
+                            if isSelectionMode {
+                                toggleSelection(for: photo)
+                            } else {
+                                selectedPhoto = photo
+                            }
+                        }
+                    }
+                }
+                .padding()
+            }
         }
     }
 
@@ -90,28 +146,8 @@ struct PhotoLibraryView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding()
                 } else {
-                    // Photo grid
-                    ScrollView {
-                        LazyVGrid(columns: [
-                            GridItem(.adaptive(minimum: 100), spacing: 8)
-                        ], spacing: 8) {
-                            ForEach(filteredPhotos, id: \.localId) { photo in
-                                PhotoThumbnailCard(
-                                    photo: photo,
-                                    isSelectionMode: isSelectionMode,
-                                    isSelected: selectedPhotos.contains(photo.localId)
-                                )
-                                .onTapGesture {
-                                    if isSelectionMode {
-                                        toggleSelection(for: photo)
-                                    } else {
-                                        selectedPhoto = photo
-                                    }
-                                }
-                            }
-                        }
-                        .padding()
-                    }
+                    // Photo grid - grouped or ungrouped
+                    photoGridView
                 }
             }
             .navigationTitle("Photo Library")
@@ -136,6 +172,11 @@ struct PhotoLibraryView: View {
                     } else {
                         HStack(spacing: 16) {
                             if !allPhotos.isEmpty {
+                                // Group toggle button
+                                Button(action: { isGroupedByAddress.toggle() }) {
+                                    Image(systemName: isGroupedByAddress ? "square.grid.2x2" : "rectangle.3.group")
+                                }
+                                
                                 Button(action: { isSelectionMode = true }) {
                                     Image(systemName: "checkmark.circle")
                                 }
@@ -181,34 +222,38 @@ struct PhotoLibraryView: View {
                             let recentPhotos = photoCaptureManager.capturedImages.suffix(photosWithMetadata.count)
 
                             for capturedPhoto in recentPhotos {
-                                // Find the saved file URL from Documents directory
-                                if let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-                                    // The file was saved by processImage, we need to find it
-                                    // Since we don't have the exact filename, we'll re-save it
-                                    if let imageData = capturedPhoto.image.jpegData(compressionQuality: 0.7) {
-                                        let fileName = "photo_\(Date().timeIntervalSince1970)_\(UUID().uuidString.prefix(8)).jpg"
-                                        let fileURL = documentsPath.appendingPathComponent(fileName)
+                                // Find the saved file URL from shared container
+                                let storageDirectory = SharedContainerHelper.photosStorageDirectory
+                                // The file was saved by processImage, we need to find it
+                                // Since we don't have the exact filename, we'll re-save it
+                                if let imageData = capturedPhoto.image.jpegData(compressionQuality: 0.7) {
+                                    let fileName = "photo_\(Date().timeIntervalSince1970)_\(UUID().uuidString.prefix(8)).jpg"
+                                    let fileURL = storageDirectory.appendingPathComponent(fileName)
 
-                                        do {
-                                            try imageData.write(to: fileURL)
+                                    do {
+                                        try imageData.write(to: fileURL)
 
-                                            let photoRecord = PhotoRecord(fileURL: fileURL.path)
+                                        let photoRecord = PhotoRecord(fileURL: fileURL.path)
 
-                                            // Parse location from locationString if available
-                                            if let locationString = capturedPhoto.location {
-                                                let components = locationString.split(separator: ",")
-                                                if components.count == 2,
-                                                   let lat = Double(components[0]),
-                                                   let lon = Double(components[1]) {
-                                                    photoRecord.latitude = lat
-                                                    photoRecord.longitude = lon
-                                                }
+                                        // Parse location from locationString if available
+                                        if let locationString = capturedPhoto.location {
+                                            let components = locationString.split(separator: ",")
+                                            if components.count == 2,
+                                               let lat = Double(components[0]),
+                                               let lon = Double(components[1]) {
+                                                photoRecord.latitude = lat
+                                                photoRecord.longitude = lon
                                             }
-
-                                            modelContext.insert(photoRecord)
-                                        } catch {
-                                            print("❌ Error saving photo to library: \(error)")
                                         }
+                                        
+                                        // Save address from captured photo (geocoded from EXIF or current location)
+                                        photoRecord.address = capturedPhoto.address
+                                        
+                                        print("📸 Saving photo with address: \(photoRecord.address ?? "nil")")
+
+                                        modelContext.insert(photoRecord)
+                                    } catch {
+                                        print("❌ Error saving photo to library: \(error)")
                                     }
                                 }
                             }
@@ -549,6 +594,7 @@ struct PhotoLibraryView: View {
             let photoRecord = PhotoRecord(fileURL: savedURL)
             photoRecord.latitude = photoCaptureManager.currentLocation?.coordinate.latitude
             photoRecord.longitude = photoCaptureManager.currentLocation?.coordinate.longitude
+            photoRecord.address = photoCaptureManager.currentAddress
 
             modelContext.insert(photoRecord)
             try? modelContext.save()
@@ -568,6 +614,7 @@ struct PhotoLibraryView: View {
             let photoRecord = PhotoRecord(fileURL: savedURL)
             photoRecord.latitude = photoCaptureManager.currentLocation?.coordinate.latitude
             photoRecord.longitude = photoCaptureManager.currentLocation?.coordinate.longitude
+            photoRecord.address = photoCaptureManager.currentAddress
 
             modelContext.insert(photoRecord)
             try? modelContext.save()
@@ -586,6 +633,7 @@ struct PhotoLibraryView: View {
                 let photoRecord = PhotoRecord(fileURL: savedURL)
                 photoRecord.latitude = photoCaptureManager.currentLocation?.coordinate.latitude
                 photoRecord.longitude = photoCaptureManager.currentLocation?.coordinate.longitude
+                photoRecord.address = photoCaptureManager.currentAddress
 
                 modelContext.insert(photoRecord)
 
@@ -661,8 +709,8 @@ struct PhotoLibraryView: View {
         guard let data = image.jpegData(compressionQuality: 0.9) else { return nil }
 
         let filename = "\(UUID().uuidString).jpg"
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let fileURL = documentsPath.appendingPathComponent(filename)
+        let storageDirectory = SharedContainerHelper.photosStorageDirectory
+        let fileURL = storageDirectory.appendingPathComponent(filename)
 
         do {
             try data.write(to: fileURL)
@@ -670,6 +718,63 @@ struct PhotoLibraryView: View {
         } catch {
             print("❌ Failed to save image: \(error)")
             return nil
+        }
+    }
+}
+
+// MARK: - Grouped Address Section
+struct GroupedAddressSection: View {
+    let address: String
+    let photos: [PhotoRecord]
+    let isSelectionMode: Bool
+    @Binding var selectedPhotos: Set<UUID>
+    @Binding var selectedPhoto: PhotoRecord?
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Address header
+            HStack {
+                Text(address)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                Spacer()
+                Text("\(photos.count) photo\(photos.count == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal)
+            
+            // Photos grid for this address
+            LazyVGrid(columns: [
+                GridItem(.adaptive(minimum: 100), spacing: 8)
+            ], spacing: 8) {
+                ForEach(photos, id: \.localId) { photo in
+                    PhotoThumbnailCard(
+                        photo: photo,
+                        isSelectionMode: isSelectionMode,
+                        isSelected: selectedPhotos.contains(photo.localId)
+                    )
+                    .onTapGesture {
+                        if isSelectionMode {
+                            toggleSelection(for: photo)
+                        } else {
+                            selectedPhoto = photo
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal)
+            
+            Divider()
+                .padding(.top, 8)
+        }
+    }
+    
+    private func toggleSelection(for photo: PhotoRecord) {
+        if selectedPhotos.contains(photo.localId) {
+            selectedPhotos.remove(photo.localId)
+        } else {
+            selectedPhotos.insert(photo.localId)
         }
     }
 }

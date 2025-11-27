@@ -1879,7 +1879,8 @@ struct QuoteFormView: View {
                     let photoRecord = PhotoRecord(
                         fileURL: fileURL.path,
                         jobId: job?.jobId,
-                        quoteDraftId: quoteDraft.localId
+                        quoteDraftId: quoteDraft.localId,
+                        address: quoteDraft.clientAddress
                     )
                     photoRecord.createdAt = capturedPhoto.timestamp
 

@@ -49,7 +49,7 @@ class PhotoCaptureManager: NSObject, ObservableObject {
 
     // EXIF-based geocoding cache (persistent)
     private let geocodingCacheKey = "com.dtsapp.geocodingCache"
-    private let geocodingCacheRadius: CLLocationDistance = 30.0 // 30m precision for exact property matching
+    private let geocodingCacheRadius: CLLocationDistance = 10.0 // 10m precision for exact property matching
 
     override init() {
         super.init()
@@ -226,14 +226,14 @@ class PhotoCaptureManager: NSObject, ObservableObject {
             //     saveToPhotosApp(watermarkedImage)
             // }
 
-            // Save to Documents directory
-            guard let imageData = watermarkedImage.jpegData(compressionQuality: 0.7),
-                  let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            // Save to shared container (persists across app installations)
+            guard let imageData = watermarkedImage.jpegData(compressionQuality: 0.7) else {
                 return
             }
 
+            let storageDirectory = SharedContainerHelper.photosStorageDirectory
             let fileName = "photo_\(Date().timeIntervalSince1970).jpg"
-            let fileURL = documentsPath.appendingPathComponent(fileName)
+            let fileURL = storageDirectory.appendingPathComponent(fileName)
 
             do {
                 try imageData.write(to: fileURL)
@@ -257,6 +257,7 @@ class PhotoCaptureManager: NSObject, ObservableObject {
                 let capturedPhoto = CapturedPhoto(
                     image: uiImage,
                     location: locationString,
+                    address: preGeocodedAddress,
                     quoteDraftId: quoteDraftId,
                     jobId: jobId
                 )
