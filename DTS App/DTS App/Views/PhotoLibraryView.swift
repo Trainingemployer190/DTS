@@ -32,7 +32,19 @@ struct PhotoLibraryView: View {
     @State private var showingActionSheet = false
 
     // Grouping mode
-    @State private var isGroupedByAddress = false
+    @State private var isGroupedByAddress = true
+    
+    // Watermark editing
+    @State private var editingWatermarkPhoto: PhotoRecord?
+    @State private var showingWatermarkEditor = false
+    
+    // Album management
+    @State private var movingPhoto: PhotoRecord?
+    @State private var showingAlbumPicker = false
+    @State private var showingAddPhotosToAlbum = false
+    @State private var selectedAlbumAddress: String?
+    @State private var renamingAlbum: String?
+    @State private var showingAlbumRename = false
 
     var filteredPhotos: [PhotoRecord] {
         if searchText.isEmpty {
@@ -67,7 +79,21 @@ struct PhotoLibraryView: View {
                                 photos: photos,
                                 isSelectionMode: isSelectionMode,
                                 selectedPhotos: $selectedPhotos,
-                                selectedPhoto: $selectedPhoto
+                                selectedPhoto: $selectedPhoto,
+                                onEditWatermark: editWatermark,
+                                onMoveToAlbum: { photo in
+                                    movingPhoto = photo
+                                    showingAlbumPicker = true
+                                },
+                                onDelete: deletePhoto,
+                                onAddPhotos: {
+                                    selectedAlbumAddress = address
+                                    showingPhotoMenu = true
+                                },
+                                onRenameAlbum: {
+                                    renamingAlbum = address
+                                    showingAlbumRename = true
+                                }
                             )
                         }
                     }
@@ -89,6 +115,28 @@ struct PhotoLibraryView: View {
                                 toggleSelection(for: photo)
                             } else {
                                 selectedPhoto = photo
+                            }
+                        }
+                        .contextMenu {
+                            Button {
+                                editWatermark(for: photo)
+                            } label: {
+                                Label("Edit Watermark", systemImage: "text.bubble")
+                            }
+                            
+                            Button {
+                                movingPhoto = photo
+                                showingAlbumPicker = true
+                            } label: {
+                                Label("Move to Album", systemImage: "folder")
+                            }
+                            
+                            Divider()
+                            
+                            Button(role: .destructive) {
+                                deletePhoto(photo)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
                             }
                         }
                     }
@@ -220,6 +268,9 @@ struct PhotoLibraryView: View {
                         await MainActor.run {
                             // Get the most recently captured photos
                             let recentPhotos = photoCaptureManager.capturedImages.suffix(photosWithMetadata.count)
+                            
+                            // Use selectedAlbumAddress if set for all photos in batch
+                            let targetAddress = selectedAlbumAddress
 
                             for capturedPhoto in recentPhotos {
                                 // Find the saved file URL from shared container
@@ -246,8 +297,11 @@ struct PhotoLibraryView: View {
                                             }
                                         }
 
-                                        // Save address from captured photo (geocoded from EXIF or current location)
-                                        photoRecord.address = capturedPhoto.address
+                                        // Use selectedAlbumAddress if set, otherwise use geocoded address
+                                        let finalAddress = targetAddress ?? capturedPhoto.address
+                                        photoRecord.address = finalAddress
+                                        photoRecord.watermarkAddress = finalAddress
+                                        photoRecord.originalTimestamp = capturedPhoto.timestamp
 
                                         print("📸 Saving photo with address: \(photoRecord.address ?? "nil")")
 
@@ -259,6 +313,9 @@ struct PhotoLibraryView: View {
                             }
 
                             try? modelContext.save()
+                            
+                            // Clear selected album after use
+                            selectedAlbumAddress = nil
                         }
 
                         isProcessingPhotos = false
@@ -267,6 +324,41 @@ struct PhotoLibraryView: View {
             }
             .sheet(item: $selectedPhoto) { (photo: PhotoRecord) in
                 PhotoDetailView(photo: photo)
+            }
+            .sheet(isPresented: $showingWatermarkEditor) {
+                if let photo = editingWatermarkPhoto {
+                    let albumPhotos = photo.address.flatMap { addr in
+                        groupedPhotos[addr]
+                    }
+                    EditWatermarkView(photo: photo, albumPhotos: albumPhotos)
+                }
+            }
+            .sheet(isPresented: $showingAlbumPicker) {
+                if let photo = movingPhoto {
+                    AlbumPickerView(
+                        photo: photo,
+                        availableAlbums: Array(groupedPhotos.keys.sorted()),
+                        onSelect: { newAddress in
+                            movePhotoToAlbum(photo: photo, newAddress: newAddress)
+                        }
+                    )
+                }
+            }
+            .sheet(isPresented: Binding(
+                get: { showingAlbumRename && renamingAlbum != nil },
+                set: { newValue in 
+                    showingAlbumRename = newValue
+                    if !newValue { renamingAlbum = nil }
+                }
+            )) {
+                if let oldAddress = renamingAlbum {
+                    AlbumRenameView(
+                        currentAddress: oldAddress,
+                        onRename: { newAddress in
+                            renameAlbum(from: oldAddress, to: newAddress)
+                        }
+                    )
+                }
             }
             .alert("Clear All Photos?", isPresented: $showingDeleteConfirmation) {
                 Button("Cancel", role: .cancel) {}
@@ -594,10 +686,18 @@ struct PhotoLibraryView: View {
             let photoRecord = PhotoRecord(fileURL: savedURL)
             photoRecord.latitude = photoCaptureManager.currentLocation?.coordinate.latitude
             photoRecord.longitude = photoCaptureManager.currentLocation?.coordinate.longitude
-            photoRecord.address = photoCaptureManager.currentAddress
+            
+            // Use selectedAlbumAddress if set, otherwise use geocoded address
+            let targetAddress = selectedAlbumAddress ?? photoCaptureManager.currentAddress
+            photoRecord.address = targetAddress
+            photoRecord.watermarkAddress = targetAddress
+            photoRecord.originalTimestamp = Date()
 
             modelContext.insert(photoRecord)
             try? modelContext.save()
+            
+            // Clear selected album after use
+            selectedAlbumAddress = nil
         }
     }
 
@@ -614,15 +714,26 @@ struct PhotoLibraryView: View {
             let photoRecord = PhotoRecord(fileURL: savedURL)
             photoRecord.latitude = photoCaptureManager.currentLocation?.coordinate.latitude
             photoRecord.longitude = photoCaptureManager.currentLocation?.coordinate.longitude
-            photoRecord.address = photoCaptureManager.currentAddress
+            
+            // Use selectedAlbumAddress if set, otherwise use geocoded address
+            let targetAddress = selectedAlbumAddress ?? photoCaptureManager.currentAddress
+            photoRecord.address = targetAddress
+            photoRecord.watermarkAddress = targetAddress
+            photoRecord.originalTimestamp = Date()
 
             modelContext.insert(photoRecord)
             try? modelContext.save()
+            
+            // Clear selected album after use
+            selectedAlbumAddress = nil
         }
     }
 
     private func handleMultiplePhotoLibraryImages(_ images: [UIImage]) {
         print("📸 Processing \(images.count) photos from library...")
+        
+        // Capture the target address before loop
+        let targetAddress = selectedAlbumAddress ?? photoCaptureManager.currentAddress
 
         for (index, image) in images.enumerated() {
             // Add watermark if location available
@@ -633,7 +744,9 @@ struct PhotoLibraryView: View {
                 let photoRecord = PhotoRecord(fileURL: savedURL)
                 photoRecord.latitude = photoCaptureManager.currentLocation?.coordinate.latitude
                 photoRecord.longitude = photoCaptureManager.currentLocation?.coordinate.longitude
-                photoRecord.address = photoCaptureManager.currentAddress
+                photoRecord.address = targetAddress
+                photoRecord.watermarkAddress = targetAddress
+                photoRecord.originalTimestamp = Date()
 
                 modelContext.insert(photoRecord)
 
@@ -650,6 +763,9 @@ struct PhotoLibraryView: View {
         } catch {
             print("❌ Failed to save photos: \(error)")
         }
+        
+        // Clear selected album after use
+        selectedAlbumAddress = nil
     }
 
     private func addWatermarkToImage(_ image: UIImage) -> UIImage {
@@ -720,6 +836,56 @@ struct PhotoLibraryView: View {
             return nil
         }
     }
+    
+    // MARK: - Watermark and Album Management
+    
+    private func editWatermark(for photo: PhotoRecord) {
+        editingWatermarkPhoto = photo
+        showingWatermarkEditor = true
+    }
+    
+    private func movePhotoToAlbum(photo: PhotoRecord, newAddress: String) {
+        photo.address = newAddress
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Failed to move photo to album: \(error)")
+        }
+    }
+    
+    private func renameAlbum(from oldAddress: String, to newAddress: String) {
+        // Update address for all photos in the album
+        if let photosInAlbum = groupedPhotos[oldAddress] {
+            for photo in photosInAlbum {
+                photo.address = newAddress
+                // Also update watermark address if it matches the old album address
+                if photo.watermarkAddress == oldAddress {
+                    photo.watermarkAddress = newAddress
+                }
+            }
+            
+            do {
+                try modelContext.save()
+            } catch {
+                print("❌ Failed to rename album: \(error)")
+            }
+        }
+    }
+    
+    private func deletePhoto(_ photo: PhotoRecord) {
+        // Delete file from disk
+        let fileURL = URL(fileURLWithPath: photo.fileURL)
+        try? FileManager.default.removeItem(at: fileURL)
+        
+        // Delete from SwiftData
+        modelContext.delete(photo)
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Failed to delete photo: \(error)")
+        }
+    }
 }
 
 // MARK: - Grouped Address Section
@@ -729,20 +895,53 @@ struct GroupedAddressSection: View {
     let isSelectionMode: Bool
     @Binding var selectedPhotos: Set<UUID>
     @Binding var selectedPhoto: PhotoRecord?
+    var onEditWatermark: ((PhotoRecord) -> Void)? = nil
+    var onMoveToAlbum: ((PhotoRecord) -> Void)? = nil
+    var onDelete: ((PhotoRecord) -> Void)? = nil
+    var onAddPhotos: (() -> Void)? = nil
+    var onRenameAlbum: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Address header
-            HStack {
-                Text(address)
-                    .font(.headline)
-                    .foregroundColor(.primary)
+            HStack(alignment: .top, spacing: 12) {
+                HStack(spacing: 12) {
+                    Text(address)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                    
+                    if let onRenameAlbum = onRenameAlbum {
+                        Button(action: onRenameAlbum) {
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.title)
+                                .foregroundColor(.blue)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+                
                 Spacer()
-                Text("\(photos.count) photo\(photos.count == 1 ? "" : "s")")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("\(photos.count) photo\(photos.count == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    if let onAddPhotos = onAddPhotos {
+                        Button(action: onAddPhotos) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title)
+                                .foregroundColor(.blue)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
             }
             .padding(.horizontal)
+            .padding(.vertical, 8)
 
             // Photos grid for this address
             LazyVGrid(columns: [
@@ -759,6 +958,27 @@ struct GroupedAddressSection: View {
                             toggleSelection(for: photo)
                         } else {
                             selectedPhoto = photo
+                        }
+                    }
+                    .contextMenu {
+                        Button {
+                            onEditWatermark?(photo)
+                        } label: {
+                            Label("Edit Watermark", systemImage: "text.bubble")
+                        }
+                        
+                        Button {
+                            onMoveToAlbum?(photo)
+                        } label: {
+                            Label("Move to Album", systemImage: "folder")
+                        }
+                        
+                        Divider()
+                        
+                        Button(role: .destructive) {
+                            onDelete?(photo)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
                         }
                     }
                 }

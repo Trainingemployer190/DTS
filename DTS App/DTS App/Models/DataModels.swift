@@ -327,8 +327,12 @@ final class PhotoRecord {
     var createdAt: Date = Date()
     var latitude: Double?
     var longitude: Double?
-    var address: String? // Client address for grouping
+    var address: String? // Client address for grouping/album
     var uploaded: Bool = false
+    
+    // Watermark data (for regeneration)
+    var originalTimestamp: Date? // Original photo capture time
+    var watermarkAddress: String? // Address shown in watermark (can differ from album address)
 
     // Upload tracking
     var uploadAttempts: Int = 0
@@ -347,6 +351,8 @@ final class PhotoRecord {
         self.jobId = jobId
         self.quoteDraftId = quoteDraftId
         self.address = address
+        self.originalTimestamp = Date()
+        self.watermarkAddress = address
     }
 }
 
