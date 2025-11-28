@@ -65,17 +65,24 @@ struct PricingEngine {
             settings.costPerRoundElbow : settings.costPerElbow)
         let hangersCost = Double(quote.hangersCount) * settings.costPerHanger
 
+        // Calculate wedge costs (for slanted fascia)
+        let wedgeCost = quote.includeWedges ? Double(quote.wedgeCount) * settings.costPerWedge : 0
+
         // Additional items cost
         let additionalItemsCost = quote.additionalLaborItems.reduce(0) { $0 + $1.amount }
 
-        let materialsCost = gutterMaterialsCost + downspoutMaterialsCost + gutterGuardCost + elbowsCost + hangersCost
+        let materialsCost = gutterMaterialsCost + downspoutMaterialsCost + gutterGuardCost + elbowsCost + hangersCost + wedgeCost
 
         // Calculate composite feet (includes gutter, downspout, and elbows for labor calculation)
         let totalElbowsAndCrimps = Double(quote.aElbows + quote.bElbows + quote.twoCrimp + quote.fourCrimp)
         let compositeFeet = quote.gutterFeet + quote.downspoutFeet + totalElbowsAndCrimps
 
         // Calculate labor cost based on composite feet
-        let gutterLaborCost = compositeFeet * settings.laborPerFootGutter
+        // Add extra labor when wedges are included
+        let baseLaborRate = settings.laborPerFootGutter
+        let wedgeLaborIncrease = quote.includeWedges ? settings.wedgeLaborIncrease : 0
+        let effectiveLaborRate = baseLaborRate + wedgeLaborIncrease
+        let gutterLaborCost = compositeFeet * effectiveLaborRate
         let gutterGuardLaborCost = quote.includeGutterGuard ? quote.gutterGuardFeet * settings.gutterGuardLaborPerFoot : 0
         let laborCost = gutterLaborCost + gutterGuardLaborCost
 

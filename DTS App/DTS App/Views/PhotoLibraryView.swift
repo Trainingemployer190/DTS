@@ -30,7 +30,7 @@ struct PhotoLibraryView: View {
     @State private var isSelectionMode = false
     @State private var selectedPhotos = Set<UUID>()
     @State private var showingActionSheet = false
-    
+
     // Grouping mode
     @State private var isGroupedByAddress = false
 
@@ -45,7 +45,7 @@ struct PhotoLibraryView: View {
             (photo.address?.localizedCaseInsensitiveContains(searchText) ?? false)
         }
     }
-    
+
     var groupedPhotos: [String: [PhotoRecord]] {
         let grouped = Dictionary(grouping: filteredPhotos) { photo in
             photo.address ?? "No Address"
@@ -53,7 +53,7 @@ struct PhotoLibraryView: View {
         print("📊 Grouped photos by address: \(grouped.keys.sorted())")
         return grouped
     }
-    
+
     @ViewBuilder
     var photoGridView: some View {
         ScrollView {
@@ -176,7 +176,7 @@ struct PhotoLibraryView: View {
                                 Button(action: { isGroupedByAddress.toggle() }) {
                                     Image(systemName: isGroupedByAddress ? "square.grid.2x2" : "rectangle.3.group")
                                 }
-                                
+
                                 Button(action: { isSelectionMode = true }) {
                                     Image(systemName: "checkmark.circle")
                                 }
@@ -245,10 +245,10 @@ struct PhotoLibraryView: View {
                                                 photoRecord.longitude = lon
                                             }
                                         }
-                                        
+
                                         // Save address from captured photo (geocoded from EXIF or current location)
                                         photoRecord.address = capturedPhoto.address
-                                        
+
                                         print("📸 Saving photo with address: \(photoRecord.address ?? "nil")")
 
                                         modelContext.insert(photoRecord)
@@ -729,7 +729,7 @@ struct GroupedAddressSection: View {
     let isSelectionMode: Bool
     @Binding var selectedPhotos: Set<UUID>
     @Binding var selectedPhoto: PhotoRecord?
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Address header
@@ -743,7 +743,7 @@ struct GroupedAddressSection: View {
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal)
-            
+
             // Photos grid for this address
             LazyVGrid(columns: [
                 GridItem(.adaptive(minimum: 100), spacing: 8)
@@ -764,12 +764,12 @@ struct GroupedAddressSection: View {
                 }
             }
             .padding(.horizontal)
-            
+
             Divider()
                 .padding(.top, 8)
         }
     }
-    
+
     private func toggleSelection(for photo: PhotoRecord) {
         if selectedPhotos.contains(photo.localId) {
             selectedPhotos.remove(photo.localId)

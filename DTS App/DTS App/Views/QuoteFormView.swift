@@ -456,6 +456,59 @@ struct QuoteFormView: View {
         }
     }
 
+    // MARK: - Wedge Section
+    private var wedgeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Wedges (Slanted Fascia)")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top)
+
+            VStack(spacing: 16) {
+                Toggle("Include Wedges", isOn: $quoteDraft.includeWedges)
+
+                if quoteDraft.includeWedges {
+                    HStack {
+                        Text("Wedge Count")
+                        Spacer()
+                        Text("\(quoteDraft.wedgeCount)")
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Text("Automatically calculated based on gutter feet and wedge spacing (\(settings.wedgeSpacingFeet, specifier: "%.1f") ft)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding()
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal)
+        }
+        .onChange(of: quoteDraft.includeWedges) { _, newValue in
+            if newValue {
+                // Calculate wedge count based on gutter feet
+                calculateWedgeCount()
+            } else {
+                quoteDraft.wedgeCount = 0
+            }
+        }
+        .onChange(of: quoteDraft.gutterFeet) { _, _ in
+            if quoteDraft.includeWedges {
+                calculateWedgeCount()
+            }
+        }
+    }
+
+    private func calculateWedgeCount() {
+        guard settings.wedgeSpacingFeet > 0 else {
+            quoteDraft.wedgeCount = 0
+            return
+        }
+        quoteDraft.wedgeCount = Int(ceil(quoteDraft.gutterFeet / settings.wedgeSpacingFeet))
+    }
+
 
     private var breakdown: PricingEngine.PriceBreakdown {
         return PricingEngine.calculatePrice(quote: quoteDraft, settings: settings)
@@ -738,6 +791,7 @@ struct QuoteFormView: View {
                 colorSectionContent
                 measurementsSectionContent
                 gutterGuardSectionContent
+                wedgeSection
                 additionalLaborSectionContent
 
                 if showingLineItemEditor {

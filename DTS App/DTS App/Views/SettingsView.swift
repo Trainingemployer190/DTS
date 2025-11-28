@@ -42,6 +42,9 @@ struct SettingsView: View {
     @State private var gutterGuardProfitMarginText = ""
     @State private var materialCostRoundDownspoutText = ""
     @State private var costPerRoundElbowText = ""
+    @State private var costPerWedgeText = ""
+    @State private var wedgeSpacingText = ""
+    @State private var wedgeLaborIncreaseText = ""
 
     enum FieldType {
         case materialCostGutter, materialCostDownspout, gutterGuardMaterial
@@ -51,6 +54,7 @@ struct SettingsView: View {
         case taxRate
         case gutterGuardMarkup, gutterGuardProfitMargin
         case materialCostRoundDownspout, costPerRoundElbow
+        case costPerWedge, wedgeSpacing, wedgeLaborIncrease
     }
 
     private var settings: AppSettings {
@@ -81,6 +85,9 @@ struct SettingsView: View {
         gutterGuardProfitMarginText = settings.gutterGuardProfitMarginPercent == 0 ? "" : String(format: "%.1f", settings.gutterGuardProfitMarginPercent * 100)
         materialCostRoundDownspoutText = settings.materialCostPerFootRoundDownspout == 0 ? "" : String(settings.materialCostPerFootRoundDownspout)
         costPerRoundElbowText = settings.costPerRoundElbow == 0 ? "" : String(settings.costPerRoundElbow)
+        costPerWedgeText = settings.costPerWedge == 0 ? "" : String(settings.costPerWedge)
+        wedgeSpacingText = settings.wedgeSpacingFeet == 0 ? "" : String(settings.wedgeSpacingFeet)
+        wedgeLaborIncreaseText = settings.wedgeLaborIncrease == 0 ? "" : String(settings.wedgeLaborIncrease)
     }
 
     // Specific save functions for each property
@@ -187,6 +194,24 @@ struct SettingsView: View {
     private func saveCostPerRoundElbow(_ text: String) {
         let value = text.isEmpty ? 0 : (Double(text) ?? 0)
         settings.costPerRoundElbow = value
+        saveSettings()
+    }
+
+    private func saveCostPerWedge(_ text: String) {
+        let value = text.isEmpty ? 0 : (Double(text) ?? 0)
+        settings.costPerWedge = value
+        saveSettings()
+    }
+
+    private func saveWedgeSpacing(_ text: String) {
+        let value = text.isEmpty ? 0 : (Double(text) ?? 0)
+        settings.wedgeSpacingFeet = value
+        saveSettings()
+    }
+
+    private func saveWedgeLaborIncrease(_ text: String) {
+        let value = text.isEmpty ? 0 : (Double(text) ?? 0)
+        settings.wedgeLaborIncrease = value
         saveSettings()
     }
 
@@ -383,6 +408,68 @@ struct SettingsView: View {
                         }
                     }
                 Text("ft")
+            }
+
+            // Wedge costs section
+            HStack {
+                Text("Wedge (Slanted Fascia)")
+                Spacer()
+                Text("$")
+                TextField("0", text: $costPerWedgeText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .costPerWedge)
+                    .onSubmit {
+                        saveCostPerWedge(costPerWedgeText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .costPerWedge {
+                            saveCostPerWedge(costPerWedgeText)
+                        }
+                    }
+            }
+
+            HStack {
+                Text("Wedge Spacing")
+                Spacer()
+                TextField("0", text: $wedgeSpacingText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 60)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .wedgeSpacing)
+                    .onSubmit {
+                        saveWedgeSpacing(wedgeSpacingText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .wedgeSpacing {
+                            saveWedgeSpacing(wedgeSpacingText)
+                        }
+                    }
+                Text("ft")
+            }
+
+            HStack {
+                Text("Wedge Labor Increase")
+                Spacer()
+                Text("$")
+                TextField("0", text: $wedgeLaborIncreaseText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .wedgeLaborIncrease)
+                    .onSubmit {
+                        saveWedgeLaborIncrease(wedgeLaborIncreaseText)
+                        focusedField = nil
+                    }
+                    .onChange(of: focusedField) { _, newValue in
+                        if newValue != .wedgeLaborIncrease {
+                            saveWedgeLaborIncrease(wedgeLaborIncreaseText)
+                        }
+                    }
+                Text("/ft")
             }
         }
     }

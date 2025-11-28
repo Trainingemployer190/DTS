@@ -56,13 +56,13 @@ The following files have been updated to use the shared container:
 ### Updated Files:
 - **`PhotoCaptureManager.swift`** - Photo capture and storage
   - Line ~308: Changed from Documents to shared container
-  
+
 - **`PhotoLibraryView.swift`** - Photo library and saving
   - Lines ~224, ~703: Changed from Documents to shared container
-  
+
 - **`QuoteHistoryView.swift`** - Orphaned photo cleanup
   - Line ~266: Changed from Documents to shared container
-  
+
 - **`DTSApp.swift`** - App initialization
   - Added automatic photo migration on first launch
 
@@ -73,7 +73,7 @@ The following files have been updated to use the shared container:
 ### Storage Location:
 - **Before:** `/var/mobile/Containers/Data/Application/{UUID}/Documents/`
   - ❌ Deleted on every reinstall
-  
+
 - **After:** `/var/mobile/Containers/Shared/AppGroup/{GROUP-UUID}/Photos/`
   - ✅ Persists across reinstalls and updates
 
@@ -186,11 +186,11 @@ AppGroup Container/
 
 ## Benefits
 
-✅ **Photos persist** across app reinstalls  
-✅ **No data loss** when testing new versions  
-✅ **Automatic migration** of existing photos  
-✅ **Fallback safety** if not configured  
-✅ **Production ready** for App Store builds  
+✅ **Photos persist** across app reinstalls
+✅ **No data loss** when testing new versions
+✅ **Automatic migration** of existing photos
+✅ **Fallback safety** if not configured
+✅ **Production ready** for App Store builds
 
 ---
 

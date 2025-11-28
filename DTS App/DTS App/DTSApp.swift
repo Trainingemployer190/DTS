@@ -9,10 +9,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: "com.dtsapp.token-refresh", using: nil) { task in
             self.handleTokenRefreshTask(task: task as! BGAppRefreshTask)
         }
-        
+
         // Migrate photos from old Documents location to shared container
         migratePhotosIfNeeded()
-        
+
         return true
     }
 
@@ -43,12 +43,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             task.setTaskCompleted(success: success)
         }
     }
-    
+
     private func migratePhotosIfNeeded() {
         // Check if migration is needed and has not been done before
         let migrationKey = "com.dtsapp.photoMigrationCompleted"
         let hasMigrated = UserDefaults.standard.bool(forKey: migrationKey)
-        
+
         if !hasMigrated && SharedContainerHelper.needsMigration() {
             print("📦 Starting photo migration to shared container...")
             SharedContainerHelper.migrateExistingPhotos { count, errors in
