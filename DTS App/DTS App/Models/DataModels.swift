@@ -29,9 +29,9 @@ final class AppSettings {
     var costPerRoundElbow: Double = 12.00  // New round elbow cost (higher price)
     var costPerHanger: Double = 0.38
     var hangerSpacingFeet: Double = 3.0
-    var costPerWedge: Double = 0.50  // Cost per wedge for slanted fascia
+    var costPerWedge: Double = 3.00  // Cost per wedge for slanted fascia
     var wedgeSpacingFeet: Double = 2.0  // Wedges every 2 feet
-    var wedgeLaborIncrease: Double = 0.50  // Additional labor per foot when wedges are needed
+    var wedgeLaborIncrease: Double = 0.0  // Additional labor per foot when wedges are needed
     var gutterGuardMaterialPerFoot: Double = 2.00
     var gutterGuardLaborPerFoot: Double = 2.25
 
