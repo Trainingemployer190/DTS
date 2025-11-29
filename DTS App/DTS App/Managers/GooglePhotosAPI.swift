@@ -20,10 +20,22 @@ class GooglePhotosAPI: ObservableObject {
     private let scopes = "https://www.googleapis.com/auth/photoslibrary"
 
     // PRE-CONFIGURED MODE: Shared company account
-    // To enable: Set usePreConfiguredAuth = true and paste your refresh token below
+    // To enable: Set usePreConfiguredAuth = true and store refresh token in Keychain
     // To get token: Sign in once manually, check console logs for refresh token
-    private let preConfiguredRefreshToken: String? = "1//06IK2CLvA9Q-2CgYIARAAGAYSNwF-L9IrayzbsxQLxV6qtq4K6z3OACKIqcWX2AUz5FXm7gc6eQfw4-NlaTHo6D_2oMZ8rGkXSqY"
+    // Then store it using: GooglePhotosAPI.shared.setPreConfiguredRefreshToken("your_token")
+    private var preConfiguredRefreshToken: String? {
+        // Read from Keychain instead of hardcoding
+        return KeychainManager.shared.getString(for: "GooglePhotosPreConfiguredRefreshToken")
+    }
     private let usePreConfiguredAuth = true  // Set to true to enable pre-configured mode
+    
+    /// Store a pre-configured refresh token securely in Keychain
+    func setPreConfiguredRefreshToken(_ token: String) {
+        _ = KeychainManager.shared.save(string: token, for: "GooglePhotosPreConfiguredRefreshToken")
+        print("✅ Pre-configured refresh token saved to Keychain")
+        // Re-initialize with the new token
+        initializePreConfiguredAuth()
+    }
 
     // API endpoints
     private let tokenEndpoint = "https://oauth2.googleapis.com/token"
