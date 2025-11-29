@@ -402,7 +402,9 @@
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = WNU63L8T28;
 				ENABLE_PREVIEWS = YES;
+				EXCLUDED_SOURCE_FILE_NAMES = Info.plist;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture photos of job sites and measurements for documentation purposes.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app needs location access to add GPS coordinates to photos for accurate job site documentation.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured photos and access existing images for job documentation.";
@@ -411,6 +413,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIBackgroundModes = "(fetch)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -434,7 +437,9 @@
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = WNU63L8T28;
 				ENABLE_PREVIEWS = YES;
+				EXCLUDED_SOURCE_FILE_NAMES = Info.plist;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture photos of job sites and measurements for documentation purposes.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app needs location access to add GPS coordinates to photos for accurate job site documentation.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured photos and access existing images for job documentation.";
@@ -443,6 +448,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIBackgroundModes = "(fetch)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

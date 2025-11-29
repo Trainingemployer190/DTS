@@ -334,9 +334,15 @@ final class PhotoRecord {
     var originalTimestamp: Date? // Original photo capture time
     var watermarkAddress: String? // Address shown in watermark (can differ from album address)
 
-    // Upload tracking
+    // Upload tracking (imgbb)
     var uploadAttempts: Int = 0
     var lastUploadError: String?
+    
+    // Google Photos upload tracking
+    var uploadedToGooglePhotos: Bool = false
+    var googlePhotosUploadAttempts: Int = 0
+    var lastGooglePhotosUploadError: String?
+    var googlePhotosUploadedAt: Date?
 
     // Annotation features
     var title: String = ""

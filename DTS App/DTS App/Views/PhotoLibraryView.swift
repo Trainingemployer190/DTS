@@ -45,6 +45,9 @@ struct PhotoLibraryView: View {
     @State private var selectedAlbumAddress: String?
     @State private var renamingAlbum: String?
     @State private var showingAlbumRename = false
+    
+    // Google Photos integration
+    @State private var showingGooglePhotosSettings = false
 
     var filteredPhotos: [PhotoRecord] {
         if searchText.isEmpty {
@@ -65,6 +68,21 @@ struct PhotoLibraryView: View {
         print("📊 Grouped photos by address: \(grouped.keys.sorted())")
         return grouped
     }
+    
+    /// Returns album addresses sorted by most recent photo (newest first)
+    var sortedAlbumAddresses: [String] {
+        groupedPhotos.keys.sorted { address1, address2 in
+            let photos1 = groupedPhotos[address1] ?? []
+            let photos2 = groupedPhotos[address2] ?? []
+            
+            // Get the most recent photo date for each album
+            let mostRecent1 = photos1.map { $0.createdAt }.max() ?? Date.distantPast
+            let mostRecent2 = photos2.map { $0.createdAt }.max() ?? Date.distantPast
+            
+            // Sort descending (most recent first)
+            return mostRecent1 > mostRecent2
+        }
+    }
 
     @ViewBuilder
     var photoGridView: some View {
@@ -72,7 +90,7 @@ struct PhotoLibraryView: View {
             if isGroupedByAddress {
                 // Grouped view by address
                 VStack(alignment: .leading, spacing: 20) {
-                    ForEach(groupedPhotos.keys.sorted(), id: \.self) { address in
+                    ForEach(sortedAlbumAddresses, id: \.self) { address in
                         if let photos = groupedPhotos[address] {
                             GroupedAddressSection(
                                 address: address,
@@ -229,6 +247,12 @@ struct PhotoLibraryView: View {
                                     Image(systemName: "checkmark.circle")
                                 }
                             }
+                            
+                            // Google Photos settings button
+                            Button(action: { showingGooglePhotosSettings = true }) {
+                                Image(systemName: "cloud.fill")
+                                    .foregroundColor(GooglePhotosAPI.shared.autoUploadEnabled ? .blue : .gray)
+                            }
 
                             Button(action: { showingPhotoMenu = true }) {
                                 Image(systemName: "camera.fill")
@@ -287,18 +311,43 @@ struct PhotoLibraryView: View {
                                         let photoRecord = PhotoRecord(fileURL: fileURL.path)
 
                                         // Parse location from locationString if available
+                                        var photoLat: Double?
+                                        var photoLon: Double?
                                         if let locationString = capturedPhoto.location {
                                             let components = locationString.split(separator: ",")
                                             if components.count == 2,
                                                let lat = Double(components[0]),
                                                let lon = Double(components[1]) {
+                                                photoLat = lat
+                                                photoLon = lon
                                                 photoRecord.latitude = lat
                                                 photoRecord.longitude = lon
                                             }
                                         }
 
-                                        // Use selectedAlbumAddress if set, otherwise use geocoded address
-                                        let finalAddress = targetAddress ?? capturedPhoto.address
+                                        // Determine the best address for this photo:
+                                        // 1. Use selectedAlbumAddress if user explicitly chose an album
+                                        // 2. Use geocoded address from photo EXIF
+                                        // 3. Try to match to existing album by GPS proximity
+                                        // 4. Fall back to "No Address"
+                                        var finalAddress: String?
+                                        
+                                        if let explicitTarget = targetAddress {
+                                            // User selected an album, use it
+                                            finalAddress = explicitTarget
+                                            print("📍 Using user-selected album: \(explicitTarget)")
+                                        } else if let geocodedAddress = capturedPhoto.address {
+                                            // Photo has a geocoded address
+                                            finalAddress = geocodedAddress
+                                            print("📍 Using geocoded address: \(geocodedAddress)")
+                                        } else if let lat = photoLat, let lon = photoLon {
+                                            // No geocoded address, but we have GPS - try to match existing album
+                                            if let matchedAlbum = findMatchingAlbumByGPS(latitude: lat, longitude: lon) {
+                                                finalAddress = matchedAlbum
+                                                print("📍 Matched to existing album by GPS: \(matchedAlbum)")
+                                            }
+                                        }
+                                        
                                         photoRecord.address = finalAddress
                                         photoRecord.watermarkAddress = finalAddress
                                         photoRecord.originalTimestamp = capturedPhoto.timestamp
@@ -306,6 +355,9 @@ struct PhotoLibraryView: View {
                                         print("📸 Saving photo with address: \(photoRecord.address ?? "nil")")
 
                                         modelContext.insert(photoRecord)
+                                        
+                                        // Upload to Google Photos if enabled
+                                        uploadToGooglePhotos(photoRecord)
                                     } catch {
                                         print("❌ Error saving photo to library: \(error)")
                                     }
@@ -359,6 +411,9 @@ struct PhotoLibraryView: View {
                         }
                     )
                 }
+            }
+            .sheet(isPresented: $showingGooglePhotosSettings) {
+                GooglePhotosSettingsView()
             }
             .alert("Clear All Photos?", isPresented: $showingDeleteConfirmation) {
                 Button("Cancel", role: .cancel) {}
@@ -648,7 +703,92 @@ struct PhotoLibraryView: View {
         }
         #endif
     }
+    
+    // MARK: - Google Photos Upload
+    
+    private func uploadToGooglePhotos(_ photoRecord: PhotoRecord) {
+        print("📤 uploadToGooglePhotos called for: \(photoRecord.fileURL)")
+        print("   autoUploadEnabled: \(GooglePhotosAPI.shared.autoUploadEnabled)")
+        print("   isAuthenticated: \(GooglePhotosAPI.shared.isAuthenticated)")
+        
+        guard GooglePhotosAPI.shared.autoUploadEnabled else {
+            print("⚠️ Google Photos auto-upload is disabled")
+            return
+        }
+        guard GooglePhotosAPI.shared.isAuthenticated else {
+            print("⚠️ Google Photos not authenticated")
+            return
+        }
+        
+        print("🚀 Starting Google Photos upload...")
+        Task {
+            let fileURL = URL(fileURLWithPath: photoRecord.fileURL)
+            let success = await GooglePhotosAPI.shared.uploadPhoto(
+                fileURL: fileURL,
+                albumName: photoRecord.address ?? "DTS App Photos"
+            )
+            
+            await MainActor.run {
+                if success {
+                    photoRecord.uploadedToGooglePhotos = true
+                    photoRecord.googlePhotosUploadedAt = Date()
+                    photoRecord.googlePhotosUploadAttempts += 1
+                    photoRecord.lastGooglePhotosUploadError = nil
+                    print("✅ Photo uploaded to Google Photos: \(photoRecord.fileURL)")
+                } else {
+                    photoRecord.googlePhotosUploadAttempts += 1
+                    photoRecord.lastGooglePhotosUploadError = GooglePhotosAPI.shared.errorMessage
+                    print("❌ Failed to upload photo to Google Photos: \(GooglePhotosAPI.shared.errorMessage ?? "Unknown error")")
+                }
+                
+                try? modelContext.save()
+            }
+        }
+    }
 
+    // MARK: - Album Matching by GPS
+    
+    /// Find an existing album that has photos near the given coordinates
+    /// Returns the album address if found within the specified radius (default 100 meters)
+    private func findMatchingAlbumByGPS(latitude: Double, longitude: Double, radiusMeters: Double = 100) -> String? {
+        // Get unique albums with their representative coordinates
+        for (address, photos) in groupedPhotos {
+            guard address != "No Address" else { continue }
+            
+            // Check if any photo in this album is within the radius
+            for photo in photos {
+                if let photoLat = photo.latitude, let photoLon = photo.longitude {
+                    let distance = calculateDistance(
+                        lat1: latitude, lon1: longitude,
+                        lat2: photoLat, lon2: photoLon
+                    )
+                    
+                    if distance <= radiusMeters {
+                        print("📍 Found matching album '\(address)' within \(Int(distance))m")
+                        return address
+                    }
+                }
+            }
+        }
+        
+        return nil
+    }
+    
+    /// Calculate distance between two GPS coordinates using Haversine formula
+    private func calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double) -> Double {
+        let earthRadius: Double = 6371000 // meters
+        
+        let dLat = (lat2 - lat1) * .pi / 180
+        let dLon = (lon2 - lon1) * .pi / 180
+        
+        let a = sin(dLat/2) * sin(dLat/2) +
+                cos(lat1 * .pi / 180) * cos(lat2 * .pi / 180) *
+                sin(dLon/2) * sin(dLon/2)
+        let c = 2 * atan2(sqrt(a), sqrt(1-a))
+        
+        return earthRadius * c
+    }
+    
     private func deleteAllPhotos() {
         print("🗑️ Deleting all \(allPhotos.count) photos...")
 
@@ -696,6 +836,9 @@ struct PhotoLibraryView: View {
             modelContext.insert(photoRecord)
             try? modelContext.save()
             
+            // Upload to Google Photos if enabled
+            uploadToGooglePhotos(photoRecord)
+            
             // Clear selected album after use
             selectedAlbumAddress = nil
         }
@@ -724,6 +867,9 @@ struct PhotoLibraryView: View {
             modelContext.insert(photoRecord)
             try? modelContext.save()
             
+            // Upload to Google Photos if enabled
+            uploadToGooglePhotos(photoRecord)
+            
             // Clear selected album after use
             selectedAlbumAddress = nil
         }
@@ -749,6 +895,9 @@ struct PhotoLibraryView: View {
                 photoRecord.originalTimestamp = Date()
 
                 modelContext.insert(photoRecord)
+                
+                // Upload to Google Photos if enabled
+                uploadToGooglePhotos(photoRecord)
 
                 print("✅ Added photo \(index + 1)/\(images.count)")
             } else {
