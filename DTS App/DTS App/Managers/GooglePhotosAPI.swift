@@ -436,7 +436,7 @@ class GooglePhotosAPI: ObservableObject {
             return cachedId
         }
 
-        guard await ensureValidToken(), let accessToken = accessToken else {
+        guard await ensureValidToken(), accessToken != nil else {
             errorMessage = "Not authenticated"
             return nil
         }

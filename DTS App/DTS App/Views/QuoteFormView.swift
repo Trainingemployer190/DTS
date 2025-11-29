@@ -2016,7 +2016,7 @@ struct QuoteFormView: View {
             print("📤 Google Photos upload skipped - auto upload not enabled")
             return
         }
-        
+
         guard googleAPI.isAuthenticated else {
             print("📤 Google Photos upload skipped - not authenticated")
             return
@@ -2024,7 +2024,7 @@ struct QuoteFormView: View {
 
         // Get the photos for this quote
         let quotePhotos = quoteDraft.photos
-        
+
         print("📤 uploadQuotePhotosToGooglePhotos called")
         print("📤 quoteDraft.photos.count = \(quotePhotos.count)")
         print("📤 autoUploadEnabled = \(googleAPI.autoUploadEnabled)")
@@ -2041,18 +2041,18 @@ struct QuoteFormView: View {
         Task {
             for (index, photoRecord) in quotePhotos.enumerated() {
                 print("📤 Processing photo \(index + 1)/\(quotePhotos.count): \(photoRecord.fileURL)")
-                
+
                 // Add delay between uploads to avoid rate limiting (429 errors)
                 if index > 0 {
                     try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
                 }
-                
+
                 // Skip if already uploaded
                 if photoRecord.uploadedToGooglePhotos {
                     print("📤 Skipping already uploaded photo: \(photoRecord.fileURL)")
                     continue
                 }
-                
+
                 // Check if file exists
                 let fileURL = URL(fileURLWithPath: photoRecord.fileURL)
                 guard FileManager.default.fileExists(atPath: photoRecord.fileURL) else {
@@ -2061,7 +2061,12 @@ struct QuoteFormView: View {
                 }
 
                 // Get the address for album organization
-                let address = photoRecord.address ?? quoteDraft.clientAddress ?? ""
+                let address: String
+                if let photoAddress = photoRecord.address, !photoAddress.isEmpty {
+                    address = photoAddress
+                } else {
+                    address = quoteDraft.clientAddress
+                }
                 print("📤 Uploading to album address: \(address)")
 
                 // Upload with album organization

@@ -312,7 +312,7 @@ struct GooglePhotosSettingsView: View {
                 await MainActor.run {
                     uploadProgress = index + 1
                 }
-                
+
                 // Add delay between uploads to avoid rate limiting (429 errors)
                 if index > 0 {
                     try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay

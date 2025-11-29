@@ -293,7 +293,7 @@ struct PhotoLibraryView: View {
 
                             // Use selectedAlbumAddress if set for all photos in batch
                             let targetAddress = selectedAlbumAddress
-                            
+
                             // Collect photo records for batch upload
                             var photoRecordsToUpload: [PhotoRecord] = []
 
@@ -366,7 +366,7 @@ struct PhotoLibraryView: View {
                             }
 
                             try? modelContext.save()
-                            
+
                             // Upload to Google Photos sequentially with rate limiting
                             if !photoRecordsToUpload.isEmpty {
                                 uploadPhotosToGooglePhotosSequentially(photoRecordsToUpload)
@@ -743,7 +743,7 @@ struct PhotoLibraryView: View {
                     photoRecord.googlePhotosMediaItemId = mediaItemId
                     photoRecord.googlePhotosAlbumId = albumId
 
-                    if let albumId = albumId {
+                    if albumId != nil {
                         print("✅ Photo uploaded to Google Photos album: \(photoRecord.address ?? "unknown")")
                     } else {
                         print("✅ Photo uploaded to Google Photos (no album)")
@@ -758,11 +758,11 @@ struct PhotoLibraryView: View {
             }
         }
     }
-    
+
     /// Upload multiple photos to Google Photos sequentially with rate limiting delays
     private func uploadPhotosToGooglePhotosSequentially(_ photoRecords: [PhotoRecord]) {
         print("📤 Starting sequential upload of \(photoRecords.count) photos to Google Photos")
-        
+
         guard GooglePhotosAPI.shared.autoUploadEnabled else {
             print("⚠️ Google Photos auto-upload is disabled")
             return
@@ -771,22 +771,22 @@ struct PhotoLibraryView: View {
             print("⚠️ Google Photos not authenticated")
             return
         }
-        
+
         Task {
             for (index, photoRecord) in photoRecords.enumerated() {
                 print("📤 Sequential upload \(index + 1)/\(photoRecords.count): \(photoRecord.fileURL)")
-                
+
                 // Add delay between uploads to avoid rate limiting (429 errors)
                 if index > 0 {
                     try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
                 }
-                
+
                 let fileURL = URL(fileURLWithPath: photoRecord.fileURL)
                 let (success, mediaItemId, albumId) = await GooglePhotosAPI.shared.uploadPhotoToAlbum(
                     fileURL: fileURL,
                     address: photoRecord.address
                 )
-                
+
                 await MainActor.run {
                     if success {
                         photoRecord.uploadedToGooglePhotos = true
@@ -795,8 +795,8 @@ struct PhotoLibraryView: View {
                         photoRecord.lastGooglePhotosUploadError = nil
                         photoRecord.googlePhotosMediaItemId = mediaItemId
                         photoRecord.googlePhotosAlbumId = albumId
-                        
-                        if let albumId = albumId {
+
+                        if albumId != nil {
                             print("✅ Sequential upload \(index + 1)/\(photoRecords.count) complete - album: \(photoRecord.address ?? "unknown")")
                         } else {
                             print("✅ Sequential upload \(index + 1)/\(photoRecords.count) complete (no album)")
@@ -806,11 +806,11 @@ struct PhotoLibraryView: View {
                         photoRecord.lastGooglePhotosUploadError = GooglePhotosAPI.shared.errorMessage
                         print("❌ Sequential upload \(index + 1)/\(photoRecords.count) failed: \(GooglePhotosAPI.shared.errorMessage ?? "Unknown error")")
                     }
-                    
+
                     try? modelContext.save()
                 }
             }
-            
+
             print("📤 Sequential upload batch complete: \(photoRecords.count) photos processed")
         }
     }
@@ -949,7 +949,7 @@ struct PhotoLibraryView: View {
 
         // Capture the target address before loop
         let targetAddress = selectedAlbumAddress ?? photoCaptureManager.currentAddress
-        
+
         // Collect photo records for batch upload
         var photoRecordsToUpload: [PhotoRecord] = []
 
@@ -981,7 +981,7 @@ struct PhotoLibraryView: View {
         do {
             try modelContext.save()
             print("✅ Successfully saved \(images.count) photos to library")
-            
+
             // Upload to Google Photos sequentially with rate limiting
             if !photoRecordsToUpload.isEmpty {
                 uploadPhotosToGooglePhotosSequentially(photoRecordsToUpload)
