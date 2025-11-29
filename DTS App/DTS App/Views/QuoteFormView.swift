@@ -608,7 +608,12 @@ struct QuoteFormView: View {
             }
             .sheet(isPresented: $photoCaptureManager.showingCamera) {
                 ImagePicker(sourceType: .camera) { image in
-                    photoCaptureManager.processImage(image, quoteDraftId: quoteDraft.localId)
+                    // Use quote's client address for watermark
+                    photoCaptureManager.processImage(
+                        image,
+                        quoteDraftId: quoteDraft.localId,
+                        preGeocodedAddress: quoteDraft.clientAddress
+                    )
                 }
             }
             .sheet(isPresented: $photoCaptureManager.showingPhotoLibrary) {
@@ -616,14 +621,14 @@ struct QuoteFormView: View {
                     Task {
                         isProcessingPhotos = true
 
-                        // Extract job address if available
-                        let jobAddress = job?.address
+                        // Use quote's client address for watermark (not job address)
+                        let quoteAddress = quoteDraft.clientAddress
 
                         await photoCaptureManager.processBatchImages(
                             photosWithMetadata,
                             quoteDraftId: quoteDraft.localId,
                             jobId: job?.jobId,
-                            jobAddress: jobAddress
+                            jobAddress: quoteAddress
                         )
 
                         isProcessingPhotos = false
@@ -1363,6 +1368,9 @@ struct QuoteFormView: View {
 
         try? modelContext.save()
 
+        // Upload photos to Google Photos
+        uploadQuotePhotosToGooglePhotos()
+
         // Generate PDF
         generateQuotePDF(breakdown: breakdown)
 
@@ -1385,6 +1393,10 @@ struct QuoteFormView: View {
         if let job = job { quoteDraft.clientAddress = job.address }
         if existingQuote == nil { modelContext.insert(quoteDraft) }
         try? modelContext.save()
+
+        // Upload photos to Google Photos
+        uploadQuotePhotosToGooglePhotos()
+
         // Generate PDF
         generateQuotePDF(breakdown: breakdown)
         // Navigate to Home after completion
@@ -1413,6 +1425,9 @@ struct QuoteFormView: View {
             modelContext.insert(quoteDraft)
         }
         try? modelContext.save()
+
+        // Upload photos to Google Photos
+        uploadQuotePhotosToGooglePhotos()
 
         // Generate PDF
         generateQuotePDF(breakdown: breakdown)
@@ -1575,6 +1590,9 @@ struct QuoteFormView: View {
                         quoteDraft.syncErrorMessage = nil
                         quoteDraft.syncAttemptCount = 0 // Reset on success
                         try? modelContext.save()
+
+                        // Upload quote photos to Google Photos
+                        uploadQuotePhotosToGooglePhotos()
 
                         // Clear submitted photos from PhotoCaptureManager to prevent duplicates
                         // Use filter instead of removeAll to avoid index out of range during UI updates
@@ -1987,6 +2005,91 @@ struct QuoteFormView: View {
 
         print("📸 PhotoCaptureManager now has \(photoCaptureManager.capturedImages.count) total photos")
         #endif
+    }
+
+    /// Upload quote photos to Google Photos (runs in background after successful Jobber submission)
+    private func uploadQuotePhotosToGooglePhotos() {
+        let googleAPI = GooglePhotosAPI.shared
+
+        // Check if Google Photos is enabled and authenticated
+        guard googleAPI.autoUploadEnabled else {
+            print("📤 Google Photos upload skipped - auto upload not enabled")
+            return
+        }
+        
+        guard googleAPI.isAuthenticated else {
+            print("📤 Google Photos upload skipped - not authenticated")
+            return
+        }
+
+        // Get the photos for this quote
+        let quotePhotos = quoteDraft.photos
+        
+        print("📤 uploadQuotePhotosToGooglePhotos called")
+        print("📤 quoteDraft.photos.count = \(quotePhotos.count)")
+        print("📤 autoUploadEnabled = \(googleAPI.autoUploadEnabled)")
+        print("📤 isAuthenticated = \(googleAPI.isAuthenticated)")
+
+        guard !quotePhotos.isEmpty else {
+            print("📤 No photos to upload to Google Photos - quoteDraft.photos is empty")
+            return
+        }
+
+        print("📤 Starting Google Photos upload for \(quotePhotos.count) quote photos")
+
+        // Upload each photo in background
+        Task {
+            for (index, photoRecord) in quotePhotos.enumerated() {
+                print("📤 Processing photo \(index + 1)/\(quotePhotos.count): \(photoRecord.fileURL)")
+                
+                // Add delay between uploads to avoid rate limiting (429 errors)
+                if index > 0 {
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
+                }
+                
+                // Skip if already uploaded
+                if photoRecord.uploadedToGooglePhotos {
+                    print("📤 Skipping already uploaded photo: \(photoRecord.fileURL)")
+                    continue
+                }
+                
+                // Check if file exists
+                let fileURL = URL(fileURLWithPath: photoRecord.fileURL)
+                guard FileManager.default.fileExists(atPath: photoRecord.fileURL) else {
+                    print("❌ Photo file doesn't exist: \(photoRecord.fileURL)")
+                    continue
+                }
+
+                // Get the address for album organization
+                let address = photoRecord.address ?? quoteDraft.clientAddress ?? ""
+                print("📤 Uploading to album address: \(address)")
+
+                // Upload with album organization
+                let result = await googleAPI.uploadPhotoToAlbum(
+                    fileURL: fileURL,
+                    address: address
+                )
+
+                if result.success {
+                    // Update the photo record on main thread
+                    await MainActor.run {
+                        photoRecord.uploadedToGooglePhotos = true
+                        if let mediaItemId = result.mediaItemId {
+                            photoRecord.googlePhotosMediaItemId = mediaItemId
+                        }
+                        if let albumId = result.albumId {
+                            photoRecord.googlePhotosAlbumId = albumId
+                        }
+                        try? modelContext.save()
+                        print("✅ Quote photo uploaded to Google Photos: \(photoRecord.fileURL)")
+                    }
+                } else {
+                    print("❌ Failed to upload quote photo to Google Photos: \(photoRecord.fileURL)")
+                }
+            }
+
+            print("📤 Google Photos upload complete for quote photos")
+        }
     }
 }
 

@@ -33,11 +33,11 @@ struct PhotoLibraryView: View {
 
     // Grouping mode
     @State private var isGroupedByAddress = true
-    
+
     // Watermark editing
     @State private var editingWatermarkPhoto: PhotoRecord?
     @State private var showingWatermarkEditor = false
-    
+
     // Album management
     @State private var movingPhoto: PhotoRecord?
     @State private var showingAlbumPicker = false
@@ -45,7 +45,7 @@ struct PhotoLibraryView: View {
     @State private var selectedAlbumAddress: String?
     @State private var renamingAlbum: String?
     @State private var showingAlbumRename = false
-    
+
     // Google Photos integration
     @State private var showingGooglePhotosSettings = false
 
@@ -62,23 +62,21 @@ struct PhotoLibraryView: View {
     }
 
     var groupedPhotos: [String: [PhotoRecord]] {
-        let grouped = Dictionary(grouping: filteredPhotos) { photo in
+        Dictionary(grouping: filteredPhotos) { photo in
             photo.address ?? "No Address"
         }
-        print("📊 Grouped photos by address: \(grouped.keys.sorted())")
-        return grouped
     }
-    
+
     /// Returns album addresses sorted by most recent photo (newest first)
     var sortedAlbumAddresses: [String] {
         groupedPhotos.keys.sorted { address1, address2 in
             let photos1 = groupedPhotos[address1] ?? []
             let photos2 = groupedPhotos[address2] ?? []
-            
+
             // Get the most recent photo date for each album
             let mostRecent1 = photos1.map { $0.createdAt }.max() ?? Date.distantPast
             let mostRecent2 = photos2.map { $0.createdAt }.max() ?? Date.distantPast
-            
+
             // Sort descending (most recent first)
             return mostRecent1 > mostRecent2
         }
@@ -141,16 +139,16 @@ struct PhotoLibraryView: View {
                             } label: {
                                 Label("Edit Watermark", systemImage: "text.bubble")
                             }
-                            
+
                             Button {
                                 movingPhoto = photo
                                 showingAlbumPicker = true
                             } label: {
                                 Label("Move to Album", systemImage: "folder")
                             }
-                            
+
                             Divider()
-                            
+
                             Button(role: .destructive) {
                                 deletePhoto(photo)
                             } label: {
@@ -247,7 +245,7 @@ struct PhotoLibraryView: View {
                                     Image(systemName: "checkmark.circle")
                                 }
                             }
-                            
+
                             // Google Photos settings button
                             Button(action: { showingGooglePhotosSettings = true }) {
                                 Image(systemName: "cloud.fill")
@@ -292,9 +290,12 @@ struct PhotoLibraryView: View {
                         await MainActor.run {
                             // Get the most recently captured photos
                             let recentPhotos = photoCaptureManager.capturedImages.suffix(photosWithMetadata.count)
-                            
+
                             // Use selectedAlbumAddress if set for all photos in batch
                             let targetAddress = selectedAlbumAddress
+                            
+                            // Collect photo records for batch upload
+                            var photoRecordsToUpload: [PhotoRecord] = []
 
                             for capturedPhoto in recentPhotos {
                                 // Find the saved file URL from shared container
@@ -331,7 +332,7 @@ struct PhotoLibraryView: View {
                                         // 3. Try to match to existing album by GPS proximity
                                         // 4. Fall back to "No Address"
                                         var finalAddress: String?
-                                        
+
                                         if let explicitTarget = targetAddress {
                                             // User selected an album, use it
                                             finalAddress = explicitTarget
@@ -347,7 +348,7 @@ struct PhotoLibraryView: View {
                                                 print("📍 Matched to existing album by GPS: \(matchedAlbum)")
                                             }
                                         }
-                                        
+
                                         photoRecord.address = finalAddress
                                         photoRecord.watermarkAddress = finalAddress
                                         photoRecord.originalTimestamp = capturedPhoto.timestamp
@@ -355,9 +356,9 @@ struct PhotoLibraryView: View {
                                         print("📸 Saving photo with address: \(photoRecord.address ?? "nil")")
 
                                         modelContext.insert(photoRecord)
-                                        
-                                        // Upload to Google Photos if enabled
-                                        uploadToGooglePhotos(photoRecord)
+
+                                        // Collect for batch upload instead of uploading immediately
+                                        photoRecordsToUpload.append(photoRecord)
                                     } catch {
                                         print("❌ Error saving photo to library: \(error)")
                                     }
@@ -366,6 +367,11 @@ struct PhotoLibraryView: View {
 
                             try? modelContext.save()
                             
+                            // Upload to Google Photos sequentially with rate limiting
+                            if !photoRecordsToUpload.isEmpty {
+                                uploadPhotosToGooglePhotosSequentially(photoRecordsToUpload)
+                            }
+
                             // Clear selected album after use
                             selectedAlbumAddress = nil
                         }
@@ -398,7 +404,7 @@ struct PhotoLibraryView: View {
             }
             .sheet(isPresented: Binding(
                 get: { showingAlbumRename && renamingAlbum != nil },
-                set: { newValue in 
+                set: { newValue in
                     showingAlbumRename = newValue
                     if !newValue { renamingAlbum = nil }
                 }
@@ -703,13 +709,59 @@ struct PhotoLibraryView: View {
         }
         #endif
     }
-    
+
     // MARK: - Google Photos Upload
-    
+
     private func uploadToGooglePhotos(_ photoRecord: PhotoRecord) {
         print("📤 uploadToGooglePhotos called for: \(photoRecord.fileURL)")
         print("   autoUploadEnabled: \(GooglePhotosAPI.shared.autoUploadEnabled)")
         print("   isAuthenticated: \(GooglePhotosAPI.shared.isAuthenticated)")
+
+        guard GooglePhotosAPI.shared.autoUploadEnabled else {
+            print("⚠️ Google Photos auto-upload is disabled")
+            return
+        }
+        guard GooglePhotosAPI.shared.isAuthenticated else {
+            print("⚠️ Google Photos not authenticated")
+            return
+        }
+
+        print("🚀 Starting Google Photos upload with album organization...")
+        Task {
+            let fileURL = URL(fileURLWithPath: photoRecord.fileURL)
+            let (success, mediaItemId, albumId) = await GooglePhotosAPI.shared.uploadPhotoToAlbum(
+                fileURL: fileURL,
+                address: photoRecord.address
+            )
+
+            await MainActor.run {
+                if success {
+                    photoRecord.uploadedToGooglePhotos = true
+                    photoRecord.googlePhotosUploadedAt = Date()
+                    photoRecord.googlePhotosUploadAttempts += 1
+                    photoRecord.lastGooglePhotosUploadError = nil
+                    photoRecord.googlePhotosMediaItemId = mediaItemId
+                    photoRecord.googlePhotosAlbumId = albumId
+
+                    if let albumId = albumId {
+                        print("✅ Photo uploaded to Google Photos album: \(photoRecord.address ?? "unknown")")
+                    } else {
+                        print("✅ Photo uploaded to Google Photos (no album)")
+                    }
+                } else {
+                    photoRecord.googlePhotosUploadAttempts += 1
+                    photoRecord.lastGooglePhotosUploadError = GooglePhotosAPI.shared.errorMessage
+                    print("❌ Failed to upload photo to Google Photos: \(GooglePhotosAPI.shared.errorMessage ?? "Unknown error")")
+                }
+
+                try? modelContext.save()
+            }
+        }
+    }
+    
+    /// Upload multiple photos to Google Photos sequentially with rate limiting delays
+    private func uploadPhotosToGooglePhotosSequentially(_ photoRecords: [PhotoRecord]) {
+        print("📤 Starting sequential upload of \(photoRecords.count) photos to Google Photos")
         
         guard GooglePhotosAPI.shared.autoUploadEnabled else {
             print("⚠️ Google Photos auto-upload is disabled")
@@ -720,41 +772,58 @@ struct PhotoLibraryView: View {
             return
         }
         
-        print("🚀 Starting Google Photos upload...")
         Task {
-            let fileURL = URL(fileURLWithPath: photoRecord.fileURL)
-            let success = await GooglePhotosAPI.shared.uploadPhoto(
-                fileURL: fileURL,
-                albumName: photoRecord.address ?? "DTS App Photos"
-            )
-            
-            await MainActor.run {
-                if success {
-                    photoRecord.uploadedToGooglePhotos = true
-                    photoRecord.googlePhotosUploadedAt = Date()
-                    photoRecord.googlePhotosUploadAttempts += 1
-                    photoRecord.lastGooglePhotosUploadError = nil
-                    print("✅ Photo uploaded to Google Photos: \(photoRecord.fileURL)")
-                } else {
-                    photoRecord.googlePhotosUploadAttempts += 1
-                    photoRecord.lastGooglePhotosUploadError = GooglePhotosAPI.shared.errorMessage
-                    print("❌ Failed to upload photo to Google Photos: \(GooglePhotosAPI.shared.errorMessage ?? "Unknown error")")
+            for (index, photoRecord) in photoRecords.enumerated() {
+                print("📤 Sequential upload \(index + 1)/\(photoRecords.count): \(photoRecord.fileURL)")
+                
+                // Add delay between uploads to avoid rate limiting (429 errors)
+                if index > 0 {
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
                 }
                 
-                try? modelContext.save()
+                let fileURL = URL(fileURLWithPath: photoRecord.fileURL)
+                let (success, mediaItemId, albumId) = await GooglePhotosAPI.shared.uploadPhotoToAlbum(
+                    fileURL: fileURL,
+                    address: photoRecord.address
+                )
+                
+                await MainActor.run {
+                    if success {
+                        photoRecord.uploadedToGooglePhotos = true
+                        photoRecord.googlePhotosUploadedAt = Date()
+                        photoRecord.googlePhotosUploadAttempts += 1
+                        photoRecord.lastGooglePhotosUploadError = nil
+                        photoRecord.googlePhotosMediaItemId = mediaItemId
+                        photoRecord.googlePhotosAlbumId = albumId
+                        
+                        if let albumId = albumId {
+                            print("✅ Sequential upload \(index + 1)/\(photoRecords.count) complete - album: \(photoRecord.address ?? "unknown")")
+                        } else {
+                            print("✅ Sequential upload \(index + 1)/\(photoRecords.count) complete (no album)")
+                        }
+                    } else {
+                        photoRecord.googlePhotosUploadAttempts += 1
+                        photoRecord.lastGooglePhotosUploadError = GooglePhotosAPI.shared.errorMessage
+                        print("❌ Sequential upload \(index + 1)/\(photoRecords.count) failed: \(GooglePhotosAPI.shared.errorMessage ?? "Unknown error")")
+                    }
+                    
+                    try? modelContext.save()
+                }
             }
+            
+            print("📤 Sequential upload batch complete: \(photoRecords.count) photos processed")
         }
     }
 
     // MARK: - Album Matching by GPS
-    
+
     /// Find an existing album that has photos near the given coordinates
     /// Returns the album address if found within the specified radius (default 100 meters)
     private func findMatchingAlbumByGPS(latitude: Double, longitude: Double, radiusMeters: Double = 100) -> String? {
         // Get unique albums with their representative coordinates
         for (address, photos) in groupedPhotos {
             guard address != "No Address" else { continue }
-            
+
             // Check if any photo in this album is within the radius
             for photo in photos {
                 if let photoLat = photo.latitude, let photoLon = photo.longitude {
@@ -762,7 +831,7 @@ struct PhotoLibraryView: View {
                         lat1: latitude, lon1: longitude,
                         lat2: photoLat, lon2: photoLon
                     )
-                    
+
                     if distance <= radiusMeters {
                         print("📍 Found matching album '\(address)' within \(Int(distance))m")
                         return address
@@ -770,25 +839,25 @@ struct PhotoLibraryView: View {
                 }
             }
         }
-        
+
         return nil
     }
-    
+
     /// Calculate distance between two GPS coordinates using Haversine formula
     private func calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double) -> Double {
         let earthRadius: Double = 6371000 // meters
-        
+
         let dLat = (lat2 - lat1) * .pi / 180
         let dLon = (lon2 - lon1) * .pi / 180
-        
+
         let a = sin(dLat/2) * sin(dLat/2) +
                 cos(lat1 * .pi / 180) * cos(lat2 * .pi / 180) *
                 sin(dLon/2) * sin(dLon/2)
         let c = 2 * atan2(sqrt(a), sqrt(1-a))
-        
+
         return earthRadius * c
     }
-    
+
     private func deleteAllPhotos() {
         print("🗑️ Deleting all \(allPhotos.count) photos...")
 
@@ -826,7 +895,7 @@ struct PhotoLibraryView: View {
             let photoRecord = PhotoRecord(fileURL: savedURL)
             photoRecord.latitude = photoCaptureManager.currentLocation?.coordinate.latitude
             photoRecord.longitude = photoCaptureManager.currentLocation?.coordinate.longitude
-            
+
             // Use selectedAlbumAddress if set, otherwise use geocoded address
             let targetAddress = selectedAlbumAddress ?? photoCaptureManager.currentAddress
             photoRecord.address = targetAddress
@@ -835,10 +904,10 @@ struct PhotoLibraryView: View {
 
             modelContext.insert(photoRecord)
             try? modelContext.save()
-            
+
             // Upload to Google Photos if enabled
             uploadToGooglePhotos(photoRecord)
-            
+
             // Clear selected album after use
             selectedAlbumAddress = nil
         }
@@ -857,7 +926,7 @@ struct PhotoLibraryView: View {
             let photoRecord = PhotoRecord(fileURL: savedURL)
             photoRecord.latitude = photoCaptureManager.currentLocation?.coordinate.latitude
             photoRecord.longitude = photoCaptureManager.currentLocation?.coordinate.longitude
-            
+
             // Use selectedAlbumAddress if set, otherwise use geocoded address
             let targetAddress = selectedAlbumAddress ?? photoCaptureManager.currentAddress
             photoRecord.address = targetAddress
@@ -866,10 +935,10 @@ struct PhotoLibraryView: View {
 
             modelContext.insert(photoRecord)
             try? modelContext.save()
-            
+
             // Upload to Google Photos if enabled
             uploadToGooglePhotos(photoRecord)
-            
+
             // Clear selected album after use
             selectedAlbumAddress = nil
         }
@@ -877,9 +946,12 @@ struct PhotoLibraryView: View {
 
     private func handleMultiplePhotoLibraryImages(_ images: [UIImage]) {
         print("📸 Processing \(images.count) photos from library...")
-        
+
         // Capture the target address before loop
         let targetAddress = selectedAlbumAddress ?? photoCaptureManager.currentAddress
+        
+        // Collect photo records for batch upload
+        var photoRecordsToUpload: [PhotoRecord] = []
 
         for (index, image) in images.enumerated() {
             // Add watermark if location available
@@ -895,9 +967,9 @@ struct PhotoLibraryView: View {
                 photoRecord.originalTimestamp = Date()
 
                 modelContext.insert(photoRecord)
-                
-                // Upload to Google Photos if enabled
-                uploadToGooglePhotos(photoRecord)
+
+                // Collect for batch upload instead of uploading immediately
+                photoRecordsToUpload.append(photoRecord)
 
                 print("✅ Added photo \(index + 1)/\(images.count)")
             } else {
@@ -909,10 +981,15 @@ struct PhotoLibraryView: View {
         do {
             try modelContext.save()
             print("✅ Successfully saved \(images.count) photos to library")
+            
+            // Upload to Google Photos sequentially with rate limiting
+            if !photoRecordsToUpload.isEmpty {
+                uploadPhotosToGooglePhotosSequentially(photoRecordsToUpload)
+            }
         } catch {
             print("❌ Failed to save photos: \(error)")
         }
-        
+
         // Clear selected album after use
         selectedAlbumAddress = nil
     }
@@ -985,14 +1062,14 @@ struct PhotoLibraryView: View {
             return nil
         }
     }
-    
+
     // MARK: - Watermark and Album Management
-    
+
     private func editWatermark(for photo: PhotoRecord) {
         editingWatermarkPhoto = photo
         showingWatermarkEditor = true
     }
-    
+
     private func movePhotoToAlbum(photo: PhotoRecord, newAddress: String) {
         photo.address = newAddress
         do {
@@ -1001,7 +1078,7 @@ struct PhotoLibraryView: View {
             print("❌ Failed to move photo to album: \(error)")
         }
     }
-    
+
     private func renameAlbum(from oldAddress: String, to newAddress: String) {
         // Update address for all photos in the album
         if let photosInAlbum = groupedPhotos[oldAddress] {
@@ -1012,7 +1089,7 @@ struct PhotoLibraryView: View {
                     photo.watermarkAddress = newAddress
                 }
             }
-            
+
             do {
                 try modelContext.save()
             } catch {
@@ -1020,15 +1097,15 @@ struct PhotoLibraryView: View {
             }
         }
     }
-    
+
     private func deletePhoto(_ photo: PhotoRecord) {
         // Delete file from disk
         let fileURL = URL(fileURLWithPath: photo.fileURL)
         try? FileManager.default.removeItem(at: fileURL)
-        
+
         // Delete from SwiftData
         modelContext.delete(photo)
-        
+
         do {
             try modelContext.save()
         } catch {
@@ -1059,7 +1136,7 @@ struct GroupedAddressSection: View {
                         .font(.headline)
                         .foregroundColor(.primary)
                         .lineLimit(2)
-                    
+
                     if let onRenameAlbum = onRenameAlbum {
                         Button(action: onRenameAlbum) {
                             Image(systemName: "pencil.circle.fill")
@@ -1070,14 +1147,14 @@ struct GroupedAddressSection: View {
                         .buttonStyle(.borderless)
                     }
                 }
-                
+
                 Spacer()
-                
+
                 VStack(alignment: .trailing, spacing: 4) {
                     Text("\(photos.count) photo\(photos.count == 1 ? "" : "s")")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    
+
                     if let onAddPhotos = onAddPhotos {
                         Button(action: onAddPhotos) {
                             Image(systemName: "plus.circle.fill")
@@ -1115,15 +1192,15 @@ struct GroupedAddressSection: View {
                         } label: {
                             Label("Edit Watermark", systemImage: "text.bubble")
                         }
-                        
+
                         Button {
                             onMoveToAlbum?(photo)
                         } label: {
                             Label("Move to Album", systemImage: "folder")
                         }
-                        
+
                         Divider()
-                        
+
                         Button(role: .destructive) {
                             onDelete?(photo)
                         } label: {

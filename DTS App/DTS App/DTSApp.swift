@@ -109,7 +109,7 @@ struct DTSApp: App {
                 await jobberAPI.handleOAuthCallback(url: url)
             }
         }
-        
+
         // Handle Google OAuth callback
         if url.scheme == "com.googleusercontent.apps.871965263646-e5viush2cefbdtbe7tgmq3t0rr7bbl4g" {
             print("📱 Processing Google OAuth callback")

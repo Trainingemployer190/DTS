@@ -11,25 +11,25 @@ import SwiftData
 struct EditWatermarkView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    
+
     // Photo being edited (for single edit mode)
     let photo: PhotoRecord
-    
+
     // Optional: All photos in same album (for batch edit mode)
     let albumPhotos: [PhotoRecord]?
-    
+
     @State private var newAddress: String
     @State private var isProcessing = false
     @State private var showError = false
     @State private var errorMessage = ""
-    
+
     init(photo: PhotoRecord, albumPhotos: [PhotoRecord]? = nil) {
         self.photo = photo
         self.albumPhotos = albumPhotos
         // Initialize with current watermark address or album address
         _newAddress = State(initialValue: photo.watermarkAddress ?? photo.address ?? "Address not available")
     }
-    
+
     var body: some View {
         NavigationView {
             Form {
@@ -45,17 +45,17 @@ struct EditWatermarkView: View {
                         }
                     }
                 }
-                
+
                 // Edit address section
                 Section("New Address") {
                     TextField("Street address", text: $newAddress)
                         .autocapitalization(.words)
-                    
+
                     Text("Enter the address to display on the watermark")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                
+
                 // Preview section
                 Section("Preview") {
                     let imageURL = URL(fileURLWithPath: photo.fileURL)
@@ -80,12 +80,12 @@ struct EditWatermarkView: View {
                         Text("Preview not available")
                             .foregroundColor(.secondary)
                     }
-                    
+
                     Text("The watermark will show: \(newAddress)")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                
+
                 // Action buttons
                 Section {
                     Button {
@@ -99,7 +99,7 @@ struct EditWatermarkView: View {
                         }
                     }
                     .disabled(isProcessing || newAddress.isEmpty)
-                    
+
                     if let albumPhotos = albumPhotos, albumPhotos.count > 1 {
                         Button {
                             Task {
@@ -114,7 +114,7 @@ struct EditWatermarkView: View {
                         .disabled(isProcessing || newAddress.isEmpty)
                     }
                 }
-                
+
                 if isProcessing {
                     Section {
                         HStack {
@@ -142,16 +142,16 @@ struct EditWatermarkView: View {
             }
         }
     }
-    
+
     // MARK: - Update Functions
-    
+
     @MainActor
     private func updateSinglePhoto() async {
         guard !newAddress.isEmpty else { return }
-        
+
         isProcessing = true
         defer { isProcessing = false }
-        
+
         #if canImport(UIKit)
         // Regenerate watermark for single photo
         guard let newFileURL = WatermarkUtility.regenerateWatermark(
@@ -163,11 +163,11 @@ struct EditWatermarkView: View {
             showError = true
             return
         }
-        
+
         // Update the photo record
         photo.watermarkAddress = newAddress
         photo.fileURL = newFileURL.path
-        
+
         do {
             try modelContext.save()
             dismiss()
@@ -180,19 +180,19 @@ struct EditWatermarkView: View {
         showError = true
         #endif
     }
-    
+
     @MainActor
     private func updateAlbumPhotos() async {
         guard !newAddress.isEmpty,
               let albumPhotos = albumPhotos else { return }
-        
+
         isProcessing = true
         defer { isProcessing = false }
-        
+
         #if canImport(UIKit)
         var successCount = 0
         var failureCount = 0
-        
+
         for albumPhoto in albumPhotos {
             guard let newFileURL = WatermarkUtility.regenerateWatermark(
                 photo: albumPhoto,
@@ -203,24 +203,24 @@ struct EditWatermarkView: View {
                 failureCount += 1
                 continue
             }
-            
+
             albumPhoto.watermarkAddress = newAddress
             albumPhoto.fileURL = newFileURL.path
             // Update album address to match the new watermark address
             albumPhoto.address = newAddress
             successCount += 1
         }
-        
+
         do {
             try modelContext.save()
-            
+
             if failureCount > 0 {
                 errorMessage = "Updated \(successCount) photos, \(failureCount) failed"
                 showError = true
             } else {
                 dismiss()
             }
-            
+
         } catch {
             errorMessage = "Failed to save changes: \(error.localizedDescription)"
             showError = true
@@ -239,16 +239,16 @@ struct EditWatermarkView_Previews: PreviewProvider {
     static var previews: some View {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try! ModelContainer(for: PhotoRecord.self, configurations: config)
-        
+
         let samplePhoto = PhotoRecord(
             fileURL: "sample.jpg",
             address: "123 Main St, City, State"
         )
         samplePhoto.watermarkAddress = "123 Main St, City, State"
         samplePhoto.originalTimestamp = Date()
-        
+
         container.mainContext.insert(samplePhoto)
-        
+
         return EditWatermarkView(photo: samplePhoto)
             .modelContainer(container)
     }

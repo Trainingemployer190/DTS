@@ -11,7 +11,7 @@ import CoreLocation
 #if canImport(UIKit)
 import UIKit
 struct WatermarkUtility {
-    
+
     /// Regenerate watermark on existing photo with new address
     /// - Parameters:
     ///   - photo: The PhotoRecord to update
@@ -28,10 +28,10 @@ struct WatermarkUtility {
             print("❌ Failed to load image from: \(photo.fileURL)")
             return nil
         }
-        
+
         // Determine timestamp to use
         let timestamp = preserveTimestamp ? (photo.originalTimestamp ?? Date()) : Date()
-        
+
         // Get coordinate for watermark
         let coordinate: CLLocationCoordinate2D? = {
             if let lat = photo.latitude, let lon = photo.longitude {
@@ -39,7 +39,7 @@ struct WatermarkUtility {
             }
             return nil
         }()
-        
+
         // Generate new watermark
         let watermarkedImage = addWatermark(
             to: originalImage,
@@ -47,24 +47,24 @@ struct WatermarkUtility {
             coordinate: coordinate,
             address: newAddress
         )
-        
+
         // Save to new file
         guard let imageData = watermarkedImage.jpegData(compressionQuality: 0.9) else {
             print("❌ Failed to generate image data")
             return nil
         }
-        
+
         let storageDirectory = SharedContainerHelper.photosStorageDirectory
         let fileName = "photo_\(Date().timeIntervalSince1970)_\(UUID().uuidString.prefix(8)).jpg"
         let fileURL = storageDirectory.appendingPathComponent(fileName)
-        
+
         do {
             try imageData.write(to: fileURL)
-            
+
             // Delete old file
             let oldURL = URL(fileURLWithPath: photo.fileURL)
             try? FileManager.default.removeItem(at: oldURL)
-            
+
             print("✅ Regenerated watermark: \(fileName)")
             return fileURL
         } catch {
@@ -72,7 +72,7 @@ struct WatermarkUtility {
             return nil
         }
     }
-    
+
     /// Load image from file path
     private static func loadImage(from path: String) -> UIImage? {
         let url = URL(fileURLWithPath: path)
@@ -81,7 +81,7 @@ struct WatermarkUtility {
         }
         return UIImage(data: data)
     }
-    
+
     /// Add watermark to image
     private static func addWatermark(
         to image: UIImage,

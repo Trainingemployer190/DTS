@@ -329,7 +329,7 @@ final class PhotoRecord {
     var longitude: Double?
     var address: String? // Client address for grouping/album
     var uploaded: Bool = false
-    
+
     // Watermark data (for regeneration)
     var originalTimestamp: Date? // Original photo capture time
     var watermarkAddress: String? // Address shown in watermark (can differ from album address)
@@ -337,12 +337,14 @@ final class PhotoRecord {
     // Upload tracking (imgbb)
     var uploadAttempts: Int = 0
     var lastUploadError: String?
-    
+
     // Google Photos upload tracking
     var uploadedToGooglePhotos: Bool = false
     var googlePhotosUploadAttempts: Int = 0
     var lastGooglePhotosUploadError: String?
     var googlePhotosUploadedAt: Date?
+    var googlePhotosMediaItemId: String?  // Media item ID for adding to albums later
+    var googlePhotosAlbumId: String?      // Album ID this photo belongs to
 
     // Annotation features
     var title: String = ""
