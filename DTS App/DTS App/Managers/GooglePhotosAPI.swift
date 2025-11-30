@@ -16,8 +16,10 @@ class GooglePhotosAPI: ObservableObject {
     // Google OAuth credentials
     private let clientId = "871965263646-e5viush2cefbdtbe7tgmq3t0rr7bbl4g.apps.googleusercontent.com"
     private let redirectURI = "com.googleusercontent.apps.871965263646-e5viush2cefbdtbe7tgmq3t0rr7bbl4g:/oauth2redirect"
-    // Updated scope to allow album creation and management
-    private let scopes = "https://www.googleapis.com/auth/photoslibrary"
+    // Scopes for uploading photos and managing albums
+    // - photoslibrary.appendonly: Required to create/upload media items
+    // - photoslibrary: Required to read and create albums
+    private let scopes = "https://www.googleapis.com/auth/photoslibrary.appendonly https://www.googleapis.com/auth/photoslibrary"
 
     // PRE-CONFIGURED MODE: Shared company account
     // To enable: Set usePreConfiguredAuth = true and store refresh token in Keychain
@@ -305,13 +307,10 @@ class GooglePhotosAPI: ObservableObject {
                 isAuthenticated = true
                 errorMessage = nil
 
-                // Print refresh token for pre-configured mode setup
+                // Save refresh token to Keychain for pre-configured mode
                 if let refreshToken = tokenResponse.refresh_token {
-                    print(String(repeating: "=", count: 60))
-                    print("🔑 GOOGLE PHOTOS REFRESH TOKEN (for pre-configured mode):")
-                    print(refreshToken)
-                    print("💡 Copy this token to GooglePhotosAPI.swift preConfiguredRefreshToken")
-                    print(String(repeating: "=", count: 60))
+                    setPreConfiguredRefreshToken(refreshToken)
+                    print("✅ New refresh token saved to Keychain automatically")
                 }
 
                 print("✅ Google Photos authentication successful")
@@ -578,19 +577,33 @@ class GooglePhotosAPI: ObservableObject {
 
     /// Upload photo and return (success, mediaItemId)
     func uploadPhoto(fileURL: URL, albumName: String? = nil) async -> (success: Bool, mediaItemId: String?) {
+        print("🔄 uploadPhoto called for: \(fileURL.lastPathComponent)")
+        
+        // Check if file exists
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            errorMessage = "Photo file not found"
+            print("❌ Upload failed: File not found at \(fileURL.path)")
+            return (false, nil)
+        }
+        
         // Check if token needs refresh
         if let expiryDate = tokenExpiryDate, Date() >= expiryDate {
+            print("🔄 Token expired, refreshing...")
             let refreshed = await refreshAccessToken()
             if !refreshed {
                 errorMessage = "Failed to refresh access token"
+                print("❌ Upload failed: Failed to refresh access token")
                 return (false, nil)
             }
         }
 
         guard let accessToken = accessToken else {
             errorMessage = "Not authenticated"
+            print("❌ Upload failed: Not authenticated (no access token)")
             return (false, nil)
         }
+        
+        print("✅ Token valid, starting upload...")
 
         isUploading = true
         uploadProgress = 0.0
@@ -602,7 +615,9 @@ class GooglePhotosAPI: ObservableObject {
 
         do {
             // Step 1: Upload raw bytes
+            print("📁 Reading file: \(fileURL.path)")
             let imageData = try Data(contentsOf: fileURL)
+            print("📁 File read successfully, size: \(imageData.count) bytes")
             let fileName = fileURL.lastPathComponent
 
             var uploadRequest = URLRequest(url: URL(string: uploadEndpoint)!)
@@ -614,19 +629,27 @@ class GooglePhotosAPI: ObservableObject {
             uploadRequest.httpBody = imageData
 
             uploadProgress = 0.3
+            print("📤 Sending upload request to Google Photos API...")
 
             let (uploadData, uploadResponse) = try await URLSession.shared.data(for: uploadRequest)
+            let statusCode = (uploadResponse as? HTTPURLResponse)?.statusCode ?? -1
+            let responseText = String(data: uploadData, encoding: .utf8) ?? "No response"
+            print("📤 Got response - Status: \(statusCode), Response length: \(responseText.count) chars")
 
             guard let httpResponse = uploadResponse as? HTTPURLResponse,
                   httpResponse.statusCode == 200,
                   let uploadToken = String(data: uploadData, encoding: .utf8) else {
-                errorMessage = "Failed to upload photo bytes"
+                errorMessage = "Failed to upload photo bytes (status: \(statusCode))"
+                print("❌ Upload bytes failed - Status: \(statusCode), Response: \(responseText)")
                 return (false, nil)
             }
+            
+            print("✅ Step 1 complete - got upload token")
 
             uploadProgress = 0.6
 
             // Step 2: Create media item
+            print("📤 Step 2: Creating media item...")
             let mediaItem = GoogleMediaItemRequest(
                 description: albumName ?? "DTS App Photo",
                 simpleMediaItem: GoogleSimpleMediaItem(uploadToken: uploadToken)
@@ -642,11 +665,14 @@ class GooglePhotosAPI: ObservableObject {
             createRequest.httpBody = batchData
 
             let (createData, createResponse) = try await URLSession.shared.data(for: createRequest)
+            let createStatusCode = (createResponse as? HTTPURLResponse)?.statusCode ?? -1
+            let createResponseText = String(data: createData, encoding: .utf8) ?? "Unknown"
+            print("📤 Create media response - Status: \(createStatusCode)")
 
             guard let httpResponse = createResponse as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
-                let errorText = String(data: createData, encoding: .utf8) ?? "Unknown error"
-                errorMessage = "Failed to create media item: \(errorText)"
+                errorMessage = "Failed to create media item (status: \(createStatusCode))"
+                print("❌ Create media item failed - Status: \(createStatusCode), Response: \(createResponseText)")
                 return (false, nil)
             }
 

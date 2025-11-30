@@ -63,6 +63,16 @@ struct GooglePhotosSettingsView: View {
                                     .foregroundColor(.green)
                             }
                         }
+                        
+                        // Always show reconnect button in pre-configured mode
+                        Button("Sign Out & Reconnect") {
+                            googleAPI.signOut()
+                            // Small delay then start new auth
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                googleAPI.startAuthentication()
+                            }
+                        }
+                        .foregroundColor(.blue)
                     } else if googleAPI.isAuthenticated {
                         Button("Sign Out") {
                             googleAPI.signOut()
