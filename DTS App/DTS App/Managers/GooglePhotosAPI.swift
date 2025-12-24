@@ -30,7 +30,7 @@ class GooglePhotosAPI: ObservableObject {
         return KeychainManager.shared.getString(for: "GooglePhotosPreConfiguredRefreshToken")
     }
     private let usePreConfiguredAuth = true  // Set to true to enable pre-configured mode
-    
+
     /// Store a pre-configured refresh token securely in Keychain
     func setPreConfiguredRefreshToken(_ token: String) {
         _ = KeychainManager.shared.save(string: token, for: "GooglePhotosPreConfiguredRefreshToken")
@@ -578,14 +578,14 @@ class GooglePhotosAPI: ObservableObject {
     /// Upload photo and return (success, mediaItemId)
     func uploadPhoto(fileURL: URL, albumName: String? = nil) async -> (success: Bool, mediaItemId: String?) {
         print("🔄 uploadPhoto called for: \(fileURL.lastPathComponent)")
-        
+
         // Check if file exists
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             errorMessage = "Photo file not found"
             print("❌ Upload failed: File not found at \(fileURL.path)")
             return (false, nil)
         }
-        
+
         // Check if token needs refresh
         if let expiryDate = tokenExpiryDate, Date() >= expiryDate {
             print("🔄 Token expired, refreshing...")
@@ -602,7 +602,7 @@ class GooglePhotosAPI: ObservableObject {
             print("❌ Upload failed: Not authenticated (no access token)")
             return (false, nil)
         }
-        
+
         print("✅ Token valid, starting upload...")
 
         isUploading = true
@@ -643,7 +643,7 @@ class GooglePhotosAPI: ObservableObject {
                 print("❌ Upload bytes failed - Status: \(statusCode), Response: \(responseText)")
                 return (false, nil)
             }
-            
+
             print("✅ Step 1 complete - got upload token")
 
             uploadProgress = 0.6

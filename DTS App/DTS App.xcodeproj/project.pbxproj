@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C8F00BF12EF8774F0032460F /* DTS Share Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C8F00BE72EF8774F0032460F /* DTS Share Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		C87799F32E4CFCB200D3E76D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,13 +25,45 @@
 			remoteGlobalIDString = C87799E42E4CFCB000D3E76D;
 			remoteInfo = "DTS App";
 		};
+		C8F00BEF2EF8774F0032460F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C87799DD2E4CFCB000D3E76D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C8F00BE62EF8774F0032460F;
+			remoteInfo = "DTS Share Extension";
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C8F00BF22EF8774F0032460F /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C8F00BF12EF8774F0032460F /* DTS Share Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		C87799E52E4CFCB000D3E76D /* DTS App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DTS App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C87799F22E4CFCB200D3E76D /* DTS AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DTS AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C87799FC2E4CFCB200D3E76D /* DTS AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DTS AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C8F00BE72EF8774F0032460F /* DTS Share Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "DTS Share Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		C8F00BF52EF8774F0032460F /* Exceptions for "DTS Share Extension" folder in "DTS Share Extension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C8F00BE62EF8774F0032460F /* DTS Share Extension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C87799E72E4CFCB000D3E76D /* DTS App */ = {
@@ -43,6 +79,14 @@
 		C87799FF2E4CFCB200D3E76D /* DTS AppUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "DTS AppUITests";
+			sourceTree = "<group>";
+		};
+		C8F00BE82EF8774F0032460F /* DTS Share Extension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C8F00BF52EF8774F0032460F /* Exceptions for "DTS Share Extension" folder in "DTS Share Extension" target */,
+			);
+			path = "DTS Share Extension";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -69,6 +113,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C8F00BE42EF8774F0032460F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -78,6 +129,7 @@
 				C87799E72E4CFCB000D3E76D /* DTS App */,
 				C87799F52E4CFCB200D3E76D /* DTS AppTests */,
 				C87799FF2E4CFCB200D3E76D /* DTS AppUITests */,
+				C8F00BE82EF8774F0032460F /* DTS Share Extension */,
 				C87799E62E4CFCB000D3E76D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,6 +140,7 @@
 				C87799E52E4CFCB000D3E76D /* DTS App.app */,
 				C87799F22E4CFCB200D3E76D /* DTS AppTests.xctest */,
 				C87799FC2E4CFCB200D3E76D /* DTS AppUITests.xctest */,
+				C8F00BE72EF8774F0032460F /* DTS Share Extension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -102,10 +155,12 @@
 				C87799E12E4CFCB000D3E76D /* Sources */,
 				C87799E22E4CFCB000D3E76D /* Frameworks */,
 				C87799E32E4CFCB000D3E76D /* Resources */,
+				C8F00BF22EF8774F0032460F /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C8F00BF02EF8774F0032460F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				C87799E72E4CFCB000D3E76D /* DTS App */,
@@ -163,6 +218,28 @@
 			productReference = C87799FC2E4CFCB200D3E76D /* DTS AppUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		C8F00BE62EF8774F0032460F /* DTS Share Extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C8F00BF62EF8774F0032460F /* Build configuration list for PBXNativeTarget "DTS Share Extension" */;
+			buildPhases = (
+				C8F00BE32EF8774F0032460F /* Sources */,
+				C8F00BE42EF8774F0032460F /* Frameworks */,
+				C8F00BE52EF8774F0032460F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C8F00BE82EF8774F0032460F /* DTS Share Extension */,
+			);
+			name = "DTS Share Extension";
+			packageProductDependencies = (
+			);
+			productName = "DTS Share Extension";
+			productReference = C8F00BE72EF8774F0032460F /* DTS Share Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -170,7 +247,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1640;
+				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					C87799E42E4CFCB000D3E76D = {
@@ -183,6 +260,9 @@
 					C87799FB2E4CFCB200D3E76D = {
 						CreatedOnToolsVersion = 16.4;
 						TestTargetID = C87799E42E4CFCB000D3E76D;
+					};
+					C8F00BE62EF8774F0032460F = {
+						CreatedOnToolsVersion = 26.0;
 					};
 				};
 			};
@@ -203,6 +283,7 @@
 				C87799E42E4CFCB000D3E76D /* DTS App */,
 				C87799F12E4CFCB200D3E76D /* DTS AppTests */,
 				C87799FB2E4CFCB200D3E76D /* DTS AppUITests */,
+				C8F00BE62EF8774F0032460F /* DTS Share Extension */,
 			);
 		};
 /* End PBXProject section */
@@ -223,6 +304,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C87799FA2E4CFCB200D3E76D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C8F00BE52EF8774F0032460F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,6 +341,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C8F00BE32EF8774F0032460F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -265,6 +360,11 @@
 			isa = PBXTargetDependency;
 			target = C87799E42E4CFCB000D3E76D /* DTS App */;
 			targetProxy = C87799FD2E4CFCB200D3E76D /* PBXContainerItemProxy */;
+		};
+		C8F00BF02EF8774F0032460F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C8F00BE62EF8774F0032460F /* DTS Share Extension */;
+			targetProxy = C8F00BEF2EF8774F0032460F /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -410,10 +510,10 @@
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured photos and access existing images for job documentation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "(fetch)";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UIBackgroundModes = "(fetch)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -445,10 +545,10 @@
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured photos and access existing images for job documentation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "(fetch)";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UIBackgroundModes = "(fetch)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -534,6 +634,64 @@
 			};
 			name = Release;
 		};
+		C8F00BF32EF8774F0032460F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WNU63L8T28;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "DTS Share Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "DTS Share Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "DTS.DTS-App.DTS-Share-Extension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C8F00BF42EF8774F0032460F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WNU63L8T28;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "DTS Share Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "DTS Share Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "DTS.DTS-App.DTS-Share-Extension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -569,6 +727,15 @@
 			buildConfigurations = (
 				C8779A0D2E4CFCB200D3E76D /* Debug */,
 				C8779A0E2E4CFCB200D3E76D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C8F00BF62EF8774F0032460F /* Build configuration list for PBXNativeTarget "DTS Share Extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C8F00BF32EF8774F0032460F /* Debug */,
+				C8F00BF42EF8774F0032460F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

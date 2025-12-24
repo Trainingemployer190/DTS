@@ -63,7 +63,7 @@ struct GooglePhotosSettingsView: View {
                                     .foregroundColor(.green)
                             }
                         }
-                        
+
                         // Always show reconnect button in pre-configured mode
                         Button("Sign Out & Reconnect") {
                             googleAPI.signOut()
