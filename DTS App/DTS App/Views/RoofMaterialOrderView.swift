@@ -12,25 +12,30 @@ import UniformTypeIdentifiers
 
 struct RoofMaterialOrderView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var router: AppRouter
     @Query(sort: \RoofMaterialOrder.createdAt, order: .reverse) private var orders: [RoofMaterialOrder]
     @Query private var settings: [AppSettings]
     @Query private var allPresets: [RoofPresetTemplate]
-    
+
     private var builtInPresets: [RoofPresetTemplate] {
         allPresets.filter { $0.isBuiltIn }
     }
-    
+
     @State private var showingFilePicker = false
     @State private var showingCleanup = false
     @State private var selectedOrder: RoofMaterialOrder?
     @State private var isImporting = false
     @State private var importError: String?
     @State private var showingImportError = false
-    
+    @State private var showShareImportSuccess = false
+    @State private var shareImportedOrderName = ""
+    @State private var navigateToOrder: RoofMaterialOrder?
+    @State private var showImportedOrder = false
+
     var currentSettings: AppSettings {
         settings.first ?? AppSettings()
     }
-    
+
     var body: some View {
         NavigationStack {
             List {
@@ -61,7 +66,7 @@ struct RoofMaterialOrderView: View {
                     }
                     .disabled(isImporting)
                 }
-                
+
                 // Orders List
                 if orders.isEmpty {
                     Section {
@@ -91,7 +96,7 @@ struct RoofMaterialOrderView: View {
                         .onDelete(perform: deleteOrders)
                     }
                 }
-                
+
                 // Storage Section
                 Section {
                     Button {
@@ -132,6 +137,21 @@ struct RoofMaterialOrderView: View {
                     RoofOrderDetailView(order: order)
                 }
             }
+            .fullScreenCover(isPresented: $showImportedOrder) {
+                if let order = navigateToOrder {
+                    NavigationStack {
+                        RoofOrderDetailView(order: order)
+                            .toolbar {
+                                ToolbarItem(placement: .navigationBarLeading) {
+                                    Button("Done") {
+                                        showImportedOrder = false
+                                        navigateToOrder = nil
+                                    }
+                                }
+                            }
+                    }
+                }
+            }
             .alert("Import Error", isPresented: $showingImportError) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -139,28 +159,117 @@ struct RoofMaterialOrderView: View {
             }
             .onAppear {
                 ensureBuiltInPresetsExist()
+                checkForPendingShareExtensionImport()
+            }
+            .onChange(of: router.showRoofPDFImport) { oldValue, newValue in
+                if newValue {
+                    checkForPendingShareExtensionImport()
+                }
             }
         }
     }
     
+    private func checkForPendingShareExtensionImport() {
+        guard let pendingId = router.pendingRoofPDFImportId else { return }
+        
+        print("📥 Processing pending PDF import: \(pendingId)")
+        
+        // Look for the PDF file in the shared container
+        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.DTS.DTS-App") else {
+            print("❌ Cannot access app group container")
+            router.clearPendingImport()
+            return
+        }
+        
+        let roofPDFsDir = containerURL.appendingPathComponent("RoofPDFs", isDirectory: true)
+        
+        // Find the PDF file that starts with the pending ID
+        do {
+            let files = try FileManager.default.contentsOfDirectory(at: roofPDFsDir, includingPropertiesForKeys: nil)
+            if let matchingFile = files.first(where: { $0.lastPathComponent.hasPrefix(pendingId) }) {
+                print("✅ Found matching PDF: \(matchingFile.lastPathComponent)")
+                
+                isImporting = true
+                
+                Task {
+                    await importPDFFromShareExtension(from: matchingFile)
+                    await MainActor.run {
+                        isImporting = false
+                        router.clearPendingImport()
+                    }
+                }
+            } else {
+                print("❌ No matching PDF found for ID: \(pendingId)")
+                router.clearPendingImport()
+            }
+        } catch {
+            print("❌ Error reading PDF directory: \(error)")
+            router.clearPendingImport()
+        }
+    }
+    
+    private func importPDFFromShareExtension(from url: URL) async {
+        // Parse PDF directly (it's already in the shared container)
+        let parseResult = RoofPDFParser.parse(url: url)
+        
+        await MainActor.run {
+            let order = RoofMaterialOrder()
+            order.pdfFilename = url.lastPathComponent
+            
+            // Extract original name from the UUID_name.pdf format
+            let filename = url.deletingPathExtension().lastPathComponent
+            let components = filename.split(separator: "_", maxSplits: 1)
+            let originalName = components.count > 1 ? String(components[1]) : filename
+            order.originalPDFName = "\(originalName).pdf"
+            
+            order.parseConfidence = parseResult.confidence
+            order.detectedFormat = parseResult.detectedFormat
+            order.parseWarnings = parseResult.warnings
+            order.measurements = parseResult.measurements
+            
+            // Clean up project name
+            let cleanName = originalName
+                .replacingOccurrences(of: "_", with: " ")
+                .replacingOccurrences(of: "-", with: " ")
+            order.projectName = cleanName
+            
+            // Calculate initial materials
+            order.materials = RoofMaterialCalculator.calculateMaterials(
+                from: parseResult.measurements,
+                settings: currentSettings,
+                shingleType: order.shingleType,
+                shingleColor: order.shingleColor
+            )
+            
+            modelContext.insert(order)
+            try? modelContext.save()
+            
+            print("✅ Created order from Share Extension: \(cleanName)")
+            
+            // Navigate directly to the order
+            navigateToOrder = order
+            showImportedOrder = true
+        }
+    }
+
     private func handlePDFImport(result: Result<URL, Error>) {
         switch result {
         case .success(let url):
             isImporting = true
-            
+
             Task {
                 await importPDF(from: url)
                 await MainActor.run {
                     isImporting = false
                 }
             }
-            
+
         case .failure(let error):
             importError = error.localizedDescription
             showingImportError = true
         }
     }
-    
+
     private func importPDF(from url: URL) async {
         // Copy PDF to shared storage
         guard let savedURL = SharedContainerHelper.copyRoofPDF(from: url) else {
@@ -170,10 +279,10 @@ struct RoofMaterialOrderView: View {
             }
             return
         }
-        
+
         // Parse PDF
         let parseResult = RoofPDFParser.parse(url: savedURL)
-        
+
         // Create order
         await MainActor.run {
             let order = RoofMaterialOrder()
@@ -183,27 +292,27 @@ struct RoofMaterialOrderView: View {
             order.detectedFormat = parseResult.detectedFormat
             order.parseWarnings = parseResult.warnings
             order.measurements = parseResult.measurements
-            
+
             // Extract project name from filename
             let cleanName = url.deletingPathExtension().lastPathComponent
                 .replacingOccurrences(of: "_", with: " ")
                 .replacingOccurrences(of: "-", with: " ")
             order.projectName = cleanName
-            
+
             // Calculate initial materials
             order.materials = RoofMaterialCalculator.calculateMaterials(
                 from: parseResult.measurements,
                 settings: currentSettings
             )
-            
+
             modelContext.insert(order)
             try? modelContext.save()
-            
+
             // Navigate to detail view
             selectedOrder = order
         }
     }
-    
+
     private func deleteOrders(at offsets: IndexSet) {
         for index in offsets {
             let order = orders[index]
@@ -216,7 +325,7 @@ struct RoofMaterialOrderView: View {
         }
         try? modelContext.save()
     }
-    
+
     private func ensureBuiltInPresetsExist() {
         // Check if built-in presets exist, create if not
         if builtInPresets.isEmpty {
@@ -233,26 +342,26 @@ struct RoofMaterialOrderView: View {
 
 struct RoofOrderRowView: View {
     let order: RoofMaterialOrder
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(order.projectName.isEmpty ? "Unnamed Project" : order.projectName)
                     .font(.headline)
                     .lineLimit(1)
-                
+
                 Spacer()
-                
+
                 RoofOrderStatusBadge(status: order.status)
             }
-            
+
             HStack {
                 if order.measurements.totalSquares > 0 {
                     Text("\(String(format: "%.1f", order.measurements.totalSquares)) SQ")
                         .font(.caption)
                         .foregroundColor(.blue)
                 }
-                
+
                 if let format = order.detectedFormat {
                     Text("•")
                         .foregroundColor(.secondary)
@@ -260,23 +369,32 @@ struct RoofOrderRowView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 Text(order.createdAt.formatted(date: .abbreviated, time: .omitted))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            
-            // Confidence warning
+
+            // Confidence warning with reason
             if order.parseConfidence < 80 && order.parseConfidence > 0 {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                        .font(.caption)
-                    Text("Needs verification")
-                        .font(.caption)
-                        .foregroundColor(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                            .font(.caption)
+                        Text("Needs verification (\(Int(order.parseConfidence))%)")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                    // Show first warning reason as hint
+                    if let firstWarning = order.parseWarnings.first {
+                        Text(firstWarning)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
                 }
             }
         }
@@ -288,7 +406,7 @@ struct RoofOrderRowView: View {
 
 struct RoofOrderStatusBadge: View {
     let status: RoofOrderStatus
-    
+
     var body: some View {
         Text(status.rawValue.capitalized)
             .font(.caption)
@@ -299,7 +417,7 @@ struct RoofOrderStatusBadge: View {
             .foregroundColor(foregroundColor)
             .cornerRadius(4)
     }
-    
+
     var backgroundColor: Color {
         switch status {
         case .draft: return .gray.opacity(0.2)
@@ -307,7 +425,7 @@ struct RoofOrderStatusBadge: View {
         case .completed: return .green.opacity(0.2)
         }
     }
-    
+
     var foregroundColor: Color {
         switch status {
         case .draft: return .gray

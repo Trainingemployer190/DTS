@@ -74,7 +74,7 @@ struct MainContentView: View {
             // Handle initial authentication if needed
         }
     }
-    
+
     private func checkForPendingRoofImport() {
         // Check for pending PDF import from Share Extension
         let sharedDefaults = UserDefaults(suiteName: "group.DTS.DTS-App")
@@ -85,53 +85,53 @@ struct MainContentView: View {
             sharedDefaults?.removeObject(forKey: "pendingRoofPDFImport")
         }
     }
-    
+
     private func migrateRoofSettingsIfNeeded() {
         // Check if migration is pending
         let pendingKey = "com.dtsapp.pendingRoofSettingsMigration"
         let migrationKey = "com.dtsapp.roofSettingsMigration_v1"
-        
+
         guard UserDefaults.standard.bool(forKey: pendingKey) else { return }
-        
+
         print("🔧 Performing roof settings migration...")
-        
+
         // Fetch existing settings
         let descriptor = FetchDescriptor<AppSettings>()
         do {
             let allSettings = try modelContext.fetch(descriptor)
-            
+
             if let settings = allSettings.first {
                 // Update to correct defaults
                 var didUpdate = false
-                
+
                 // Fix underlayment (was 400, should be 1000)
                 if settings.roofUnderlaymentSqFtPerRoll < 500 {
                     settings.roofUnderlaymentSqFtPerRoll = 1000.0
                     print("  ✓ Updated underlayment to 1000 sqft/roll")
                     didUpdate = true
                 }
-                
+
                 // Fix ice & water for eaves (should be OFF by default)
                 if settings.roofAutoAddIceWaterForEaves {
                     settings.roofAutoAddIceWaterForEaves = false
                     print("  ✓ Disabled ice & water for eaves")
                     didUpdate = true
                 }
-                
+
                 // Fix starter strip (was 100, should be 120)
                 if settings.roofStarterStripLFPerBundle < 110 {
                     settings.roofStarterStripLFPerBundle = 120.0
                     print("  ✓ Updated starter strip to 120 LF/bundle")
                     didUpdate = true
                 }
-                
+
                 // Fix ridge cap (was 33, should be 25)
                 if settings.roofRidgeCapLFPerBundle > 30 {
                     settings.roofRidgeCapLFPerBundle = 25.0
                     print("  ✓ Updated ridge cap to 25 LF/bundle")
                     didUpdate = true
                 }
-                
+
                 if didUpdate {
                     try modelContext.save()
                     print("✅ Roof settings migration completed")
@@ -139,11 +139,11 @@ struct MainContentView: View {
                     print("✅ Roof settings already correct, no migration needed")
                 }
             }
-            
+
             // Mark migration as complete
             UserDefaults.standard.removeObject(forKey: pendingKey)
             UserDefaults.standard.set(true, forKey: migrationKey)
-            
+
         } catch {
             print("❌ Failed to migrate roof settings: \(error)")
         }

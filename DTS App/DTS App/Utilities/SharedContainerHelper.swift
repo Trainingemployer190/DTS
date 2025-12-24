@@ -117,9 +117,9 @@ enum SharedContainerHelper {
             return false
         }
     }
-    
+
     // MARK: - Roof PDF Storage
-    
+
     /// Get the shared container URL for roof measurement PDF storage
     /// This directory persists across app installations and updates
     static var sharedRoofPDFsDirectory: URL? {
@@ -127,9 +127,9 @@ enum SharedContainerHelper {
             print("❌ Failed to access App Group container for PDFs: \(appGroupIdentifier)")
             return nil
         }
-        
+
         let pdfDir = containerURL.appendingPathComponent("RoofPDFs", isDirectory: true)
-        
+
         // Create directory if it doesn't exist
         if !FileManager.default.fileExists(atPath: pdfDir.path) {
             do {
@@ -140,10 +140,10 @@ enum SharedContainerHelper {
                 return nil
             }
         }
-        
+
         return pdfDir
     }
-    
+
     /// Get the best available storage directory for roof PDFs
     static var roofPDFStorageDirectory: URL {
         if let sharedDir = sharedRoofPDFsDirectory {
@@ -153,7 +153,7 @@ enum SharedContainerHelper {
             return documentsDirectory.appendingPathComponent("RoofPDFs")
         }
     }
-    
+
     /// Save a PDF to the shared roof PDFs directory
     /// - Parameters:
     ///   - data: The PDF file data
@@ -161,7 +161,7 @@ enum SharedContainerHelper {
     /// - Returns: The URL where the PDF was saved, or nil on failure
     static func saveRoofPDF(data: Data, filename: String? = nil) -> URL? {
         let pdfDir = roofPDFStorageDirectory
-        
+
         // Ensure directory exists
         if !FileManager.default.fileExists(atPath: pdfDir.path) {
             do {
@@ -171,10 +171,10 @@ enum SharedContainerHelper {
                 return nil
             }
         }
-        
+
         let name = filename ?? "\(UUID().uuidString).pdf"
         let fileURL = pdfDir.appendingPathComponent(name)
-        
+
         do {
             try data.write(to: fileURL)
             print("✅ Saved roof PDF: \(name)")
@@ -184,13 +184,13 @@ enum SharedContainerHelper {
             return nil
         }
     }
-    
+
     /// Copy a PDF from a URL to the shared roof PDFs directory
     /// - Parameter sourceURL: The source PDF URL (e.g., from share extension)
     /// - Returns: The URL where the PDF was copied, or nil on failure
     static func copyRoofPDF(from sourceURL: URL) -> URL? {
         let pdfDir = roofPDFStorageDirectory
-        
+
         // Ensure directory exists
         if !FileManager.default.fileExists(atPath: pdfDir.path) {
             do {
@@ -200,13 +200,13 @@ enum SharedContainerHelper {
                 return nil
             }
         }
-        
+
         // Generate unique filename preserving original extension
         let originalName = sourceURL.deletingPathExtension().lastPathComponent
         let ext = sourceURL.pathExtension.isEmpty ? "pdf" : sourceURL.pathExtension
         let uniqueName = "\(UUID().uuidString)_\(originalName).\(ext)"
         let destURL = pdfDir.appendingPathComponent(uniqueName)
-        
+
         do {
             // Start accessing security-scoped resource if needed
             let accessing = sourceURL.startAccessingSecurityScopedResource()
@@ -215,7 +215,7 @@ enum SharedContainerHelper {
                     sourceURL.stopAccessingSecurityScopedResource()
                 }
             }
-            
+
             try FileManager.default.copyItem(at: sourceURL, to: destURL)
             print("✅ Copied roof PDF: \(uniqueName)")
             return destURL
@@ -224,16 +224,16 @@ enum SharedContainerHelper {
             return nil
         }
     }
-    
+
     /// List all PDF files in the roof PDFs directory
     /// - Returns: Array of PDF file URLs
     static func listRoofPDFs() -> [URL] {
         let pdfDir = roofPDFStorageDirectory
-        
+
         guard FileManager.default.fileExists(atPath: pdfDir.path) else {
             return []
         }
-        
+
         do {
             let files = try FileManager.default.contentsOfDirectory(at: pdfDir, includingPropertiesForKeys: [.fileSizeKey, .creationDateKey])
             return files.filter { $0.pathExtension.lowercased() == "pdf" }
@@ -242,7 +242,7 @@ enum SharedContainerHelper {
             return []
         }
     }
-    
+
     /// Get file info for a roof PDF
     /// - Parameter url: The PDF file URL
     /// - Returns: Tuple with file size in bytes and creation date, or nil on failure
@@ -257,7 +257,7 @@ enum SharedContainerHelper {
             return nil
         }
     }
-    
+
     /// Delete a roof PDF file
     /// - Parameter url: The PDF file URL to delete
     /// - Returns: True if deletion was successful
@@ -272,7 +272,7 @@ enum SharedContainerHelper {
             return false
         }
     }
-    
+
     /// Find orphaned roof PDFs (PDFs that don't have matching RoofMaterialOrder records)
     /// - Parameter validFilenames: Set of PDF filenames that are still referenced by orders
     /// - Returns: Array of orphaned PDF URLs
@@ -280,7 +280,7 @@ enum SharedContainerHelper {
         let allPDFs = listRoofPDFs()
         return allPDFs.filter { !validFilenames.contains($0.lastPathComponent) }
     }
-    
+
     /// Delete all orphaned roof PDFs
     /// - Parameter validFilenames: Set of PDF filenames that are still referenced by orders
     /// - Returns: Number of files deleted
@@ -288,31 +288,31 @@ enum SharedContainerHelper {
     static func cleanupOrphanedRoofPDFs(validFilenames: Set<String>) -> Int {
         let orphaned = findOrphanedRoofPDFs(validFilenames: validFilenames)
         var deletedCount = 0
-        
+
         for pdfURL in orphaned {
             if deleteRoofPDF(at: pdfURL) {
                 deletedCount += 1
             }
         }
-        
+
         print("✅ Cleaned up \(deletedCount) orphaned roof PDFs")
         return deletedCount
     }
-    
+
     /// Get total size of all roof PDFs in bytes
     static var totalRoofPDFSize: Int64 {
         let pdfs = listRoofPDFs()
         var total: Int64 = 0
-        
+
         for pdf in pdfs {
             if let info = getRoofPDFInfo(url: pdf) {
                 total += info.size
             }
         }
-        
+
         return total
     }
-    
+
     /// Format bytes as human-readable string
     static func formatBytes(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()

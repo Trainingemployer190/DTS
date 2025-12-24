@@ -12,7 +12,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         // Migrate photos from old Documents location to shared container
         migratePhotosIfNeeded()
-        
+
         // Migrate roof settings to correct defaults (v1.1.6+)
         migrateRoofSettingsIfNeeded()
 
@@ -46,15 +46,15 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             task.setTaskCompleted(success: success)
         }
     }
-    
+
     private func migrateRoofSettingsIfNeeded() {
         // Check if roof settings migration has been done
         let migrationKey = "com.dtsapp.roofSettingsMigration_v1"
         let hasMigrated = UserDefaults.standard.bool(forKey: migrationKey)
-        
+
         if !hasMigrated {
             print("🔧 Migrating roof settings to correct defaults...")
-            
+
             // We need to update AppSettings directly in SwiftData
             // This will be done in MainContentView on first launch with access to modelContext
             UserDefaults.standard.set(true, forKey: "com.dtsapp.pendingRoofSettingsMigration")
@@ -93,6 +93,7 @@ struct DTSApp: App {
     @State private var showLoadingScreen = true
     @StateObject private var jobberAPI = JobberAPI()
     @StateObject private var router = AppRouter()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -116,10 +117,16 @@ struct DTSApp: App {
                     .onAppear {
                         checkForPendingRoofPDFImport()
                     }
+                    .onChange(of: scenePhase) { oldPhase, newPhase in
+                        if newPhase == .active {
+                            // Check for pending imports when app becomes active
+                            checkForPendingRoofPDFImport()
+                        }
+                    }
             }
         }
     }
-    
+
     private func checkForPendingRoofPDFImport() {
         // Check for pending PDF import from Share Extension
         let sharedDefaults = UserDefaults(suiteName: "group.DTS.DTS-App")
@@ -136,16 +143,23 @@ struct DTSApp: App {
 
         // Handle Jobber OAuth callback
         if url.scheme == "dts-app" {
-            // Check for roof PDF import URL: dts-app://import-roof-pdf?id=xxx
+            // Check for roof PDF import URL: dts-app://import-roof-pdf
             if url.host == "import-roof-pdf" {
-                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-                if let pdfId = components?.queryItems?.first(where: { $0.name == "id" })?.value {
-                    print("📥 Received roof PDF import request: \(pdfId)")
-                    router.navigateToRoofImport(pdfId: pdfId)
-                    return
+                print("📥 Received roof PDF import request from Share Extension")
+                // Check for pending import in shared UserDefaults
+                let sharedDefaults = UserDefaults(suiteName: "group.DTS.DTS-App")
+                if let pendingId = sharedDefaults?.string(forKey: "pendingRoofPDFImport") {
+                    print("📥 Found pending PDF ID: \(pendingId)")
+                    router.navigateToRoofImport(pdfId: pendingId)
+                    // Clear the pending flag
+                    sharedDefaults?.removeObject(forKey: "pendingRoofPDFImport")
+                } else {
+                    // No pending ID, just navigate to roof orders tab
+                    router.selectedTab = 4
                 }
+                return
             }
-            
+
             // Otherwise, it's a Jobber OAuth callback
             print("📱 Processing Jobber OAuth callback")
             Task {

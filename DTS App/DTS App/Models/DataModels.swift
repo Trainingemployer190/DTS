@@ -52,45 +52,45 @@ final class AppSettings {
     // Jobber integration
     var autoCreateJobberQuote: Bool = true
     var includePhotosInQuote: Bool = true
-    
+
     // MARK: - Roof Material Calculation Settings
-    
+
     // Shingles & Coverage
     var roofBundlesPerSquare: Double = 3.0  // 3 bundles per square (standard 3-tab or architectural)
     var roofShingleWasteFactor: Double = 0.10  // 10% waste default
-    
+
     // Underlayment - GAF FeltBuster covers 10 squares (1000 sqft) per roll
     var roofUnderlaymentSqFtPerRoll: Double = 1000.0  // 10 squares per roll (GAF FeltBuster 10SQ)
     var roofUnderlaymentWasteFactor: Double = 0.10  // 10% waste
-    
+
     // Starter Strip - GAF Pro-Start covers 120.33 LF per bundle
     var roofStarterStripLFPerBundle: Double = 120.0  // ~120 LF per bundle (GAF Pro-Start)
     var roofStarterStripWasteFactor: Double = 0.05  // 5% waste
-    
+
     // Ridge Cap - GAF Seal-A-Ridge covers 25 LF per bundle
     var roofRidgeCapLFPerBundle: Double = 25.0  // 25 LF per bundle (GAF Seal-A-Ridge)
     var roofRidgeCapWasteFactor: Double = 0.05  // 5% waste
-    
+
     // Drip Edge
     var roofDripEdgeLFPerPiece: Double = 10.0  // 10 feet per piece
     var roofDripEdgeWasteFactor: Double = 0.05  // 5% waste
-    
+
     // Valley Flashing
     var roofIncludesValleyFlashing: Bool = false  // We don't use valley flashing - just ice & water in valleys
     var roofValleyFlashingLFPerPiece: Double = 10.0  // 10 feet per piece
     var roofValleyWasteFactor: Double = 0.10  // 10% waste
-    
+
     // Ice & Water Shield - GAF WeatherWatch covers 2 squares (200 SF) per roll
     var roofIceWaterSqFtPerRoll: Double = 200.0  // 2 SQ per roll (GAF WeatherWatch 36"x66.7')
     var roofIceWaterWidthFeet: Double = 3.0  // 36" = 3 feet wide
     var roofIceWaterWasteFactor: Double = 0.10  // 10% waste
-    
+
     // Nails
     var roofCoilNailsLbsPerSquare: Double = 2.0  // 2 lbs per square
     var roofCapNailsPerRidgeLF: Double = 4.0  // 4 cap nails per LF of ridge
     var roofCoilNailsPerBox: Double = 7200.0  // Nails per box (varies by manufacturer)
     var roofCapNailsPerBox: Double = 3000.0  // Cap nails per box
-    
+
     // Auto-apply business rules
     var roofAutoAddIceWaterForValleys: Bool = true
     var roofAutoAddIceWaterForEaves: Bool = false  // Disabled - only add for valleys by default
@@ -99,10 +99,10 @@ final class AppSettings {
     var roofLowPitchThreshold: Int = 4  // Pitch BELOW this gets ice & water (3/12 and lower, NOT 4/12)
     var roofAutoAddDripEdgeForRakesEaves: Bool = true
     var roofEaveIceWaterWidthFeet: Double = 3.0  // How far up from eave for ice & water
-    
+
     // Supplier settings
     var roofDefaultSupplierEmail: String = ""  // Default email for material orders
-    
+
     // Parse confidence threshold
     var roofParseConfidenceThreshold: Double = 80.0  // Show warning below this %
 
@@ -566,17 +566,17 @@ struct RoofMaterialLineItem: Codable, Identifiable {
     var category: String  // "Shingles", "Underlayment", "Flashing", etc.
     var supplierSKU: String?
     var notes: String?
-    
+
     /// Returns the effective quantity (manual override or calculated)
     var quantity: Double {
         manualQuantity ?? calculatedQuantity
     }
-    
+
     /// Whether user has manually adjusted this item
     var isManuallyAdjusted: Bool {
         manualQuantity != nil
     }
-    
+
     /// Reset to calculated quantity
     mutating func resetToCalculated() {
         manualQuantity = nil
@@ -596,25 +596,25 @@ struct RoofMeasurements: Codable {
     var wallFlashingFeet: Double = 0  // Wall/headwall flashing linear feet
     var pitch: String?  // Primary roof pitch (e.g., "6/12")
     var pitchMultiplier: Double = 1.0  // Pitch factor for area calculations
-    
+
     // Low pitch areas (under 4/12) - need ice & water shield
     var lowPitchSqFt: Double = 0  // Square footage of areas under 4/12 pitch (3/12 and below)
     var lowPitchAreas: [String] = []  // Description of low pitch areas
-    
+
     // Pitch transitions (where different pitches meet) - need ice & water
     var transitionFeet: Double = 0  // Linear feet of transitions between different pitches
     var transitionDescriptions: [String] = []  // Description of transitions
-    
+
     /// Check if any measurements were parsed
     var hasData: Bool {
         totalSquares > 0 || totalSqFt > 0 || ridgeFeet > 0 || valleyFeet > 0
     }
-    
+
     /// Check if roof has low pitch areas requiring ice & water
     var hasLowPitchAreas: Bool {
         lowPitchSqFt > 0
     }
-    
+
     /// Check if roof has pitch transitions
     var hasTransitions: Bool {
         transitionFeet > 0
@@ -627,37 +627,41 @@ final class RoofMaterialOrder {
     var id: UUID = UUID()
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
-    
+
     // Job/Client information
     var projectName: String = ""
     var clientName: String = ""
     var address: String = ""
     var notes: String = ""
     
+    // Shingle selection
+    var shingleType: String = "GAF Timberline HDZ"  // Default shingle type
+    var shingleColor: String = "Charcoal"  // Default color
+
     // PDF file reference
     var pdfFilename: String?  // Filename in SharedContainerHelper.roofPDFStorageDirectory
     var originalPDFName: String?  // Original filename before UUID prefix
-    
+
     // Parse metadata
     var parseConfidence: Double = 0  // 0-100 confidence score
     var detectedFormat: String?  // "iRoof", "EagleView", "Manual", etc.
     var parseWarnings: [String] = []  // Any warnings during parsing
-    
+
     // Measurements (stored as JSON)
     var measurementsJSON: Data?
-    
+
     // Materials (stored as JSON)
     var materialsJSON: Data?
-    
+
     // Preset used
     var presetId: UUID?
     var presetName: String?
-    
+
     // Status
     var statusRaw: String = RoofOrderStatus.draft.rawValue
     var orderedAt: Date?
     var supplierEmail: String?
-    
+
     var status: RoofOrderStatus {
         get { RoofOrderStatus(rawValue: statusRaw) ?? .draft }
         set {
@@ -667,7 +671,7 @@ final class RoofMaterialOrder {
             }
         }
     }
-    
+
     // Computed properties for measurements
     var measurements: RoofMeasurements {
         get {
@@ -679,7 +683,7 @@ final class RoofMaterialOrder {
             updatedAt = Date()
         }
     }
-    
+
     // Computed properties for materials
     var materials: [RoofMaterialLineItem] {
         get {
@@ -691,15 +695,15 @@ final class RoofMaterialOrder {
             updatedAt = Date()
         }
     }
-    
+
     // Get PDF URL if available - requires passing the storage directory
     func pdfURL(in storageDirectory: URL) -> URL? {
         guard let filename = pdfFilename else { return nil }
         return storageDirectory.appendingPathComponent(filename)
     }
-    
+
     init() {}
-    
+
     /// Update a specific material's manual quantity
     func updateMaterialQuantity(id: UUID, quantity: Double?) {
         var mats = materials
@@ -708,7 +712,7 @@ final class RoofMaterialOrder {
             materials = mats
         }
     }
-    
+
     /// Reset all materials to calculated quantities
     func resetAllToCalculated() {
         var mats = materials
@@ -717,7 +721,7 @@ final class RoofMaterialOrder {
         }
         materials = mats
     }
-    
+
     /// Check if confidence is below threshold
     func needsVerification(threshold: Double = 80.0) -> Bool {
         return parseConfidence < threshold
@@ -732,10 +736,10 @@ final class RoofPresetTemplate {
     var presetDescription: String = ""  // Renamed from 'description' which is reserved in @Model
     var createdAt: Date = Date()
     var isBuiltIn: Bool = false  // Built-in presets cannot be deleted
-    
+
     // Material factors (stored as JSON for flexibility)
     var factorsJSON: Data?
-    
+
     var factors: RoofPresetFactors {
         get {
             guard let data = factorsJSON else { return RoofPresetFactors() }
@@ -745,16 +749,16 @@ final class RoofPresetTemplate {
             factorsJSON = try? JSONEncoder().encode(newValue)
         }
     }
-    
+
     init() {}
-    
+
     init(name: String, presetDescription: String, isBuiltIn: Bool = false, factors: RoofPresetFactors = RoofPresetFactors()) {
         self.name = name
         self.presetDescription = presetDescription
         self.isBuiltIn = isBuiltIn
         self.factors = factors
     }
-    
+
     /// Create default built-in presets
     static func createBuiltInPresets() -> [RoofPresetTemplate] {
         return [
@@ -801,26 +805,26 @@ struct RoofPresetFactors: Codable {
     // Shingles
     var bundlesPerSquare: Double
     var shingleWasteFactor: Double
-    
+
     // Underlayment
     var underlaymentSqFtPerRoll: Double
     var underlaymentWasteFactor: Double
     var usesSyntheticUnderlayment: Bool
-    
+
     // Starter & Ridge
     var starterStripLFPerBundle: Double
     var ridgeCapLFPerBundle: Double
-    
+
     // Drip Edge
     var dripEdgeLFPerPiece: Double
     var dripEdgeWasteFactor: Double
     var includesDripEdge: Bool
-    
+
     // Valley
     var includesValleyFlashing: Bool  // Whether to include valley flashing (vs just ice & water)
     var valleyFlashingLFPerPiece: Double
     var valleyWasteFactor: Double
-    
+
     // Ice & Water Shield
     var iceWaterSqFtPerRoll: Double
     var iceWaterWidthFeet: Double
@@ -830,15 +834,15 @@ struct RoofPresetFactors: Codable {
     var lowPitchThreshold: Int  // Pitch below this (e.g., 4) gets ice & water (exclusive - 3/12 and below)
     var requiresIceWaterForTransitions: Bool  // Ice & water where different pitches meet
     var eaveIceWaterWidthFeet: Double
-    
+
     // Nails
     var coilNailsLbsPerSquare: Double
     var capNailsPerRidgeLF: Double
-    
+
     // General
     var wasteFactor: Double
     var includesRidgeCap: Bool
-    
+
     // Default initializer with all defaults
     init(
         bundlesPerSquare: Double = 3.0,
@@ -905,19 +909,19 @@ final class RoofParseFailureLog {
     var errorMessage: String = ""
     var extractedPatterns: [String] = []  // Patterns that were recognized
     var missedPatterns: [String] = []  // Patterns that failed
-    
+
     init() {}
-    
+
     init(pdfFilename: String, content: String, error: String) {
         self.pdfFilename = pdfFilename
         self.sanitizedContent = Self.sanitizePII(content)
         self.errorMessage = error
     }
-    
+
     /// Remove personally identifiable information from content
     static func sanitizePII(_ content: String) -> String {
         var sanitized = content
-        
+
         // Remove phone numbers (various formats)
         let phonePatterns = [
             "\\b\\d{3}[-.]?\\d{3}[-.]?\\d{4}\\b",  // 123-456-7890
@@ -933,7 +937,7 @@ final class RoofParseFailureLog {
                 )
             }
         }
-        
+
         // Remove email addresses
         if let emailRegex = try? NSRegularExpression(pattern: "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", options: []) {
             sanitized = emailRegex.stringByReplacingMatches(
@@ -942,7 +946,7 @@ final class RoofParseFailureLog {
                 withTemplate: "[EMAIL]"
             )
         }
-        
+
         // Remove street addresses (basic pattern)
         if let addressRegex = try? NSRegularExpression(pattern: "\\b\\d+\\s+[A-Za-z]+\\s+(St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Blvd|Boulevard|Ct|Court|Way|Circle|Cir)\\b", options: [.caseInsensitive]) {
             sanitized = addressRegex.stringByReplacingMatches(
@@ -951,7 +955,7 @@ final class RoofParseFailureLog {
                 withTemplate: "[ADDRESS]"
             )
         }
-        
+
         // Remove ZIP codes
         if let zipRegex = try? NSRegularExpression(pattern: "\\b\\d{5}(-\\d{4})?\\b", options: []) {
             sanitized = zipRegex.stringByReplacingMatches(
@@ -960,7 +964,7 @@ final class RoofParseFailureLog {
                 withTemplate: "[ZIP]"
             )
         }
-        
+
         // Remove names (words that look like proper nouns after common titles)
         let titlePatterns = ["Mr\\.?", "Mrs\\.?", "Ms\\.?", "Dr\\.?"]
         for title in titlePatterns {
@@ -972,7 +976,7 @@ final class RoofParseFailureLog {
                 )
             }
         }
-        
+
         return sanitized
     }
 }
@@ -990,13 +994,13 @@ extension RoofPresetTemplate {
         )
         return try? JSONEncoder().encode(exportData)
     }
-    
+
     /// Import preset from JSON data
     static func importFromJSON(_ data: Data) -> RoofPresetTemplate? {
         guard let exportData = try? JSONDecoder().decode(RoofPresetExport.self, from: data) else {
             return nil
         }
-        
+
         let preset = RoofPresetTemplate()
         preset.name = exportData.name + " (Imported)"
         preset.presetDescription = exportData.description

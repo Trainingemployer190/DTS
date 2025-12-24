@@ -14,15 +14,16 @@ struct RoofOrderDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Bindable var order: RoofMaterialOrder
-    
+
     @Query private var settings: [AppSettings]
     @Query private var presets: [RoofPresetTemplate]
-    
+
     @State private var showingEmailComposer = false
+    @State private var showingShareSheet = false
     @State private var showingPresetPicker = false
     @State private var editingMeasurements = false
     @State private var selectedPresetId: UUID?
-    
+
     // Editable measurement copies
     @State private var editTotalSquares: String = ""
     @State private var editRidgeFeet: String = ""
@@ -30,37 +31,61 @@ struct RoofOrderDetailView: View {
     @State private var editRakeFeet: String = ""
     @State private var editEaveFeet: String = ""
     @State private var editHipFeet: String = ""
-    
+
     var currentSettings: AppSettings {
         settings.first ?? AppSettings()
     }
-    
+
     var selectedPreset: RoofPresetTemplate? {
         presets.first { $0.id == selectedPresetId }
     }
-    
+
     var body: some View {
         List {
             // Confidence Warning Banner
             if order.needsVerification(threshold: currentSettings.roofParseConfidenceThreshold) {
                 Section {
-                    HStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                            .font(.title2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Please Verify Measurements")
-                                .font(.headline)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundColor(.orange)
-                            Text("Confidence: \(Int(order.parseConfidence))% - Some values may need manual correction")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                                .font(.title2)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Please Verify Measurements")
+                                    .font(.headline)
+                                    .foregroundColor(.orange)
+                                Text("Confidence: \(Int(order.parseConfidence))%")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        // Show specific reasons for low confidence
+                        if !order.parseWarnings.isEmpty {
+                            Divider()
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Issues Found:")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.secondary)
+                                ForEach(order.parseWarnings, id: \.self) { warning in
+                                    HStack(alignment: .top, spacing: 6) {
+                                        Image(systemName: "circle.fill")
+                                            .font(.system(size: 4))
+                                            .foregroundColor(.orange)
+                                            .padding(.top, 5)
+                                        Text(warning)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
                         }
                     }
                     .padding(.vertical, 8)
                 }
             }
-            
+
             // Project Info
             Section("Project Information") {
                 TextField("Project Name", text: $order.projectName)
@@ -73,7 +98,22 @@ struct RoofOrderDetailView: View {
                 .keyboardType(.emailAddress)
                 .textContentType(.emailAddress)
                 .autocapitalization(.none)
+            }
+            
+            // Shingle Selection
+            Section("Shingle Selection") {
+                TextField("Shingle Type", text: $order.shingleType)
+                    .autocapitalization(.words)
+                TextField("Color", text: $order.shingleColor)
+                    .autocapitalization(.words)
                 
+                Text("Example: GAF Timberline HDZ, Charcoal")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            // PDF Format Info
+            Section {
                 if let format = order.detectedFormat {
                     HStack {
                         Text("PDF Format")
@@ -82,7 +122,7 @@ struct RoofOrderDetailView: View {
                             .foregroundColor(.secondary)
                     }
                 }
-                
+
                 HStack {
                     Text("Status")
                     Spacer()
@@ -94,7 +134,7 @@ struct RoofOrderDetailView: View {
                     .pickerStyle(.menu)
                 }
             }
-            
+
             // Measurements Section
             Section {
                 if editingMeasurements {
@@ -104,7 +144,7 @@ struct RoofOrderDetailView: View {
                     MeasurementEditRow(label: "Rake", value: $editRakeFeet, unit: "LF")
                     MeasurementEditRow(label: "Eave", value: $editEaveFeet, unit: "LF")
                     MeasurementEditRow(label: "Hip", value: $editHipFeet, unit: "LF")
-                    
+
                     Button("Save & Recalculate") {
                         saveMeasurementsAndRecalculate()
                     }
@@ -117,7 +157,7 @@ struct RoofOrderDetailView: View {
                     MeasurementDisplayRow(label: "Rake", value: order.measurements.rakeFeet, unit: "LF", format: "%.1f")
                     MeasurementDisplayRow(label: "Eave", value: order.measurements.eaveFeet, unit: "LF", format: "%.1f")
                     MeasurementDisplayRow(label: "Hip", value: order.measurements.hipFeet, unit: "LF", format: "%.1f")
-                    
+
                     if let pitch = order.measurements.pitch {
                         HStack {
                             Text("Pitch")
@@ -142,7 +182,7 @@ struct RoofOrderDetailView: View {
                     .font(.caption)
                 }
             }
-            
+
             // Preset Selector
             Section("Calculation Preset") {
                 Button {
@@ -157,7 +197,7 @@ struct RoofOrderDetailView: View {
                     }
                 }
             }
-            
+
             // Materials Section
             Section {
                 ForEach(order.materials) { material in
@@ -171,7 +211,7 @@ struct RoofOrderDetailView: View {
                         }
                     )
                 }
-                
+
                 if order.materials.contains(where: { $0.isManuallyAdjusted }) {
                     Button("Reset All to Calculated") {
                         order.resetAllToCalculated()
@@ -189,24 +229,47 @@ struct RoofOrderDetailView: View {
                     .font(.caption)
                 }
             }
-            
+
             // Notes
             Section("Notes") {
                 TextEditor(text: $order.notes)
                     .frame(minHeight: 80)
             }
-            
+
             // Actions
             Section {
-                Button {
-                    showingEmailComposer = true
-                } label: {
-                    HStack {
-                        Image(systemName: "envelope.fill")
-                        Text("Email Order to Supplier")
+                // Primary email button (if Mail is available)
+                if MFMailComposeViewController.canSendMail() {
+                    Button {
+                        showingEmailComposer = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "envelope.fill")
+                            Text("Email Order to Supplier")
+                        }
                     }
                 }
-                .disabled(!MFMailComposeViewController.canSendMail())
+
+                // Share button (always available - works on simulator too)
+                Button {
+                    showingShareSheet = true
+                } label: {
+                    HStack {
+                        Image(systemName: "square.and.arrow.up")
+                        Text("Share Order")
+                    }
+                }
+
+                // Copy to clipboard
+                Button {
+                    let orderText = RoofMaterialCalculator.generateEmailBody(order: order)
+                    UIPasteboard.general.string = orderText
+                } label: {
+                    HStack {
+                        Image(systemName: "doc.on.doc")
+                        Text("Copy to Clipboard")
+                    }
+                }
             }
         }
         .navigationTitle("Order Details")
@@ -216,6 +279,8 @@ struct RoofOrderDetailView: View {
         .onChange(of: order.address) { _, _ in try? modelContext.save() }
         .onChange(of: order.notes) { _, _ in try? modelContext.save() }
         .onChange(of: order.statusRaw) { _, _ in try? modelContext.save() }
+        .onChange(of: order.shingleType) { _, _ in try? modelContext.save() }
+        .onChange(of: order.shingleColor) { _, _ in try? modelContext.save() }
         .sheet(isPresented: $showingEmailComposer) {
             MailComposerView(
                 subject: RoofMaterialCalculator.generateEmailSubject(order: order),
@@ -226,6 +291,9 @@ struct RoofOrderDetailView: View {
                     return email.isEmpty ? [] : [email]
                 }()
             )
+        }
+        .sheet(isPresented: $showingShareSheet) {
+            ShareSheet(activityItems: [RoofMaterialCalculator.generateEmailBody(order: order)])
         }
         .sheet(isPresented: $showingPresetPicker) {
             PresetPickerView(
@@ -240,9 +308,9 @@ struct RoofOrderDetailView: View {
             selectedPresetId = order.presetId
         }
     }
-    
+
     // MARK: - Actions
-    
+
     private func loadMeasurementsForEditing() {
         let m = order.measurements
         editTotalSquares = String(format: "%.2f", m.totalSquares)
@@ -252,7 +320,7 @@ struct RoofOrderDetailView: View {
         editEaveFeet = String(format: "%.1f", m.eaveFeet)
         editHipFeet = String(format: "%.1f", m.hipFeet)
     }
-    
+
     private func saveMeasurementsAndRecalculate() {
         var m = order.measurements
         m.totalSquares = Double(editTotalSquares) ?? m.totalSquares
@@ -262,13 +330,13 @@ struct RoofOrderDetailView: View {
         m.rakeFeet = Double(editRakeFeet) ?? m.rakeFeet
         m.eaveFeet = Double(editEaveFeet) ?? m.eaveFeet
         m.hipFeet = Double(editHipFeet) ?? m.hipFeet
-        
+
         order.measurements = m
         editingMeasurements = false
-        
+
         recalculateMaterials()
     }
-    
+
     private func recalculateMaterials() {
         order.materials = RoofMaterialCalculator.recalculate(
             order: order,
@@ -277,17 +345,17 @@ struct RoofOrderDetailView: View {
         )
         try? modelContext.save()
     }
-    
+
     private func updateMaterialQuantity(materialId: UUID, quantity: Double?) {
         order.updateMaterialQuantity(id: materialId, quantity: quantity)
         try? modelContext.save()
     }
-    
+
     private func resetMaterialToCalculated(materialId: UUID) {
         order.updateMaterialQuantity(id: materialId, quantity: nil)
         try? modelContext.save()
     }
-    
+
     private func applyPreset(_ preset: RoofPresetTemplate?) {
         if let preset = preset {
             order.presetId = preset.id
@@ -307,7 +375,7 @@ struct MeasurementDisplayRow: View {
     let value: Double
     let unit: String
     let format: String
-    
+
     var body: some View {
         HStack {
             Text(label)
@@ -322,7 +390,7 @@ struct MeasurementEditRow: View {
     let label: String
     @Binding var value: String
     let unit: String
-    
+
     var body: some View {
         HStack {
             Text(label)
@@ -342,16 +410,16 @@ struct MaterialRowView: View {
     let material: RoofMaterialLineItem
     let onQuantityChange: (Double?) -> Void
     let onReset: () -> Void
-    
+
     @State private var isEditing = false
     @State private var editQuantity: String = ""
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(material.name)
                     .font(.headline)
-                
+
                 if material.isManuallyAdjusted {
                     Text("Manual")
                         .font(.caption2)
@@ -362,16 +430,16 @@ struct MaterialRowView: View {
                         .foregroundColor(.orange)
                         .cornerRadius(4)
                 }
-                
+
                 Spacer()
-                
+
                 if isEditing {
                     HStack {
                         TextField("Qty", text: $editQuantity)
                             .keyboardType(.decimalPad)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 60)
-                        
+
                         Button("Save") {
                             if let qty = Double(editQuantity) {
                                 onQuantityChange(qty)
@@ -391,26 +459,26 @@ struct MaterialRowView: View {
                     }
                 }
             }
-            
+
             if let description = material.description {
                 Text(description)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            
+
             if let notes = material.notes {
                 Text(notes)
                     .font(.caption2)
                     .foregroundColor(.secondary)
                     .italic()
             }
-            
+
             if material.isManuallyAdjusted {
                 HStack {
                     Text("Calculated: \(Int(ceil(material.calculatedQuantity))) \(material.unit)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
-                    
+
                     Button("Reset") {
                         onReset()
                     }
@@ -428,7 +496,7 @@ struct PresetPickerView: View {
     @Binding var selectedId: UUID?
     let onSelect: (RoofPresetTemplate?) -> Void
     @Environment(\.dismiss) private var dismiss
-    
+
     var body: some View {
         NavigationStack {
             List {
@@ -449,7 +517,7 @@ struct PresetPickerView: View {
                     }
                     .foregroundColor(.primary)
                 }
-                
+
                 Section("Built-in Presets") {
                     ForEach(presets.filter { $0.isBuiltIn }) { preset in
                         PresetRow(preset: preset, isSelected: selectedId == preset.id) {
@@ -459,7 +527,7 @@ struct PresetPickerView: View {
                         }
                     }
                 }
-                
+
                 let customPresets = presets.filter { !$0.isBuiltIn }
                 if !customPresets.isEmpty {
                     Section("Custom Presets") {
@@ -490,7 +558,7 @@ struct PresetRow: View {
     let preset: RoofPresetTemplate
     let isSelected: Bool
     let onTap: () -> Void
-    
+
     var body: some View {
         Button(action: onTap) {
             HStack {
@@ -520,7 +588,7 @@ struct MailComposerView: UIViewControllerRepresentable {
     let body: String
     let recipients: [String]
     @Environment(\.dismiss) private var dismiss
-    
+
     func makeUIViewController(context: Context) -> MFMailComposeViewController {
         let composer = MFMailComposeViewController()
         composer.mailComposeDelegate = context.coordinator
@@ -529,20 +597,20 @@ struct MailComposerView: UIViewControllerRepresentable {
         composer.setToRecipients(recipients)
         return composer
     }
-    
+
     func updateUIViewController(_ uiViewController: MFMailComposeViewController, context: Context) {}
-    
+
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
-    
+
     class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
         let parent: MailComposerView
-        
+
         init(_ parent: MailComposerView) {
             self.parent = parent
         }
-        
+
         func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
             parent.dismiss()
         }

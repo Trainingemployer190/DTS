@@ -637,6 +637,7 @@
 		C8F00BF32EF8774F0032460F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "DTS Share Extension/DTS Share Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = WNU63L8T28;
@@ -666,6 +667,7 @@
 		C8F00BF42EF8774F0032460F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "DTS Share Extension/DTS Share Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = WNU63L8T28;

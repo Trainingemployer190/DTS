@@ -14,17 +14,17 @@ struct RoofSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var settingsArray: [AppSettings]
     @Query(sort: \RoofPresetTemplate.name) private var presets: [RoofPresetTemplate]
-    
+
     @State private var showingCreatePreset = false
     @State private var showingImportPreset = false
     @State private var editingPreset: RoofPresetTemplate?
     @State private var presetToExport: RoofPresetTemplate?
     @State private var showingExportShare = false
-    
+
     private var settings: AppSettings {
         settingsArray.first ?? AppSettings()
     }
-    
+
     var body: some View {
         List {
             // Supplier Settings
@@ -43,7 +43,7 @@ struct RoofSettingsView: View {
                     .foregroundColor(.secondary)
                 }
             }
-            
+
             // Default Calculation Settings
             Section {
                 SettingSliderRow(
@@ -56,7 +56,7 @@ struct RoofSettingsView: View {
                     step: 0.5,
                     format: "%.1f"
                 )
-                
+
                 SettingSliderRow(
                     label: "Shingle Waste Factor",
                     value: Binding(
@@ -72,7 +72,7 @@ struct RoofSettingsView: View {
             } footer: {
                 Text("Standard 3-tab shingles use 3 bundles per square")
             }
-            
+
             Section("Underlayment") {
                 SettingSliderRow(
                     label: "Coverage per Roll (sqft)",
@@ -84,7 +84,7 @@ struct RoofSettingsView: View {
                     step: 50,
                     format: "%.0f"
                 )
-                
+
                 SettingSliderRow(
                     label: "Waste Factor",
                     value: Binding(
@@ -96,7 +96,7 @@ struct RoofSettingsView: View {
                     format: "%.0f%%"
                 )
             }
-            
+
             Section("Starter & Ridge Cap") {
                 SettingSliderRow(
                     label: "Starter Strip (LF/bundle)",
@@ -108,7 +108,7 @@ struct RoofSettingsView: View {
                     step: 10,
                     format: "%.0f"
                 )
-                
+
                 SettingSliderRow(
                     label: "Ridge Cap (LF/bundle)",
                     value: Binding(
@@ -120,7 +120,7 @@ struct RoofSettingsView: View {
                     format: "%.0f"
                 )
             }
-            
+
             Section("Drip Edge & Flashing") {
                 SettingSliderRow(
                     label: "Drip Edge (ft/piece)",
@@ -132,7 +132,7 @@ struct RoofSettingsView: View {
                     step: 1,
                     format: "%.0f"
                 )
-                
+
                 SettingSliderRow(
                     label: "Valley (ft/piece)",
                     value: Binding(
@@ -144,7 +144,7 @@ struct RoofSettingsView: View {
                     format: "%.0f"
                 )
             }
-            
+
             Section("Ice & Water Shield") {
                 SettingSliderRow(
                     label: "Coverage per Roll (sqft)",
@@ -156,7 +156,7 @@ struct RoofSettingsView: View {
                     step: 25,
                     format: "%.0f"
                 )
-                
+
                 SettingSliderRow(
                     label: "Eave Coverage Width (ft)",
                     value: Binding(
@@ -168,24 +168,24 @@ struct RoofSettingsView: View {
                     format: "%.1f"
                 )
             }
-            
+
             Section("Auto-Apply Rules") {
                 Toggle("Add Ice & Water for Valleys", isOn: Binding(
                     get: { settings.roofAutoAddIceWaterForValleys },
                     set: { settings.roofAutoAddIceWaterForValleys = $0 }
                 ))
-                
+
                 Toggle("Add Ice & Water for Eaves", isOn: Binding(
                     get: { settings.roofAutoAddIceWaterForEaves },
                     set: { settings.roofAutoAddIceWaterForEaves = $0 }
                 ))
-                
+
                 Toggle("Add Drip Edge for Rakes/Eaves", isOn: Binding(
                     get: { settings.roofAutoAddDripEdgeForRakesEaves },
                     set: { settings.roofAutoAddDripEdgeForRakesEaves = $0 }
                 ))
             }
-            
+
             Section {
                 SettingSliderRow(
                     label: "Coil Nails (lbs/square)",
@@ -197,7 +197,7 @@ struct RoofSettingsView: View {
                     step: 0.5,
                     format: "%.1f"
                 )
-                
+
                 SettingSliderRow(
                     label: "Cap Nails (per ridge LF)",
                     value: Binding(
@@ -211,7 +211,7 @@ struct RoofSettingsView: View {
             } header: {
                 Text("Nails")
             }
-            
+
             Section {
                 SettingSliderRow(
                     label: "Confidence Threshold",
@@ -228,7 +228,7 @@ struct RoofSettingsView: View {
             } footer: {
                 Text("Show verification warning when parse confidence is below this threshold")
             }
-            
+
             // Presets Management
             Section {
                 ForEach(presets.filter { $0.isBuiltIn }) { preset in
@@ -246,7 +246,7 @@ struct RoofSettingsView: View {
             } header: {
                 Text("Built-in Presets")
             }
-            
+
             let customPresets = presets.filter { !$0.isBuiltIn }
             if !customPresets.isEmpty {
                 Section("Custom Presets") {
@@ -264,7 +264,7 @@ struct RoofSettingsView: View {
                     }
                 }
             }
-            
+
             Section {
                 Button {
                     showingCreatePreset = true
@@ -274,7 +274,7 @@ struct RoofSettingsView: View {
                         Text("Create New Preset")
                     }
                 }
-                
+
                 Button {
                     showingImportPreset = true
                 } label: {
@@ -310,38 +310,38 @@ struct RoofSettingsView: View {
             }
         }
     }
-    
+
     // MARK: - Actions
-    
+
     private func duplicatePreset(_ preset: RoofPresetTemplate) {
         let duplicate = RoofPresetTemplate()
         duplicate.name = preset.name + " (Copy)"
         duplicate.presetDescription = preset.presetDescription
         duplicate.factors = preset.factors
         duplicate.isBuiltIn = false
-        
+
         modelContext.insert(duplicate)
         try? modelContext.save()
     }
-    
+
     private func deletePreset(_ preset: RoofPresetTemplate) {
         guard !preset.isBuiltIn else { return }
         modelContext.delete(preset)
         try? modelContext.save()
     }
-    
+
     private func handlePresetImport(result: Result<URL, Error>) {
         switch result {
         case .success(let url):
             guard url.startAccessingSecurityScopedResource() else { return }
             defer { url.stopAccessingSecurityScopedResource() }
-            
+
             if let data = try? Data(contentsOf: url),
                let preset = RoofPresetTemplate.importFromJSON(data) {
                 modelContext.insert(preset)
                 try? modelContext.save()
             }
-            
+
         case .failure(let error):
             print("❌ Import failed: \(error)")
         }
@@ -356,7 +356,7 @@ struct SettingSliderRow: View {
     let range: ClosedRange<Double>
     let step: Double
     let format: String
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -379,7 +379,7 @@ struct PresetManagementRow: View {
     let onExport: () -> Void
     let onEdit: (() -> Void)?
     let onDelete: (() -> Void)?
-    
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
@@ -401,9 +401,9 @@ struct PresetManagementRow: View {
                         .foregroundColor(.secondary)
                 }
             }
-            
+
             Spacer()
-            
+
             Menu {
                 if let onEdit = onEdit {
                     Button {
@@ -412,19 +412,19 @@ struct PresetManagementRow: View {
                         Label("Edit", systemImage: "pencil")
                     }
                 }
-                
+
                 Button {
                     onDuplicate()
                 } label: {
                     Label("Duplicate", systemImage: "doc.on.doc")
                 }
-                
+
                 Button {
                     onExport()
                 } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
-                
+
                 if let onDelete = onDelete {
                     Divider()
                     Button(role: .destructive) {
@@ -447,13 +447,13 @@ struct PresetEditorView: View {
     @Environment(\.dismiss) private var dismiss
     let preset: RoofPresetTemplate?
     let onSave: (RoofPresetTemplate) -> Void
-    
+
     @State private var name: String = ""
     @State private var description: String = ""
     @State private var factors = RoofPresetFactors()
-    
+
     var isEditing: Bool { preset != nil }
-    
+
     var body: some View {
         NavigationStack {
             Form {
@@ -461,7 +461,7 @@ struct PresetEditorView: View {
                     TextField("Name", text: $name)
                     TextField("Description", text: $description)
                 }
-                
+
                 Section("Shingles") {
                     SettingSliderRow(
                         label: "Bundles per Square",
@@ -481,7 +481,7 @@ struct PresetEditorView: View {
                         format: "%.0f%%"
                     )
                 }
-                
+
                 Section("Underlayment") {
                     SettingSliderRow(
                         label: "Coverage (sqft/roll)",
@@ -492,14 +492,14 @@ struct PresetEditorView: View {
                     )
                     Toggle("Synthetic Underlayment", isOn: $factors.usesSyntheticUnderlayment)
                 }
-                
+
                 Section("Auto-Apply Rules") {
                     Toggle("Ice & Water for Valleys", isOn: $factors.requiresIceWaterForValleys)
                     Toggle("Ice & Water for Eaves", isOn: $factors.requiresIceWaterForEaves)
                     Toggle("Include Drip Edge", isOn: $factors.includesDripEdge)
                     Toggle("Include Ridge Cap", isOn: $factors.includesRidgeCap)
                 }
-                
+
                 Section("General Waste Factor") {
                     SettingSliderRow(
                         label: "Overall Waste",
@@ -536,7 +536,7 @@ struct PresetEditorView: View {
             }
         }
     }
-    
+
     private func savePreset() {
         if let preset = preset {
             preset.name = name
@@ -560,23 +560,23 @@ struct PresetEditorView: View {
 class PresetFileWrapper: NSObject, UIActivityItemSource {
     let data: Data
     let filename: String
-    
+
     init(data: Data, filename: String) {
         self.data = data
         self.filename = filename
     }
-    
+
     func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
         return data
     }
-    
+
     func activityViewController(_ activityViewController: UIActivityViewController, itemForActivityType activityType: UIActivity.ActivityType?) -> Any? {
         // Create a temp file for sharing
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
         try? data.write(to: tempURL)
         return tempURL
     }
-    
+
     func activityViewController(_ activityViewController: UIActivityViewController, subjectForActivityType activityType: UIActivity.ActivityType?) -> String {
         return "Roof Preset: \(filename)"
     }
