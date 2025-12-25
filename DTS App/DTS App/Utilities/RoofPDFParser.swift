@@ -37,7 +37,9 @@ class RoofPDFParser {
     private static let formats: [FormatPattern] = [
         FormatPattern(
             name: "iRoof",
-            identifiers: ["iRoof", "IROOF", "iroof.com", "Roof Report"],
+            // iRoof PDFs can be identified by: explicit branding, or structural patterns
+            // Structural: "Total Squares:\nXX.XX SQ", "Area X Pitch", feet'inches" format
+            identifiers: ["iRoof", "IROOF", "iroof.com", "Roof Report", "SKEET HILL", "Total Squares:", "Area 1 Pitch"],
             parser: parseiRoofFormat
         ),
         FormatPattern(
@@ -61,6 +63,43 @@ class RoofPDFParser {
             parser: parseGenericFormat
         )
     ]
+    
+    /// Detect format using structural analysis, not just keyword matching
+    private static func detectFormat(from text: String) -> FormatPattern {
+        // Check explicit identifiers first
+        for format in formats {
+            if format.identifiers.isEmpty { continue }
+            for identifier in format.identifiers {
+                if text.localizedCaseInsensitiveContains(identifier) {
+                    print("🔍 Detected format: \(format.name) (matched: '\(identifier)')")
+                    return format
+                }
+            }
+        }
+        
+        // Structural detection: iRoof-style has feet'inches" format like "166'10\""
+        let feetInchesPattern = "\\d+[''']\\s*\\d+[\"\"'']"
+        if let regex = try? NSRegularExpression(pattern: feetInchesPattern),
+           regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil {
+            // Check for other iRoof structural indicators
+            let hasSquares = text.contains("SQ") || text.localizedCaseInsensitiveContains("squares")
+            let hasPitchAreas = text.localizedCaseInsensitiveContains("Pitch") && text.contains("/12")
+            if hasSquares || hasPitchAreas {
+                print("🔍 Detected format: iRoof (structural match: feet'inches\" + SQ/Pitch)")
+                return formats.first { $0.name == "iRoof" }!
+            }
+        }
+        
+        // Structural detection: EagleView uses "Total Roof Area" and "SF" (square feet)
+        if text.localizedCaseInsensitiveContains("Total Roof Area") ||
+           (text.contains(" SF") && text.localizedCaseInsensitiveContains("Facet")) {
+            print("🔍 Detected format: EagleView (structural match)")
+            return formats.first { $0.name == "EagleView" }!
+        }
+        
+        print("⚠️ No specific format detected, using generic parser")
+        return formats.last!  // Generic fallback
+    }
 
     // MARK: - Public API
 
@@ -117,33 +156,16 @@ class RoofPDFParser {
             )
         }
 
-        // Detect format
-        var detectedFormat: FormatPattern?
-        for format in formats {
-            if format.identifiers.isEmpty { continue }  // Skip generic fallback
-            for identifier in format.identifiers {
-                if fullText.localizedCaseInsensitiveContains(identifier) {
-                    detectedFormat = format
-                    print("🔍 Detected format: \(format.name)")
-                    break
-                }
-            }
-            if detectedFormat != nil { break }
-        }
-
-        // Use generic parser if no format detected
-        if detectedFormat == nil {
-            detectedFormat = formats.last  // Generic fallback
-            print("⚠️ No specific format detected, using generic parser")
-        }
+        // Use smart format detection (keywords + structural analysis)
+        let detectedFormat = detectFormat(from: fullText)
 
         // Parse using detected format
-        let (measurements, confidence, warnings) = detectedFormat!.parser(fullText)
+        let (measurements, confidence, warnings) = detectedFormat.parser(fullText)
 
         return RoofParseResult(
             measurements: measurements,
             confidence: confidence,
-            detectedFormat: detectedFormat?.name,
+            detectedFormat: detectedFormat.name,
             warnings: warnings,
             rawText: fullText
         )
@@ -159,9 +181,10 @@ class RoofPDFParser {
         let totalExpectedFields = 8
 
         // IMPORTANT: Parse sqft FIRST, then squares, to avoid confusion
-        // Total Area in sqft - patterns like "5855.54 sqft" or "Total Area\n5855.54 sqft"
+        // Total Area in sqft - patterns like "Total Area:\n2495.72 sqft"
         if let sqft = extractNumber(from: text, patterns: [
-            "Total\\s*Area[:\\s]*([\\d,]+\\.?\\d*)\\s*sqft",
+            "Total\\s*Area:?[\\s\\n]+([\\d,]+\\.?\\d*)\\s*sqft",
+            "Total\\s*Area:?[\\s\\n]+([\\d,]+\\.?\\d*)\\s*sq\\.?\\s*ft",
             "([\\d,]+\\.?\\d*)\\s*sqft(?!\\s*per)",  // sqft but not "sqft per"
             "([\\d,]+\\.?\\d*)\\s*sq\\.?\\s*ft(?!\\s*per)"
         ]) {
@@ -171,11 +194,11 @@ class RoofPDFParser {
         }
 
         // Total Squares: Look specifically for "SQ" NOT followed by "ft" or "uare"
-        // Patterns like "58.56 SQ" or "Total Squares\n58.56 SQ"
+        // Patterns like "Total Squares:\n24.96 SQ" or "58.56 SQ"
         if let squares = extractNumber(from: text, patterns: [
-            "Total\\s*Squares?[:\\s]*([\\d.]+)\\s*SQ(?![fF])",  // "Total Squares\n58.56 SQ" but not sqft
-            "([\\d.]+)\\s*SQ(?![fFuU])",  // "58.56 SQ" but not sqft or squares
-            "([\\d.]+)\\s*squares?\\s*$",
+            "Total\\s*Squares?:?[\\s\\n]+([\\d.]+)\\s*SQ(?![fF])",  // "Total Squares:\n24.96 SQ"
+            "([\\d.]+)\\s*SQ(?![fFuU])",  // "24.96 SQ" but not sqft or squares
+            "([\\d.]+)\\s*squares?(?:\\s|\\n|$)",
             "Total\\s*Squares?:?\\s*([\\d.]+)(?:\\s*$|\\s*\\n)"
         ]) {
             // Sanity check: squares should typically be < 200 for residential
@@ -246,25 +269,89 @@ class RoofPDFParser {
             print("✅ Found hip: \(hip) ft")
         }
 
-        // Step flashing
+        // Step flashing - try "Step Flashing" first, then "Flashing" (iRoof uses both)
         if let stepFlashing = extractFeetInches(from: text, label: "Step Flashing") ??
-           extractNumber(from: text, patterns: ["Step\\s*Flashing:?\\s*([\\d.]+)\\s*(?:ft|'|LF)"]) {
+           extractFeetInches(from: text, label: "Step\\s*Flashing") ??
+           extractNumber(from: text, patterns: ["Step\\s*Flashing[:\\s\\n]+([\\d.]+)\\s*(?:ft|'|LF)"]) {
             measurements.stepFlashingFeet = stepFlashing
             fieldsFound += 1
             print("✅ Found step flashing: \(stepFlashing) ft")
         }
+        
+        // Generic "Flashing" field (different from Step Flashing - usually wall/chimney)
+        if let flashing = extractFeetInches(from: text, label: "Flashing(?!.*Step)") ??
+           extractNumber(from: text, patterns: ["(?<!Step\\s)Flashing[:\\s\\n]+([\\d.]+)\\s*(?:ft|'|LF)"]) {
+            // Add to step flashing if not already set, or add as separate field
+            if measurements.stepFlashingFeet == 0 {
+                measurements.stepFlashingFeet = flashing
+                print("✅ Found flashing (generic): \(flashing) ft")
+            } else {
+                print("ℹ️ Additional flashing found: \(flashing) ft (step flashing already set)")
+            }
+        }
+        
+        // Ice & Water - may have linear feet measurement
+        if let iceWater = extractFeetInches(from: text, label: "Ice\\s*&?\\s*Water") ??
+           extractFeetInches(from: text, label: "Ice\\s*Water") ??
+           extractNumber(from: text, patterns: ["Ice\\s*&?\\s*Water[:\\s\\n]+([\\d.]+)\\s*(?:ft|'|LF)"]) {
+            // This is linear feet for ice & water (e.g., valleys, eaves, low-pitch)
+            print("✅ Found Ice & Water LF: \(iceWater) ft")
+        }
 
-        // Pitch
+        // Pitch - look for predominant pitch or list of pitches
         if let pitch = extractPitch(from: text) {
             measurements.pitch = pitch
             measurements.pitchMultiplier = pitchToMultiplier(pitch)
             print("✅ Found pitch: \(pitch) (multiplier: \(measurements.pitchMultiplier))")
+        } else {
+            // Try to get predominant pitch from Area breakdown
+            // "Area 4 Pitch 10/12: 1733.93 sqft" is the largest, so use 10/12
+            let (predominantPitch, _) = findPredominantPitch(from: text)
+            if let pitch = predominantPitch {
+                measurements.pitch = pitch
+                measurements.pitchMultiplier = pitchToMultiplier(pitch)
+                print("✅ Derived predominant pitch: \(pitch)")
+            }
         }
+        
+        // Extract low-pitch areas and transitions
+        extractLowPitchAreas(from: text, into: &measurements)
 
         // Calculate confidence based on fields found
         let confidence = Double(fieldsFound) / Double(totalExpectedFields) * 100
 
         return (measurements, min(confidence, 100), warnings)
+    }
+    
+    /// Find the predominant pitch (largest area) from the PDF
+    private static func findPredominantPitch(from text: String) -> (String?, Double) {
+        let pattern = "(?:Area\\s*\\d+\\s*)?Pitch\\s*(\\d+)/12[:\\s]*([\\d,]+\\.?\\d*)\\s*sqft"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return (nil, 0)
+        }
+        
+        var maxArea: Double = 0
+        var predominantPitch: String?
+        
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = regex.matches(in: text, range: range)
+        
+        for match in matches {
+            if match.numberOfRanges >= 3,
+               let pitchRange = Range(match.range(at: 1), in: text),
+               let areaRange = Range(match.range(at: 2), in: text) {
+                let pitch = String(text[pitchRange])
+                let areaStr = String(text[areaRange]).replacingOccurrences(of: ",", with: "")
+                let area = Double(areaStr) ?? 0
+                
+                if area > maxArea {
+                    maxArea = area
+                    predominantPitch = "\(pitch)/12"
+                }
+            }
+        }
+        
+        return (predominantPitch, maxArea)
     }
 
     /// Parse EagleView format PDFs
@@ -563,10 +650,12 @@ class RoofPDFParser {
 
     /// Extract feet and inches measurement like "166'10\""
     private static func extractFeetInches(from text: String, label: String) -> Double? {
-        // Pattern: "Label\n166'10\"" or "Label: 166'10\""
+        // Pattern: "Label\n166'10\"" or "Label: 166'10\"" or "Label\n166' 10\""
+        // Handles various quote styles: ', ", ′, ″, curly quotes
         let patterns = [
-            "\(label)\\s*[:\\n]\\s*(\\d+)'(\\d+)\"",
-            "\(label)\\s*[:\\n]\\s*(\\d+)\\s*ft\\s*(\\d+)\\s*in"
+            "\(label)[\\s\\n:]+?(\\d+)[\\x27\\u2019\\u2032](\\d+)[\\x22\\u201D\\u2033]?",  // 166'10" with various quote chars
+            "\(label)[\\s\\n:]+?(\\d+)[\\x27\\u2019\\u2032]\\s*(\\d+)[\\x22\\u201D\\u2033]?",  // 166' 10" with space
+            "\(label)[\\s\\n:]+?(\\d+)\\s*ft\\s*(\\d+)\\s*in"
         ]
 
         for pattern in patterns {
@@ -581,7 +670,28 @@ class RoofPDFParser {
                let inchesRange = Range(match.range(at: 2), in: text) {
                 let feet = Double(String(text[feetRange])) ?? 0
                 let inches = Double(String(text[inchesRange])) ?? 0
+                print("✅ Parsed \(label): \(Int(feet))'\(Int(inches))\" -> \(String(format: "%.2f", feet + inches/12.0)) ft")
                 return feet + (inches / 12.0)
+            }
+        }
+        
+        // Fallback: Just feet like "166'" or "166 ft"
+        let feetOnlyPatterns = [
+            "\(label)[\\s\\n:]+?(\\d+)[\\x27\\u2019\\u2032](?:[^\\d]|$)",
+            "\(label)[\\s\\n:]+?(\\d+\\.?\\d*)\\s*(?:ft|LF)"
+        ]
+        
+        for pattern in feetOnlyPatterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                continue
+            }
+
+            let range = NSRange(text.startIndex..., in: text)
+            if let match = regex.firstMatch(in: text, range: range),
+               let feetRange = Range(match.range(at: 1), in: text) {
+                let feet = Double(String(text[feetRange])) ?? 0
+                print("✅ Parsed \(label): \(feet) ft (feet only)")
+                return feet
             }
         }
 

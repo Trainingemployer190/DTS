@@ -1,202 +1,194 @@
 # DTS App - AI Coding Agent Instructions
 
 ## Project Overview
-**DTS App** is a professional iOS SwiftUI application for gutter installation and quote management, deeply integrated with Jobber CRM via GraphQL API. Built with SwiftUI (iOS 18+), SwiftData, and OAuth 2.0 authentication.
+iOS SwiftUI app (iOS 18+) for DTS Gutters & Restoration: gutter quote management + roof material ordering, integrated with Jobber CRM via GraphQL.
 
-**Current Branch:** `feature/text-resize-improvements` - Photo annotation features with advanced text editing
+**Current Branch:** `roof-order` - Roof material order feature with PDF parsing and Share Extension
 
-**CURRENT PRIORITY:** Text annotation system needs to work properly - focus on coordinate conversion, text positioning, and user interaction bugs before adding new features.
+## Architecture Quick Reference
 
-## Critical Architecture Patterns
+### Data Layer (SwiftData)
+```
+DTS App/DTS App/Models/DataModels.swift     # All @Model definitions + API types
+DTS App/DTS App/Services/PricingEngine.swift # Quote markup calculations
+```
 
-### 1. GraphQL Integration (ALWAYS VALIDATE FIRST)
-**Before ANY GraphQL modification**, reference these files:
-- `DTS App/DTS App/Docs/GraphQL/jobber_schema.graphql.txt` (60,218+ lines - complete schema)
-- `DTS App/DTS App/Docs/GraphQL/JOBBER_API_REFERENCE.md` (structured field mappings)
-- `DTS App/DTS App/Docs/GraphQL/The Jobber GraphQL API_*.pdf` (technical guide)
+**SwiftData Models** (`@Model`): `AppSettings`, `QuoteDraft`, `LineItem`, `PhotoRecord`, `RoofMaterialOrder`, `RoofPresetTemplate`
 
-**Key Rules:**
-- Jobber GraphQL returns **Base64-encoded IDs** (e.g., `Z2lkOi8vSm9iYmVyL0NsaWVudC84MDA0NDUzOA==`)
-- Web URLs require **numeric IDs only** - decode Base64 to extract: `gid://Jobber/Client/80044538` → `80044538`
-- Use `extractNumericId()` from `DataModels.swift` for URL construction
-- Client URLs format: `https://secure.getjobber.com/clients/{numericId}`
-- **Always validate field names exist in schema before suggesting changes**
+**API-Only Classes** (NOT `@Model`): `JobberJob` - avoids SwiftData conflicts for GraphQL responses
 
-### 2. Data Layer Architecture
-**SwiftData Models** (`@Model` macro):
-- `AppSettings` - Single source of truth for pricing/settings
-- `QuoteDraft` - Combines `@Model` + `ObservableObject` for reactive quote editing
-- `LineItem`, `PhotoRecord`, `OutboxOperation` - Supporting models
+### Tab Structure ([MainContentView.swift](DTS%20App/DTS%20App/MainContentView.swift))
+| Tab | View | Purpose |
+|-----|------|---------|
+| 0 | HomeView | Jobber scheduled jobs |
+| 1 | QuoteFormView | Create gutter quotes |
+| 2 | QuoteHistoryView | Quote history + storage info |
+| 3 | PhotoLibraryView | Photo library with search |
+| 4 | RoofMaterialOrderView | Import roof PDFs |
+| 5 | SettingsView | App settings + OAuth |
 
-**API Models** (No `@Model`):
-- `JobberJob` - API responses, uses `class` not `@Model` to avoid SwiftData conflicts
-- All GraphQL response types live in `JobberAPI.swift` (2,584 lines)
+### Key Managers (Singletons)
+- `JobberAPI.shared` - OAuth, GraphQL queries, quote/job sync
+- `GooglePhotosAPI.shared` - Auto-upload photos to Google Photos
+- `PhotoCaptureManager` - Camera, GPS, watermarking
 
-**State Management:**
-- `JobberAPI: ObservableObject` - Singleton for all Jobber interactions
-- `AppRouter: ObservableObject` - Tab navigation state
-- `PhotoCaptureManager: ObservableObject` - Camera/location services
-- `TextHandlerManager: ObservableObject` - Drawsana-inspired annotation state management
+## Critical Patterns
 
-### 3. Pricing Engine Logic
-**Critical Formula** (`PricingEngine.swift`):
+### GraphQL Integration - ALWAYS VALIDATE SCHEMA FIRST
+```swift
+// Reference: DTS App/DTS App/Docs/GraphQL/jobber_schema.graphql.txt (60k+ lines)
+
+// Jobber returns Base64-encoded IDs
+let base64Id = "Z2lkOi8vSm9iYmVyL0NsaWVudC84MDA0NDUzOA=="
+// Decodes to: gid://Jobber/Client/80044538
+
+// For web URLs, extract numeric ID only:
+let numericId = extractNumericId(from: base64Id)  // → "80044538"
+let url = "https://secure.getjobber.com/clients/\(numericId)"
+```
+
+### Pricing Engine - Proportional Distribution
 ```swift
 // Subtotal = Materials + Labor + AdditionalItems
-// Markup applied to SUBTOTAL (not individual components)
-// Proportional distribution maintains pricing ratios for Jobber sync
+// Markup applied to SUBTOTAL (not individual items)
+// Line items get proportionally distributed marked-up prices for Jobber sync
 ```
 
-**Known Issue Fixed (Beta 2):** Jobber API expects final marked-up prices distributed proportionally across line items, not base costs. See `CHANGELOG.md` for details on proportional price distribution logic.
+### Roof PDF Parser - Multi-Format Support
+`RoofPDFParser.swift` auto-detects and parses these formats using **both keyword matching and structural analysis**:
 
-### 4. Location Services Pattern
-**PhotoCaptureManager** uses continuous location updates:
-- `startUpdatingLocation()` runs continuously (50m distance filter)
-- Location pre-loaded before photo capture (no "Getting location..." delays)
-- See `LOCATION_FIX_SUMMARY.md` for implementation details
+| Format | Identifiers | Key Fields |
+|--------|-------------|------------|
+| **iRoof** | "iRoof", "iroof.com", "Total Squares:", "Area X Pitch" | Total Squares, Ridge, Valley, Rake, Eave, Hip, Step Flashing, Pitch |
+| **EagleView** | "EagleView", "Pictometry" | Total Roof Area (sqft), Ridge/Hip, Valley, Rake, Eaves |
+| **Hover** | "HOVER", "hover.to" | Same as EagleView |
+| **RoofSnap** | "RoofSnap" | Same as iRoof |
+| **Generic** | (fallback) | Attempts pattern matching on common measurements |
 
-### 5. Photo Upload Workflow
-Photos follow this flow (`JOB_PHOTO_UPLOAD_FEATURE.md`):
-1. Capture via camera or photo library
-2. Add GPS watermark with `PhotoCaptureManager.addWatermark()`
-3. Store in `CapturedPhoto` model with `jobId` or `quoteDraftId`
-4. Upload to imgbb (third-party service)
-5. Attach to Jobber via `jobCreateNote` or quote line items
+**Format Detection:** If no explicit brand identifier found, uses structural analysis:
+- iRoof: Detected by feet'inches" format (e.g., `166'10"`) + "SQ" or "Pitch X/12"
+- EagleView: Detected by "Total Roof Area" or "Facet" + "SF"
 
-### 6. Photo Annotation System - TEXT ANNOTATION FOCUS ⚠️
-**CRITICAL: Text positioning bugs are the main issue - fix these before new features**
+**Parsing logic:**
+```swift
+// Parse sqft FIRST to avoid confusion with SQ (squares)
+// "2495.72 sqft" vs "24.96 SQ" - different units!
+// Sanity check: squares < 200 for residential, >500 probably sqft
 
-**Core Architecture:**
-- `PhotoAnnotationCanvas.swift` - Handles coordinate conversion (normalized 0..1 ↔ view space)
-- `PhotoAnnotationEditor.swift` (1,260 lines) - Main annotation interface
-- `InlineTextAnnotationEditor.swift` - Simplified text-only editor
+// Feet-inches conversion: "166'10\"" → 166.83 ft
+// Handles various quote chars: ' " ′ ″ curly quotes
 
-**Text Annotation Critical Issues to Debug:**
+// Pitch extraction: "4/12" or "4:12" → multiplier lookup
+// Multi-pitch: Finds predominant pitch from "Area X Pitch Y/12" breakdown
+```
 
-1. **Coordinate System Consistency** - THE ROOT CAUSE OF MOST BUGS:
-   ```swift
-   // STORAGE: All annotations stored in normalized coordinates (0..1)
-   annotation.position = CGPoint(x: 0.5, y: 0.5) // Center of image
+**RoofMeasurements struct fields:**
+- `totalSquares`, `totalSqFt` - Area (1 square = 100 sqft)
+- `ridgeFeet`, `valleyFeet`, `rakeFeet`, `eaveFeet`, `hipFeet` - Linear measurements
+- `stepFlashingFeet` - Wall/chimney flashing
+- `pitch`, `pitchMultiplier` - Roof slope
+- `lowPitchSqFt`, `lowPitchAreas` - Areas requiring ice & water shield
+- `transitionFeet`, `transitionDescriptions` - Where different pitches meet
 
-   // DISPLAY: Must convert to view coordinates for rendering
-   let converters = CanvasConverters(
-       toView: { normalized in /* 0..1 → screen pixels */ },
-       toNormalized: { viewPoint in /* screen pixels → 0..1 */ }
-   )
-   let screenPoint = converters.toView(annotation.position)
+### Roof Material Calculator
+`RoofMaterialCalculator.swift` uses `AppSettings` or `RoofPresetTemplate` for calculation factors:
+- Shingles: 3 bundles/square + waste factor
+- Underlayment: GAF FeltBuster (1000 sqft/roll)
+- Starter Strip: GAF Pro-Start (120 LF/bundle)
+- Ridge Cap: GAF Seal-A-Ridge (25 LF/bundle)
+- Ice & Water: Auto-add for valleys, low-pitch (<4/12), transitions
+- Output format: ABC Supply order list
 
-   // SAVING: Must convert back and adjust for text center alignment
-   // Text.draw() centers text, but NSAttributedString.draw(at:) draws from top-left
-   let adjustedPoint = CGPoint(
-       x: point.x - textSize.width / 2,   // Center horizontally
-       y: point.y - textSize.height / 2   // Center vertically
-   )
-   ```
+### Photo Annotations - Coordinate System
+```swift
+// STORAGE: Normalized coordinates (0..1)
+annotation.position = CGPoint(x: 0.5, y: 0.5)  // Center of image
 
-2. **Font Size Scaling Issues**:
-   - `annotation.size` stores font size in IMAGE space (e.g., 32pt on 4000px wide image)
-   - Must scale for display: `let screenFontSize = annotation.size * scale`
-   - Minimum readable size: Always render at least 16pt on screen
-   - When saving: Use original `annotation.size` directly (no scaling)
+// DISPLAY: Convert to view pixels via CanvasConverters
+let screenPoint = converters.toView(annotation.position)
 
-3. **Text Interaction State Machine**:
-   ```swift
-   @State private var selectedTextAnnotationIndex: Int?  // Shows blue border + handles
-   @State private var editingTextAnnotationIndex: Int?   // Shows text field + keyboard
+// SAVING: Adjust for text center alignment (NSAttributedString draws from top-left)
+let adjustedPoint = CGPoint(
+    x: point.x - textSize.width / 2,
+    y: point.y - textSize.height / 2
+)
+```
 
-   // Tap once: selectedTextAnnotationIndex = index (select mode)
-   // Tap twice: editingTextAnnotationIndex = index (edit mode)
-   // Drag text body: Update position, stay in select mode
-   // Drag resize handle: Update fontSize, set hasExplicitWidth = true
-   ```
+**Font size scaling:**
+- `annotation.size` = font size in IMAGE space (e.g., 32pt on 4000px image)
+- Display: `screenFontSize = annotation.size * scale`
+- Minimum readable: Always render at least 16pt on screen
 
-4. **Common Text Bugs to Watch For**:
-   - **Position Drift**: Text appears in different spot after save → Check center alignment adjustment
-   - **Size Mismatch**: Text too small/large after save → Verify scale factor consistency
-   - **Tap Not Working**: Can't select text → Check hit detection radius calculation
-   - **Handle Positioning**: Resize handles in wrong place → Verify view coordinate conversion
-   - **Editing Fails**: Keyboard doesn't appear → Check `editingTextAnnotationIndex` is set
+**Text interaction state:**
+```swift
+// Tap once → selectedTextAnnotationIndex (blue border + handles)
+// Tap twice → editingTextAnnotationIndex (text field + keyboard)
+// Drag body → update position
+// Drag handle → update fontSize, set hasExplicitWidth = true
+```
 
-5. **Text Annotation Data Model** (in `DataModels.swift`):
-   ```swift
-   struct PhotoAnnotation: Codable {
-       var type: AnnotationType      // .text for text annotations
-       var points: [CGPoint]          // Usually single point [position]
-       var text: String?              // The actual text content
-       var position: CGPoint          // NORMALIZED (0..1) position
-       var size: CGFloat              // Font size in IMAGE space
-       var fontSize: CGFloat?         // Optional font size (prefer using .size)
-       var hasExplicitWidth: Bool     // True if user manually resized width
-       // ... other fields
-   }
-   ```
+## Google Photos Integration
+`GooglePhotosAPI.swift` handles auto-upload to shared company account:
 
-**Debug Workflow for Text Issues:**
-1. Add logging to `converters.toView()` and `converters.toNormalized()` - verify conversion math
-2. Log `annotation.position` vs `screenPoint` - should be consistent during display
-3. Check `scale` factor calculation - should match between editor and save operation
-4. Verify text size calculation matches between SwiftUI Text and UIFont rendering
-5. Test tap point → normalized → view conversion round-trip
+**Pre-configured mode** (recommended):
+```swift
+// Refresh token stored in Keychain (not hardcoded)
+GooglePhotosAPI.shared.setPreConfiguredRefreshToken("token")  // One-time setup
+// After setup, auto-upload is automatic
+```
 
-**When Fixing Text Bugs:**
-- ✅ Always test: Create text → Save → Reopen editor → Verify position matches
-- ✅ Test different image sizes (portrait/landscape, small/large)
-- ✅ Test font sizes (minimum 12pt, maximum 72pt)
-- ✅ Test edge cases (text near image borders)
-- ❌ Don't add new features until core positioning works reliably
+**Album organization:**
+- Photos grouped by job address
+- Address shortened for album name: "713 Olive Ave Vista CA" → "713 Olive Ave"
+- Album cache prevents duplicate creation
 
-### 7. Photo Library & Selection Mode
-**PhotoLibraryView** - 4th tab in main navigation:
-- Grid view with search (title/notes/tags/location)
-- Selection mode: Multi-select with share/delete actions
-- "Clear All" for bulk deletion
-- Orphaned photo cleanup in Quote History → Storage Info
+**Scopes required:**
+- `photoslibrary.appendonly` - Upload photos
+- `photoslibrary` - Create/read albums
 
-**Storage Locations:**
-- Temporary: `/tmp/DTS_Photos/` (quote draft photos)
-- Documents: `/Documents/` (photo library photos)
+**Re-auth flow:** If scope upgrade needed, `needsReauth = true` triggers UI prompt.
 
-## Build & Development Workflows
+## Build Commands
 
-### VS Code Tasks (Preferred)
-- **Build:** `Cmd+Shift+B` → Runs "Build iOS Simulator" task
-- **Run:** Command Palette → "Run on Simulator" (auto-builds first)
-- **Clean:** "Clean Build Folder" task removes `build/` artifacts
-- **Discover:** "Discover Project Info" lists schemes/simulators
+### VS Code (Preferred)
+- **Build:** `Cmd+Shift+B`
+- **Run:** Tasks → "Run on Simulator" (auto-builds)
+- **Clean:** Tasks → "Clean Build Folder"
 
-### Configuration
-Edit `.vscode/tasks.json` inputs to change:
-- `projectPath`: "DTS App/DTS App.xcodeproj"
-- `schemeName`: "DTS App"
-- `simulatorName`: "iPhone 16 Pro"
-
-### Manual Xcode Build
+### Terminal
 ```bash
-cd "DTS App"
-xcodebuild -project "DTS App.xcodeproj" -scheme "DTS App" \
+xcodebuild -project "DTS App/DTS App.xcodeproj" -scheme "DTS App" \
   -destination "platform=iOS Simulator,name=iPhone 16 Pro" \
-  -derivedDataPath ../build clean build
+  -derivedDataPath build clean build
 ```
 
-## Key File Responsibilities
+## OAuth Configuration (DO NOT MODIFY)
+**Jobber OAuth** in `JobberAPI.swift` is working and fragile:
+- Redirect URI: `https://trainingemployer190.github.io/dtsapp-oauth-redirect/`
+- URL Scheme: `dts-app://oauth/callback`
+- Uses ASWebAuthenticationSession + Keychain storage
 
-| File | Purpose |
-|------|---------|
-| `JobberAPI.swift` | OAuth flow, GraphQL queries, token refresh, quote/job sync |
-| `DataModels.swift` | SwiftData schemas, Jobber API models, ID extraction, PhotoAnnotation |
-| `PricingEngine.swift` | Markup calculations, profit margins, proportional distribution |
-| `PhotoCaptureManager.swift` | Camera, location services, GPS watermarking |
-| `PDFGenerator.swift` | Quote PDF generation with photos |
-| `MainContentView.swift` | TabView root with SwiftData model container |
-| `DTSApp.swift` | App entry point, background token refresh |
-| `PhotoAnnotationCanvas.swift` | Coordinate conversion (normalized ↔ view space) |
-| `PhotoAnnotationEditor.swift` | Multi-tool annotation system (1,260 lines) |
-| `InlineTextAnnotationEditor.swift` | Simplified text-only editor |
-| `TextHandlerManager.swift` | State management for text interaction modes |
-| `PhotoLibraryView.swift` | 4th tab - photo grid, search, selection mode |
+**Google Photos OAuth** in `GooglePhotosAPI.swift`:
+- Client ID: `871965263646-...apps.googleusercontent.com`
+- Redirect URI: `com.googleusercontent.apps.871965263646-...:/oauth2redirect`
+- Pre-configured mode with shared company account
+- Refresh token stored in Keychain via `KeychainManager`
 
-## Common Patterns
+## App Groups & Share Extension
+```swift
+// Shared container for cross-app data:
+let appGroupId = "group.DTS.DTS-App"
+SharedContainerHelper.sharedPhotosDirectory  // Persistent photo storage
+SharedContainerHelper.pendingPDFDirectory    // PDFs from Share Extension
+```
 
-### Accessing Settings
+**Share Extension** (`DTS Share Extension/`):
+1. User shares PDF from Files/Mail/etc.
+2. Extension saves to App Group container
+3. Main app detects on launch via `checkForPendingRoofImport()`
+4. Auto-navigates to Roof Orders tab with import dialog
+
+## SwiftData Access Pattern
 ```swift
 @Query private var settings: [AppSettings]
 var currentSettings: AppSettings {
@@ -204,103 +196,24 @@ var currentSettings: AppSettings {
 }
 ```
 
-### Creating GraphQL Query
-```swift
-// 1. Validate fields in jobber_schema.graphql.txt
-// 2. Follow existing patterns in JobberAPI.swift
-let query = """
-query GetData($id: ID!) {
-  node(id: $id) {
-    ... on Request {
-      id
-      client { name }  # ← Verify nested fields exist
-    }
-  }
-}
-"""
-```
+## Key Files
+| File | Purpose |
+|------|---------|
+| [JobberAPI.swift](DTS%20App/DTS%20App/Managers/JobberAPI.swift) | OAuth + GraphQL (2,500+ lines) |
+| [GooglePhotosAPI.swift](DTS%20App/DTS%20App/Managers/GooglePhotosAPI.swift) | Photo uploads + albums (864 lines) |
+| [DataModels.swift](DTS%20App/DTS%20App/Models/DataModels.swift) | All data models (1,000+ lines) |
+| [RoofPDFParser.swift](DTS%20App/DTS%20App/Utilities/RoofPDFParser.swift) | Multi-format PDF extraction (669 lines) |
+| [RoofMaterialCalculator.swift](DTS%20App/DTS%20App/Utilities/RoofMaterialCalculator.swift) | Material calculations (452 lines) |
+| [PhotoAnnotationEditor.swift](DTS%20App/DTS%20App/Views/PhotoAnnotationEditor.swift) | Annotation UI |
+| [SharedContainerHelper.swift](DTS%20App/DTS%20App/Utilities/SharedContainerHelper.swift) | App Group storage |
 
-### Handling Jobber IDs
-```swift
-// Extract numeric ID for web URLs
-let numericId = extractNumericId(from: base64JobId)
-let url = "https://secure.getjobber.com/clients/\(numericId)"
-```
+## Git Rules
+**NEVER commit autonomously.** Only commit when user explicitly says "commit this" or similar.
 
-## Testing & Debugging
-
-### Test on Real Device
-Location services have limited simulator functionality. For GPS watermarking:
-- Use real iPhone/iPad
-- Grant "While Using App" location permission
-- First location fix takes a few seconds
-
-### Debug Logging
-- GraphQL responses: Check console for ID transformations
-- Pricing: `PricingEngine` logs detailed breakdowns
-- Location: `PhotoCaptureManager` logs geocoding results
-
-## OAuth Setup (Jobber Integration)
-**CRITICAL: DO NOT MODIFY OAuth flow structure - it's working and fragile**
-
-OAuth credentials in `JobberAPI.swift` (lines ~94-96):
-```swift
-private let clientId = "bc74e0a3-3f65-4373-b758-a512536ded90"
-private let clientSecret = "c4cc587785949060e4dd052e598a702d0ed8e91410302ceed2702d30413a6c03"
-private let redirectURI = "https://trainingemployer190.github.io/dtsapp-oauth-redirect/"
-```
-
-**Required Configuration Points:**
-1. **Redirect URI** must be exactly `https://trainingemployer190.github.io/dtsapp-oauth-redirect/`
-   - Matches Jobber Developer Portal configuration
-   - GitHub Pages handles OAuth callback redirect
-
-2. **URL Scheme** in `Info.plist`:
-   - Scheme: `dts-app` (for deep linking back to app)
-   - Callback pattern: `dts-app://oauth/callback`
-
-3. **OAuth Scopes** (line ~97):
-   ```swift
-   private let scopes = "read_clients write_clients read_requests write_requests read_quotes write_quotes read_jobs write_jobs read_scheduled_items write_scheduled_items"
-   ```
-   - All scopes required for full CRM integration
-   - Do not reduce scope list - features depend on these permissions
-
-**When Adding OAuth Features:**
-- ✅ Add new API calls using existing `accessToken`
-- ✅ Extend `JobberAPI` methods following existing patterns
-- ❌ DO NOT change redirect URI format
-- ❌ DO NOT modify `ASWebAuthenticationSession` flow in `startOAuthFlow()`
-- ❌ DO NOT alter token storage/refresh logic (uses Keychain + UserDefaults)
-
-## Recent Major Changes
-- **Beta 2 (Dec 2024):** Fixed pricing discrepancy with Jobber quotes via proportional distribution
-- **Location Fix:** Switched from one-time `requestLocation()` to continuous updates
-- **Photo Upload:** Added two-option menu (camera + library) with auto-upload to Jobber
-- **Photo Annotation (Oct 2025):** Drawsana-inspired multi-tool editor with text/drawing annotations
-- **Photo Library:** New 4th tab with search, selection mode, share/delete functionality
-- **Text Interactions:** Tap-to-select, drag-to-move, tap-again-to-edit pattern for text annotations
-
-## Git Workflow Rules
-**CRITICAL:** AI agent must NEVER commit code autonomously. Only commit when user explicitly requests it with commands like:
-- "commit this"
-- "commit these changes"
-- "make a commit"
-
-User has full control over when commits happen. Wait for explicit instructions before using git commit commands.
-
-## Documentation References
-- `README.md` - Setup, tasks, Jobber API configuration
-- `CHANGELOG.md` - Version history, critical bug fixes
-- `JOB_PHOTO_UPLOAD_FEATURE.md` - Photo workflow implementation
-- `LOCATION_FIX_SUMMARY.md` - Location services architecture
-- `PHOTO_ANNOTATION_IMPLEMENTATION.md` - Complete annotation feature overview
-- `DRAWSANA_REFACTOR_SUMMARY.md` - Text annotation architecture patterns
-- `TEXT_ANNOTATION_INTERACTION_GUIDE.md` - User interaction design patterns
-- `PHOTO_SELECTION_QUICK_GUIDE.md` - Multi-select feature documentation
-- `PHOTO_CLEANUP_FEATURE.md` - Storage management and orphaned photo cleanup
-
----
-
-**When in doubt:** Search the GraphQL schema first, follow existing patterns in `JobberAPI.swift`, and test pricing calculations against `PricingEngine` logic.
+## Testing Notes
+- **Location:** Test GPS watermarking on **real device** (simulator limited)
+- **Roof PDFs:** Test with iRoof, EagleView, Hover sample PDFs in `Iroof PDF/` folder
+- **Pricing:** Cross-reference final totals with Jobber quotes
+- **Google Photos:** Check album creation and photo upload in shared account
+- **Share Extension:** Test PDF import from Files app, Mail attachments
 

@@ -21,6 +21,7 @@ struct RoofOrderDetailView: View {
     @State private var showingEmailComposer = false
     @State private var showingShareSheet = false
     @State private var showingPresetPicker = false
+    @State private var showingPDFViewer = false
     @State private var editingMeasurements = false
     @State private var selectedPresetId: UUID?
 
@@ -31,6 +32,91 @@ struct RoofOrderDetailView: View {
     @State private var editRakeFeet: String = ""
     @State private var editEaveFeet: String = ""
     @State private var editHipFeet: String = ""
+    
+    // Custom shingle entry
+    @State private var customShingleType: String = ""
+    @State private var customShingleColor: String = ""
+    
+    // Common GAF shingle options
+    private let shingleTypes = [
+        "GAF Timberline HDZ",
+        "GAF Timberline NS",
+        "GAF Timberline AS II",
+        "GAF Timberline CS",
+        "GAF Royal Sovereign",
+        "GAF Camelot II",
+        "GAF Grand Sequoia",
+        "Other"
+    ]
+    
+    private let shingleColors = [
+        "Charcoal",
+        "Weathered Wood",
+        "Hickory",
+        "Barkwood",
+        "Shakewood",
+        "Pewter Gray",
+        "Slate",
+        "Mission Brown",
+        "Hunter Green",
+        "Birchwood",
+        "Oyster Gray",
+        "Patriot Red",
+        "Other"
+    ]
+    
+    // Check if current value is a preset or custom
+    private var isCustomShingleType: Bool {
+        !shingleTypes.contains(order.shingleType) || order.shingleType == "Other"
+    }
+    
+    private var isCustomShingleColor: Bool {
+        !shingleColors.contains(order.shingleColor) || order.shingleColor == "Other"
+    }
+    
+    // Binding for shingle type picker that handles "Other"
+    private var shingleTypePickerBinding: Binding<String> {
+        Binding(
+            get: {
+                if shingleTypes.contains(order.shingleType) {
+                    return order.shingleType
+                } else {
+                    return "Other"
+                }
+            },
+            set: { newValue in
+                if newValue == "Other" {
+                    order.shingleType = "Other"
+                    customShingleType = ""
+                } else {
+                    order.shingleType = newValue
+                    customShingleType = ""
+                }
+            }
+        )
+    }
+    
+    // Binding for shingle color picker that handles "Other"
+    private var shingleColorPickerBinding: Binding<String> {
+        Binding(
+            get: {
+                if shingleColors.contains(order.shingleColor) {
+                    return order.shingleColor
+                } else {
+                    return "Other"
+                }
+            },
+            set: { newValue in
+                if newValue == "Other" {
+                    order.shingleColor = "Other"
+                    customShingleColor = ""
+                } else {
+                    order.shingleColor = newValue
+                    customShingleColor = ""
+                }
+            }
+        )
+    }
 
     var currentSettings: AppSettings {
         settings.first ?? AppSettings()
@@ -102,14 +188,57 @@ struct RoofOrderDetailView: View {
             
             // Shingle Selection
             Section("Shingle Selection") {
-                TextField("Shingle Type", text: $order.shingleType)
-                    .autocapitalization(.words)
-                TextField("Color", text: $order.shingleColor)
-                    .autocapitalization(.words)
+                Picker("Shingle Type", selection: shingleTypePickerBinding) {
+                    ForEach(shingleTypes, id: \.self) { type in
+                        Text(type).tag(type)
+                    }
+                }
                 
-                Text("Example: GAF Timberline HDZ, Charcoal")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                if isCustomShingleType {
+                    TextField("Enter custom shingle type", text: $customShingleType)
+                        .onSubmit {
+                            if !customShingleType.isEmpty {
+                                order.shingleType = customShingleType
+                            }
+                        }
+                        .onChange(of: customShingleType) { _, newValue in
+                            if !newValue.isEmpty {
+                                order.shingleType = newValue
+                            }
+                        }
+                        .onAppear {
+                            // Load existing custom value
+                            if !shingleTypes.contains(order.shingleType) && order.shingleType != "Other" {
+                                customShingleType = order.shingleType
+                            }
+                        }
+                }
+                
+                Picker("Color", selection: shingleColorPickerBinding) {
+                    ForEach(shingleColors, id: \.self) { color in
+                        Text(color).tag(color)
+                    }
+                }
+                
+                if isCustomShingleColor {
+                    TextField("Enter custom color", text: $customShingleColor)
+                        .onSubmit {
+                            if !customShingleColor.isEmpty {
+                                order.shingleColor = customShingleColor
+                            }
+                        }
+                        .onChange(of: customShingleColor) { _, newValue in
+                            if !newValue.isEmpty {
+                                order.shingleColor = newValue
+                            }
+                        }
+                        .onAppear {
+                            // Load existing custom value
+                            if !shingleColors.contains(order.shingleColor) && order.shingleColor != "Other" {
+                                customShingleColor = order.shingleColor
+                            }
+                        }
+                }
             }
             
             // PDF Format Info
@@ -132,6 +261,25 @@ struct RoofOrderDetailView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                }
+                
+                // View Original PDF button
+                if let pdfURL = order.pdfURL(in: SharedContainerHelper.roofPDFStorageDirectory),
+                   FileManager.default.fileExists(atPath: pdfURL.path) {
+                    Button {
+                        showingPDFViewer = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "doc.text.fill")
+                                .foregroundColor(.red)
+                            Text("View Original PDF")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .foregroundColor(.primary)
                 }
             }
 
@@ -289,11 +437,12 @@ struct RoofOrderDetailView: View {
                     // Use order-specific email, or fall back to default
                     let email = order.supplierEmail ?? currentSettings.roofDefaultSupplierEmail
                     return email.isEmpty ? [] : [email]
-                }()
+                }(),
+                attachments: getPDFAttachment()
             )
         }
         .sheet(isPresented: $showingShareSheet) {
-            ShareSheet(activityItems: [RoofMaterialCalculator.generateEmailBody(order: order)])
+            ShareSheet(activityItems: getShareItems())
         }
         .sheet(isPresented: $showingPresetPicker) {
             PresetPickerView(
@@ -304,9 +453,47 @@ struct RoofOrderDetailView: View {
                 }
             )
         }
+        .sheet(isPresented: $showingPDFViewer) {
+            if let pdfURL = order.pdfURL(in: SharedContainerHelper.roofPDFStorageDirectory) {
+                PDFViewerView(
+                    pdfURL: pdfURL,
+                    title: order.pdfFilename ?? "Roof PDF"
+                )
+            }
+        }
         .onAppear {
             selectedPresetId = order.presetId
         }
+    }
+    
+    // MARK: - PDF Attachment Helpers
+    
+    /// Get the PDF URL for the order
+    private func getPDFURL() -> URL? {
+        guard let _ = order.pdfFilename else { return nil }
+        return order.pdfURL(in: SharedContainerHelper.roofPDFStorageDirectory)
+    }
+    
+    /// Get PDF data and info for email attachment
+    private func getPDFAttachment() -> [(data: Data, mimeType: String, filename: String)] {
+        guard let pdfURL = getPDFURL(),
+              let pdfData = try? Data(contentsOf: pdfURL) else {
+            return []
+        }
+        
+        let displayName = order.originalPDFName ?? order.pdfFilename ?? "roof_measurements.pdf"
+        return [(data: pdfData, mimeType: "application/pdf", filename: displayName)]
+    }
+    
+    /// Get items to share (text + PDF if available)
+    private func getShareItems() -> [Any] {
+        var items: [Any] = [RoofMaterialCalculator.generateEmailBody(order: order)]
+        
+        if let pdfURL = getPDFURL() {
+            items.append(pdfURL)
+        }
+        
+        return items
     }
 
     // MARK: - Actions
@@ -587,6 +774,7 @@ struct MailComposerView: UIViewControllerRepresentable {
     let subject: String
     let body: String
     let recipients: [String]
+    var attachments: [(data: Data, mimeType: String, filename: String)] = []
     @Environment(\.dismiss) private var dismiss
 
     func makeUIViewController(context: Context) -> MFMailComposeViewController {
@@ -595,6 +783,12 @@ struct MailComposerView: UIViewControllerRepresentable {
         composer.setSubject(subject)
         composer.setMessageBody(body, isHTML: false)
         composer.setToRecipients(recipients)
+        
+        // Add attachments
+        for attachment in attachments {
+            composer.addAttachmentData(attachment.data, mimeType: attachment.mimeType, fileName: attachment.filename)
+        }
+        
         return composer
     }
 
