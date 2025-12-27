@@ -9,6 +9,7 @@
 import SwiftUI
 import SwiftData
 import MessageUI
+import PDFKit
 
 struct RoofOrderDetailView: View {
     @Environment(\.modelContext) private var modelContext
@@ -298,22 +299,15 @@ struct RoofOrderDetailView: View {
                     }
                     .foregroundColor(.blue)
                 } else {
-                    MeasurementDisplayRow(label: "Total Squares", value: order.measurements.totalSquares, unit: "SQ", format: "%.2f")
+                    // Show squares with 10% waste factor
+                    let squaresWithWaste = order.measurements.totalSquares * 1.10
+                    MeasurementDisplayRow(label: "Total Squares (w/ 10% waste)", value: squaresWithWaste, unit: "SQ", format: "%.2f")
                     MeasurementDisplayRow(label: "Total Area", value: order.measurements.totalSqFt, unit: "sqft", format: "%.0f")
                     MeasurementDisplayRow(label: "Ridge", value: order.measurements.ridgeFeet, unit: "LF", format: "%.1f")
                     MeasurementDisplayRow(label: "Valley", value: order.measurements.valleyFeet, unit: "LF", format: "%.1f")
                     MeasurementDisplayRow(label: "Rake", value: order.measurements.rakeFeet, unit: "LF", format: "%.1f")
                     MeasurementDisplayRow(label: "Eave", value: order.measurements.eaveFeet, unit: "LF", format: "%.1f")
                     MeasurementDisplayRow(label: "Hip", value: order.measurements.hipFeet, unit: "LF", format: "%.1f")
-
-                    if let pitch = order.measurements.pitch {
-                        HStack {
-                            Text("Pitch")
-                            Spacer()
-                            Text(pitch)
-                                .foregroundColor(.secondary)
-                        }
-                    }
                 }
             } header: {
                 HStack {
@@ -343,6 +337,28 @@ struct RoofOrderDetailView: View {
                         Image(systemName: "chevron.right")
                             .foregroundColor(.secondary)
                     }
+                }
+            }
+
+            // Roof Options Section
+            Section {
+                Toggle(isOn: $order.hasSprayFoamInsulation) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Spray Foam Insulation")
+                        Text("Skip ridge vent - conditioned attic space")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .onChange(of: order.hasSprayFoamInsulation) { _, _ in
+                    recalculateMaterials()
+                }
+            } header: {
+                Text("Roof Options")
+            } footer: {
+                if order.hasSprayFoamInsulation {
+                    Text("Ridge vent excluded - spray foam creates a conditioned attic that doesn't require ventilation.")
+                        .foregroundColor(.orange)
                 }
             }
 
@@ -485,15 +501,209 @@ struct RoofOrderDetailView: View {
         return [(data: pdfData, mimeType: "application/pdf", filename: displayName)]
     }
     
-    /// Get items to share (text + PDF if available)
+    /// Get items to share (combined PDF with material order page)
     private func getShareItems() -> [Any] {
-        var items: [Any] = [RoofMaterialCalculator.generateEmailBody(order: order)]
-        
-        if let pdfURL = getPDFURL() {
-            items.append(pdfURL)
+        // Create combined PDF with original + material order page
+        if let combinedPDF = createCombinedPDF() {
+            return [combinedPDF]
         }
         
-        return items
+        // Fallback to just the original PDF if combining fails
+        if let pdfURL = getPDFURL() {
+            return [pdfURL]
+        }
+        
+        // Last resort: just text
+        return [RoofMaterialCalculator.generateEmailBody(order: order)]
+    }
+    
+    /// Create a combined PDF with original measurements + material order page
+    private func createCombinedPDF() -> URL? {
+        guard let originalURL = getPDFURL(),
+              let originalDocument = PDFDocument(url: originalURL) else {
+            return nil
+        }
+        
+        // Get page size from original PDF to match
+        let pageSize: CGSize
+        if let firstPage = originalDocument.page(at: 0) {
+            let bounds = firstPage.bounds(for: .mediaBox)
+            pageSize = bounds.size
+        } else {
+            pageSize = CGSize(width: 612, height: 792) // Default US Letter
+        }
+        
+        // Create the material order page matching original size
+        guard let orderPage = createMaterialOrderPDFPage(pageSize: pageSize) else {
+            return nil
+        }
+        
+        // Add material order page to the document
+        originalDocument.insert(orderPage, at: originalDocument.pageCount)
+        
+        // Save to temp file for sharing
+        let tempDir = FileManager.default.temporaryDirectory
+        let filename = "\(order.projectName.isEmpty ? "Roof_Order" : order.projectName.replacingOccurrences(of: " ", with: "_"))_with_materials.pdf"
+        let outputURL = tempDir.appendingPathComponent(filename)
+        
+        // Remove existing temp file if any
+        try? FileManager.default.removeItem(at: outputURL)
+        
+        if originalDocument.write(to: outputURL) {
+            print("✅ Created combined PDF at: \(outputURL.path)")
+            return outputURL
+        }
+        
+        return nil
+    }
+    
+    /// Create a PDF page containing the material order
+    private func createMaterialOrderPDFPage(pageSize: CGSize? = nil) -> PDFPage? {
+        // Use provided size or default to US Letter
+        let pageWidth: CGFloat = pageSize?.width ?? 612
+        let pageHeight: CGFloat = pageSize?.height ?? 792
+        
+        // Calculate scale factor based on page size (relative to US Letter)
+        let scaleFactor: CGFloat = min(pageWidth / 612, pageHeight / 792)
+        
+        // Scale margin based on page size
+        let margin: CGFloat = 50 * scaleFactor
+        
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight))
+        
+        let pdfData = renderer.pdfData { context in
+            context.beginPage()
+            
+            var yPosition: CGFloat = margin
+            
+            // Scaled font sizes
+            let titleFontSize: CGFloat = 24 * scaleFactor
+            let headerFontSize: CGFloat = 16 * scaleFactor
+            let bodyFontSize: CGFloat = 14 * scaleFactor
+            let itemFontSize: CGFloat = 13 * scaleFactor
+            let footerFontSize: CGFloat = 11 * scaleFactor
+            let lineSpacing: CGFloat = 22 * scaleFactor
+            let sectionSpacing: CGFloat = 35 * scaleFactor
+            
+            // Title
+            let titleFont = UIFont.boldSystemFont(ofSize: titleFontSize)
+            let titleAttributes: [NSAttributedString.Key: Any] = [
+                .font: titleFont,
+                .foregroundColor: UIColor.black
+            ]
+            
+            let title = "MATERIAL ORDER"
+            title.draw(at: CGPoint(x: margin, y: yPosition), withAttributes: titleAttributes)
+            yPosition += sectionSpacing
+            
+            // Project info
+            let headerFont = UIFont.boldSystemFont(ofSize: headerFontSize)
+            let bodyFont = UIFont.systemFont(ofSize: bodyFontSize)
+            let headerAttrs: [NSAttributedString.Key: Any] = [.font: headerFont, .foregroundColor: UIColor.black]
+            let bodyAttrs: [NSAttributedString.Key: Any] = [.font: bodyFont, .foregroundColor: UIColor.darkGray]
+            
+            if !order.projectName.isEmpty {
+                "Project: \(order.projectName)".draw(at: CGPoint(x: margin, y: yPosition), withAttributes: headerAttrs)
+                yPosition += lineSpacing
+            }
+            
+            if !order.address.isEmpty {
+                "Address: \(order.address)".draw(at: CGPoint(x: margin, y: yPosition), withAttributes: bodyAttrs)
+                yPosition += lineSpacing
+            }
+            
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateStyle = .medium
+            "Date: \(dateFormatter.string(from: Date()))".draw(at: CGPoint(x: margin, y: yPosition), withAttributes: bodyAttrs)
+            yPosition += sectionSpacing
+            
+            // Shingle info
+            "Shingle: \(order.shingleType) - \(order.shingleColor)".draw(at: CGPoint(x: margin, y: yPosition), withAttributes: headerAttrs)
+            yPosition += lineSpacing + 5 * scaleFactor
+            
+            // Draw separator line
+            let linePath = UIBezierPath()
+            linePath.move(to: CGPoint(x: margin, y: yPosition))
+            linePath.addLine(to: CGPoint(x: pageWidth - margin, y: yPosition))
+            UIColor.gray.setStroke()
+            linePath.lineWidth = 1.5 * scaleFactor
+            linePath.stroke()
+            yPosition += 20 * scaleFactor
+            
+            // Materials header
+            "MATERIALS LIST".draw(at: CGPoint(x: margin, y: yPosition), withAttributes: headerAttrs)
+            yPosition += lineSpacing + 5 * scaleFactor
+            
+            // Column headers
+            let col1 = margin
+            let col2 = pageWidth - margin - (120 * scaleFactor)
+            
+            let columnHeaderAttrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.boldSystemFont(ofSize: itemFontSize),
+                .foregroundColor: UIColor.darkGray
+            ]
+            "Item".draw(at: CGPoint(x: col1, y: yPosition), withAttributes: columnHeaderAttrs)
+            "Qty".draw(at: CGPoint(x: col2, y: yPosition), withAttributes: columnHeaderAttrs)
+            yPosition += lineSpacing
+            
+            // Materials list
+            let itemFont = UIFont.systemFont(ofSize: itemFontSize)
+            let itemAttrs: [NSAttributedString.Key: Any] = [.font: itemFont, .foregroundColor: UIColor.black]
+            let qtyAttrs: [NSAttributedString.Key: Any] = [.font: UIFont.boldSystemFont(ofSize: itemFontSize), .foregroundColor: UIColor.black]
+            
+            for material in order.materials {
+                // Item name (truncate if too long)
+                let maxNameWidth = col2 - col1 - (20 * scaleFactor)
+                var name = material.name
+                let nameSize = (name as NSString).size(withAttributes: itemAttrs)
+                if nameSize.width > maxNameWidth {
+                    while (name as NSString).size(withAttributes: itemAttrs).width > maxNameWidth && name.count > 10 {
+                        name = String(name.dropLast())
+                    }
+                    name += "..."
+                }
+                name.draw(at: CGPoint(x: col1, y: yPosition), withAttributes: itemAttrs)
+                
+                // Quantity
+                let qty = "\(Int(material.quantity)) \(material.unit)"
+                qty.draw(at: CGPoint(x: col2, y: yPosition), withAttributes: qtyAttrs)
+                
+                yPosition += lineSpacing * 0.9
+                
+                // Check if we need a new page (leave room for footer)
+                if yPosition > pageHeight - (100 * scaleFactor) {
+                    yPosition = margin
+                    context.beginPage()
+                }
+            }
+            
+            // Add note about spray foam if applicable
+            if order.hasSprayFoamInsulation {
+                yPosition += 15 * scaleFactor
+                let noteAttrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.italicSystemFont(ofSize: footerFontSize),
+                    .foregroundColor: UIColor.orange
+                ]
+                "Note: Ridge vent excluded - spray foam attic".draw(at: CGPoint(x: margin, y: yPosition), withAttributes: noteAttrs)
+                yPosition += lineSpacing
+            }
+            
+            // Footer
+            let footerY = pageHeight - (60 * scaleFactor)
+            let footerAttrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: footerFontSize),
+                .foregroundColor: UIColor.gray
+            ]
+            "Generated by DTS App".draw(at: CGPoint(x: margin, y: footerY), withAttributes: footerAttrs)
+        }
+        
+        // Create PDFDocument from data and get the page(s)
+        guard let pdfDocument = PDFDocument(data: pdfData),
+              let page = pdfDocument.page(at: 0) else {
+            return nil
+        }
+        
+        return page
     }
 
     // MARK: - Actions

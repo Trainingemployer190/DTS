@@ -299,23 +299,48 @@ class RoofPDFParser {
         }
 
         // Pitch - look for predominant pitch or list of pitches
+        // Also extract all pitch areas for breakdown display
+        let pitchBreakdown = extractAllPitchAreas(from: text)
+        measurements.pitchBreakdown = pitchBreakdown
+        
         if let pitch = extractPitch(from: text) {
             measurements.pitch = pitch
             measurements.pitchMultiplier = pitchToMultiplier(pitch)
             print("✅ Found pitch: \(pitch) (multiplier: \(measurements.pitchMultiplier))")
-        } else {
-            // Try to get predominant pitch from Area breakdown
-            // "Area 4 Pitch 10/12: 1733.93 sqft" is the largest, so use 10/12
-            let (predominantPitch, _) = findPredominantPitch(from: text)
-            if let pitch = predominantPitch {
-                measurements.pitch = pitch
-                measurements.pitchMultiplier = pitchToMultiplier(pitch)
-                print("✅ Derived predominant pitch: \(pitch)")
+        } else if !pitchBreakdown.isEmpty {
+            // Use predominant pitch from breakdown (largest area)
+            if let predominant = pitchBreakdown.max(by: { $0.sqFt < $1.sqFt }) {
+                measurements.pitch = predominant.pitch
+                measurements.pitchMultiplier = pitchToMultiplier(predominant.pitch)
+                print("✅ Derived predominant pitch: \(predominant.pitch) from \(pitchBreakdown.count) pitch areas")
             }
         }
         
-        // Extract low-pitch areas and transitions
+        // Extract low-pitch areas and transitions from text patterns
         extractLowPitchAreas(from: text, into: &measurements)
+        
+        // ALSO calculate low-pitch from pitchBreakdown if extractLowPitchAreas didn't find any
+        // This catches cases where the regex patterns didn't match the specific PDF format
+        if measurements.lowPitchSqFt == 0 && !pitchBreakdown.isEmpty {
+            var lowPitchFromBreakdown: Double = 0
+            var lowPitchDescs: [String] = []
+            
+            for area in pitchBreakdown {
+                // Extract pitch number (e.g., "2" from "2/12")
+                if let pitchNumStr = area.pitch.components(separatedBy: "/").first,
+                   let pitchNum = Int(pitchNumStr),
+                   pitchNum < 4 {  // Less than 4/12 requires ice & water
+                    lowPitchFromBreakdown += area.sqFt
+                    lowPitchDescs.append("\(area.pitch): \(String(format: "%.0f", area.sqFt)) sqft")
+                    print("⚠️ Found low-pitch area from breakdown (< 4/12): \(area.pitch) = \(String(format: "%.0f", area.sqFt)) sqft")
+                }
+            }
+            
+            if lowPitchFromBreakdown > 0 {
+                measurements.lowPitchSqFt = lowPitchFromBreakdown
+                measurements.lowPitchAreas = lowPitchDescs
+            }
+        }
 
         // Calculate confidence based on fields found
         let confidence = Double(fieldsFound) / Double(totalExpectedFields) * 100
@@ -323,35 +348,129 @@ class RoofPDFParser {
         return (measurements, min(confidence, 100), warnings)
     }
     
-    /// Find the predominant pitch (largest area) from the PDF
-    private static func findPredominantPitch(from text: String) -> (String?, Double) {
-        let pattern = "(?:Area\\s*\\d+\\s*)?Pitch\\s*(\\d+)/12[:\\s]*([\\d,]+\\.?\\d*)\\s*sqft"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-            return (nil, 0)
-        }
+    /// Extract all pitch areas from the PDF (e.g., "Area 1 Pitch 4/12: 1804.63 sqft")
+    /// Page 1 of iRoof PDFs shows: "Area 1 Pitch 2/12:" followed by "1711.09 sqft"
+    private static func extractAllPitchAreas(from text: String) -> [PitchArea] {
+        // iRoof PDF format has pitch and sqft on SEPARATE lines:
+        // Line type 1: "Area 1 Pitch 2/12:"
+        // Line type 2: "Area 1 1111.09 sqft"
+        // 
+        // TWO-PASS APPROACH:
+        // Pass 1: Extract pitch by area number -> [areaNum: pitch]
+        // Pass 2: Extract sqft by area number -> match with pitch
         
-        var maxArea: Double = 0
-        var predominantPitch: String?
+        var pitchByArea: [String: String] = [:]  // areaNum -> pitch (e.g. "1" -> "2/12")
+        var sqftByArea: [String: Double] = [:]   // areaNum -> sqft
         
-        let range = NSRange(text.startIndex..., in: text)
-        let matches = regex.matches(in: text, range: range)
-        
-        for match in matches {
-            if match.numberOfRanges >= 3,
-               let pitchRange = Range(match.range(at: 1), in: text),
-               let areaRange = Range(match.range(at: 2), in: text) {
-                let pitch = String(text[pitchRange])
-                let areaStr = String(text[areaRange]).replacingOccurrences(of: ",", with: "")
-                let area = Double(areaStr) ?? 0
-                
-                if area > maxArea {
-                    maxArea = area
-                    predominantPitch = "\(pitch)/12"
+        // Debug: Show raw text around Area markers
+        print("📋 Raw text around Area markers:")
+        let debugPattern = "Area\\s*\\d+[^\\n]{0,100}"
+        if let debugRegex = try? NSRegularExpression(pattern: debugPattern, options: [.caseInsensitive]) {
+            let debugMatches = debugRegex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+            for match in debugMatches {
+                if let range = Range(match.range, in: text) {
+                    let snippet = String(text[range]).replacingOccurrences(of: "\n", with: "\\n")
+                    print("   \"\(snippet)\"")
                 }
             }
         }
         
-        return (predominantPitch, maxArea)
+        // PASS 1: Extract pitch by area number
+        // Pattern: "Area 1 Pitch 2/12" or "Area 1 Pitch 2/12:"
+        let pitchPattern = "Area\\s*(\\d+)\\s*Pitch\\s*(\\d+)/12"
+        if let pitchRegex = try? NSRegularExpression(pattern: pitchPattern, options: [.caseInsensitive]) {
+            let matches = pitchRegex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+            print("🔍 Pass 1: Found \(matches.count) 'Area N Pitch X/12' matches")
+            
+            for match in matches {
+                guard match.numberOfRanges >= 3,
+                      let areaNumRange = Range(match.range(at: 1), in: text),
+                      let pitchNumRange = Range(match.range(at: 2), in: text) else {
+                    continue
+                }
+                
+                let areaNum = String(text[areaNumRange])
+                let pitchNum = String(text[pitchNumRange])
+                let pitch = "\(pitchNum)/12"
+                
+                pitchByArea[areaNum] = pitch
+                print("   Area \(areaNum) -> Pitch \(pitch)")
+            }
+        }
+        
+        // PASS 2: Extract sqft by area number
+        // Pattern: "Area 1 1111.09 sqft" (sqft directly after area number)
+        let sqftPattern = "Area\\s*(\\d+)\\s+([\\d,]+\\.\\d+)\\s*sqft"
+        if let sqftRegex = try? NSRegularExpression(pattern: sqftPattern, options: [.caseInsensitive]) {
+            let matches = sqftRegex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+            print("🔍 Pass 2: Found \(matches.count) 'Area N sqft' matches")
+            
+            for match in matches {
+                guard match.numberOfRanges >= 3,
+                      let areaNumRange = Range(match.range(at: 1), in: text),
+                      let sqftRange = Range(match.range(at: 2), in: text) else {
+                    continue
+                }
+                
+                let areaNum = String(text[areaNumRange])
+                let sqftStr = String(text[sqftRange]).replacingOccurrences(of: ",", with: "")
+                let sqft = Double(sqftStr) ?? 0
+                
+                // Only keep reasonable individual area sqft (100-5000, not total roof)
+                if sqft > 100 && sqft < 5000 {
+                    sqftByArea[areaNum] = sqft
+                    print("   Area \(areaNum) -> \(sqft) sqft")
+                }
+            }
+        }
+        
+        // COMBINE: Match pitch with sqft by area number
+        var pitchAreas: [PitchArea] = []
+        var seenPitches: [String: Double] = [:]  // Combine same pitches
+        
+        print("🔗 Combining pitch and sqft by area number:")
+        for (areaNum, pitch) in pitchByArea {
+            if let sqft = sqftByArea[areaNum] {
+                print("   ✅ Area \(areaNum): \(pitch) = \(sqft) sqft")
+                
+                // Add or accumulate by pitch
+                if let existing = seenPitches[pitch] {
+                    seenPitches[pitch] = existing + sqft
+                } else {
+                    seenPitches[pitch] = sqft
+                }
+            } else {
+                print("   ⚠️ Area \(areaNum): \(pitch) - no sqft found")
+            }
+        }
+        
+        // Convert to PitchArea array
+        for (pitch, sqFt) in seenPitches {
+            pitchAreas.append(PitchArea(pitch: pitch, sqFt: sqFt))
+            print("📐 Final pitch area: \(pitch) = \(sqFt) sqft")
+        }
+        
+        // Sort by pitch number (low to high)
+        pitchAreas.sort { 
+            let num1 = Int($0.pitch.components(separatedBy: "/").first ?? "0") ?? 0
+            let num2 = Int($1.pitch.components(separatedBy: "/").first ?? "0") ?? 0
+            return num1 < num2
+        }
+        
+        if !pitchAreas.isEmpty {
+            print("📊 Found \(pitchAreas.count) pitch areas: \(pitchAreas.map { "\($0.pitch): \(String(format: "%.1f", $0.squares)) SQ" }.joined(separator: ", "))")
+        }
+        
+        return pitchAreas
+    }
+    
+    /// Find the predominant pitch (largest area) from the PDF - legacy helper
+    private static func findPredominantPitch(from text: String) -> (String?, Double) {
+        let areas = extractAllPitchAreas(from: text)
+        if let max = areas.max(by: { $0.sqFt < $1.sqFt }) {
+            return (max.pitch, max.sqFt)
+        }
+        return (nil, 0)
     }
 
     /// Parse EagleView format PDFs

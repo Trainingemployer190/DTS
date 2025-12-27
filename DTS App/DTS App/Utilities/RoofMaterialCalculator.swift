@@ -27,7 +27,8 @@ class RoofMaterialCalculator {
         settings: AppSettings,
         preset: RoofPresetTemplate? = nil,
         shingleType: String = "GAF Timberline HDZ",
-        shingleColor: String = "Charcoal"
+        shingleColor: String = "Charcoal",
+        hasSprayFoamInsulation: Bool = false
     ) -> [RoofMaterialLineItem] {
 
         var materials: [RoofMaterialLineItem] = []
@@ -113,7 +114,8 @@ class RoofMaterialCalculator {
         }
 
         // 5. RIDGE VENT - GAF Cobra Rigid Vent 3 (4' pieces, for ridge only)
-        if measurements.ridgeFeet > 0 {
+        // Skip if spray foam insulation (conditioned attic doesn't need ventilation)
+        if measurements.ridgeFeet > 0 && !hasSprayFoamInsulation {
             // Cobra Rigid Vent comes in 4' sections
             let ventPiecesNeeded = ceil(measurements.ridgeFeet / 4.0)
 
@@ -315,6 +317,7 @@ class RoofMaterialCalculator {
         factors.iceWaterSqFtPerRoll = settings.roofIceWaterSqFtPerRoll
         factors.iceWaterWidthFeet = settings.roofIceWaterWidthFeet
         factors.requiresIceWaterForValleys = settings.roofAutoAddIceWaterForValleys
+        factors.requiresIceWaterForLowPitch = settings.roofAutoAddIceWaterForLowPitch
         factors.requiresIceWaterForEaves = settings.roofAutoAddIceWaterForEaves
         factors.eaveIceWaterWidthFeet = settings.roofEaveIceWaterWidthFeet
         factors.coilNailsLbsPerSquare = settings.roofCoilNailsLbsPerSquare
@@ -333,12 +336,15 @@ class RoofMaterialCalculator {
     ) -> String {
         let measurements = order.measurements
         let materials = order.materials
+        
+        // Calculate squares with 10% waste factor
+        let squaresWithWaste = measurements.totalSquares * 1.10
 
         var body = """
         \(order.projectName.isEmpty ? "Roof Order" : order.projectName)
         \(order.address.isEmpty ? "" : order.address)
         
-        \(String(format: "%.2f", measurements.totalSquares)) SQ  •  \(measurements.pitch ?? "N/A") pitch
+        \(String(format: "%.2f", squaresWithWaste)) SQ (w/ 10% waste)
         
         ────────────────────────
         MATERIALS
@@ -391,7 +397,8 @@ class RoofMaterialCalculator {
     /// Generate email subject line
     static func generateEmailSubject(order: RoofMaterialOrder) -> String {
         let address = order.address.isEmpty ? order.projectName : order.address
-        let squares = String(format: "%.1f", order.measurements.totalSquares)
+        let squaresWithWaste = order.measurements.totalSquares * 1.10
+        let squares = String(format: "%.1f", squaresWithWaste)
         return "Roof Order - \(address) - \(squares) SQ"
     }
 
@@ -409,7 +416,8 @@ class RoofMaterialCalculator {
             settings: settings,
             preset: preset,
             shingleType: order.shingleType,
-            shingleColor: order.shingleColor
+            shingleColor: order.shingleColor,
+            hasSprayFoamInsulation: order.hasSprayFoamInsulation
         )
 
         // Preserve manual overrides from existing materials

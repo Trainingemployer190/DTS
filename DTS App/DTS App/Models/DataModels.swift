@@ -596,6 +596,9 @@ struct RoofMeasurements: Codable {
     var wallFlashingFeet: Double = 0  // Wall/headwall flashing linear feet
     var pitch: String?  // Primary roof pitch (e.g., "6/12")
     var pitchMultiplier: Double = 1.0  // Pitch factor for area calculations
+    
+    // Pitch breakdown - each pitch with its square footage
+    var pitchBreakdown: [PitchArea] = []  // All pitches with their areas
 
     // Low pitch areas (under 4/12) - need ice & water shield
     var lowPitchSqFt: Double = 0  // Square footage of areas under 4/12 pitch (3/12 and below)
@@ -618,6 +621,24 @@ struct RoofMeasurements: Codable {
     /// Check if roof has pitch transitions
     var hasTransitions: Bool {
         transitionFeet > 0
+    }
+    
+    /// Check if roof has multiple pitches
+    var hasMultiplePitches: Bool {
+        pitchBreakdown.count > 1
+    }
+}
+
+/// Individual pitch area measurement
+struct PitchArea: Codable, Identifiable {
+    var id: UUID = UUID()
+    var pitch: String  // e.g., "4/12", "10/12"
+    var sqFt: Double  // Square footage at this pitch
+    var squares: Double { sqFt / 100.0 }  // Converted to squares
+    
+    init(pitch: String, sqFt: Double) {
+        self.pitch = pitch
+        self.sqFt = sqFt
     }
 }
 
@@ -657,6 +678,9 @@ final class RoofMaterialOrder {
     var presetId: UUID?
     var presetName: String?
 
+    // Attic insulation type (affects ridge vent)
+    var hasSprayFoamInsulation: Bool = false  // If true, skip ridge vent (conditioned attic)
+    
     // Status
     var statusRaw: String = RoofOrderStatus.draft.rawValue
     var orderedAt: Date?
