@@ -28,7 +28,11 @@ class RoofMaterialCalculator {
         preset: RoofPresetTemplate? = nil,
         shingleType: String = "GAF Timberline HDZ",
         shingleColor: String = "Charcoal",
-        hasSprayFoamInsulation: Bool = false
+        hasSprayFoamInsulation: Bool = false,
+        chimneyCount: Int = 0,
+        chimneyAgainstBrick: Bool = false,
+        chimneyWidthFeet: Double = 3.0,
+        wallFlashingAgainstBrick: Bool = false
     ) -> [RoofMaterialLineItem] {
 
         var materials: [RoofMaterialLineItem] = []
@@ -65,10 +69,35 @@ class RoofMaterialCalculator {
         }
 
         // 2. UNDERLAYMENT - GAF FeltBuster Syn Roof Felt 10SQ (1000 sqft/roll)
+        // NOTE: We don't put felt where ice & water goes, so subtract that area
+        // Calculate ice & water sqft first to subtract from underlayment
+        var iceWaterSqFt: Double = 0
+        
+        // For valleys - 3' width on each side
+        if factors.requiresIceWaterForValleys && measurements.valleyFeet > 0 {
+            iceWaterSqFt += measurements.valleyFeet * factors.iceWaterWidthFeet * 2
+        }
+        // For low-pitch areas
+        if factors.requiresIceWaterForLowPitch && measurements.lowPitchSqFt > 0 {
+            iceWaterSqFt += measurements.lowPitchSqFt
+        }
+        // For transitions
+        if factors.requiresIceWaterForTransitions && measurements.transitionFeet > 0 {
+            iceWaterSqFt += measurements.transitionFeet * factors.iceWaterWidthFeet * 2
+        }
+        
         if measurements.totalSquares > 0 {
             let wasteFactor = 1.0 + factors.underlaymentWasteFactor
-            let sqftNeeded = measurements.totalSquares * 100 * wasteFactor
+            let totalSqFt = measurements.totalSquares * 100
+            // Subtract ice & water areas - no felt needed there
+            let feltSqFt = max(0, totalSqFt - iceWaterSqFt)
+            let sqftNeeded = feltSqFt * wasteFactor
             let rollsNeeded = ceil(sqftNeeded / factors.underlaymentSqFtPerRoll)
+
+            var notes = "\(String(format: "%.0f", sqftNeeded)) sqft coverage needed"
+            if iceWaterSqFt > 0 {
+                notes += " (excludes \(String(format: "%.0f", iceWaterSqFt)) sqft ice & water areas)"
+            }
 
             materials.append(RoofMaterialLineItem(
                 name: "GAF FELTBUSTER SYN ROOF FELT 10SQ",
@@ -76,7 +105,7 @@ class RoofMaterialCalculator {
                 calculatedQuantity: rollsNeeded,
                 unit: "rolls",
                 category: "Underlayment",
-                notes: "\(String(format: "%.0f", sqftNeeded)) sqft coverage needed"
+                notes: notes
             ))
         }
 
@@ -129,45 +158,50 @@ class RoofMaterialCalculator {
             ))
         }
 
-        // 6. DRIP EDGE - Alum 1-1/2x3-3/4 (10' pieces)
-        if factors.includesDripEdge {
-            let dripEdgeLF = measurements.rakeFeet + measurements.eaveFeet
-            if dripEdgeLF > 0 {
-                let wasteFactor = 1.0 + factors.dripEdgeWasteFactor
-                let piecesNeeded = ceil(dripEdgeLF * wasteFactor / factors.dripEdgeLFPerPiece)
+        // 6. DRIP EDGE - Alum 1-1/2x3-3/4 (10' pieces) - RAKES ONLY
+        if factors.includesDripEdge && measurements.rakeFeet > 0 {
+            let wasteFactor = 1.0 + factors.dripEdgeWasteFactor
+            let piecesNeeded = ceil(measurements.rakeFeet * wasteFactor / factors.dripEdgeLFPerPiece)
 
-                materials.append(RoofMaterialLineItem(
-                    name: "ALUM 1-1/2X3-3/4 OF DRIP EDGE BLACK",
-                    description: "1-1/2x3-3/4\" x 10' pieces",
-                    calculatedQuantity: piecesNeeded,
-                    unit: "pieces",
-                    category: "Flashing",
-                    notes: "\(String(format: "%.0f", dripEdgeLF)) LF (rakes + eaves)"
-                ))
-            }
+            materials.append(RoofMaterialLineItem(
+                name: "ALUM 1-1/2X3-3/4 OF DRIP EDGE BLACK",
+                description: "1-1/2x3-3/4\" x 10' pieces",
+                calculatedQuantity: piecesNeeded,
+                unit: "pieces",
+                category: "Flashing",
+                notes: "\(String(format: "%.0f", measurements.rakeFeet)) LF rakes"
+            ))
+        }
+        
+        // 6B. GUTTER APRON - (10' pieces) - EAVES ONLY (where gutters go)
+        if factors.includesDripEdge && measurements.eaveFeet > 0 {
+            let wasteFactor = 1.0 + factors.dripEdgeWasteFactor
+            let piecesNeeded = ceil(measurements.eaveFeet * wasteFactor / factors.dripEdgeLFPerPiece)
+
+            materials.append(RoofMaterialLineItem(
+                name: "ALUM GUTTER APRON 2.0\" BLACK",
+                description: "AGA20BK - 10' pieces for eaves",
+                calculatedQuantity: piecesNeeded,
+                unit: "pieces",
+                category: "Flashing",
+                notes: "\(String(format: "%.0f", measurements.eaveFeet)) LF eaves"
+            ))
         }
 
         // 7. ICE & WATER SHIELD - GAF WeatherWatch 36"x66.7' 2SQ/RL (200 sqft/roll)
-        var iceWaterSqFt: Double = 0
+        // iceWaterSqFt was already calculated above for underlayment deduction
         var iceWaterNotes: [String] = []
 
-        // For valleys (if enabled) - 3' width on each side
+        // Build notes for what ice & water covers
         if factors.requiresIceWaterForValleys && measurements.valleyFeet > 0 {
-            let valleySqFt = measurements.valleyFeet * factors.iceWaterWidthFeet * 2  // Both sides
-            iceWaterSqFt += valleySqFt
+            let valleySqFt = measurements.valleyFeet * factors.iceWaterWidthFeet * 2
             iceWaterNotes.append("\(String(format: "%.0f", valleySqFt)) sqft for valleys")
         }
-
-        // For low-pitch areas (under threshold, e.g., 3/12 and below)
         if factors.requiresIceWaterForLowPitch && measurements.lowPitchSqFt > 0 {
-            iceWaterSqFt += measurements.lowPitchSqFt
             iceWaterNotes.append("\(String(format: "%.0f", measurements.lowPitchSqFt)) sqft for low-pitch areas")
         }
-
-        // For transitions between different pitches
         if factors.requiresIceWaterForTransitions && measurements.transitionFeet > 0 {
             let transitionSqFt = measurements.transitionFeet * factors.iceWaterWidthFeet * 2
-            iceWaterSqFt += transitionSqFt
             iceWaterNotes.append("\(String(format: "%.0f", transitionSqFt)) sqft for transitions")
         }
 
@@ -272,7 +306,77 @@ class RoofMaterialCalculator {
             ))
         }
         
-        // 14. PAINT/TOUCH-UP - PAINT ABC ROOF ACCES [COLOR]
+        // 14. COUNTER FLASHING for walls/dormers against brick
+        if measurements.stepFlashingFeet > 0 && wallFlashingAgainstBrick {
+            // Counter flashing: 10' pieces for masonry walls
+            let piecesNeeded = ceil(measurements.stepFlashingFeet / 10.0)
+            
+            materials.append(RoofMaterialLineItem(
+                name: "GALV COUNTER FLASHING 4X4X10",
+                description: "For brick/masonry wall termination",
+                calculatedQuantity: piecesNeeded,
+                unit: "pieces",
+                category: "Flashing",
+                notes: "Counter flashing for \(String(format: "%.0f", measurements.stepFlashingFeet)) LF of masonry wall"
+            ))
+        }
+        
+        // 15. CHIMNEY FLASHING - Step flashing, apron, and counter flashing
+        if chimneyCount > 0 {
+            // Each chimney needs:
+            // - Step flashing on both sides (approximately 6' per side = 12' per chimney)
+            // - L-flashing/apron at front (width of chimney)
+            // - Cricket/saddle flashing at back (width of chimney)
+            // - Counter flashing if brick (perimeter of chimney)
+            
+            let stepFlashingPerChimney = 12.0  // ~6' per side
+            let totalChimneyStepFlashing = Double(chimneyCount) * stepFlashingPerChimney
+            let stepPiecesNeeded = totalChimneyStepFlashing * 2  // 2 pieces per LF
+            let stepBundlesNeeded = ceil(stepPiecesNeeded / 100.0)
+            
+            materials.append(RoofMaterialLineItem(
+                name: "ALUM PB STEP FLASH 8X8 BLACK 100/BD",
+                description: "Chimney step flashing",
+                calculatedQuantity: stepBundlesNeeded,
+                unit: "bundles",
+                category: "Flashing",
+                notes: "\(chimneyCount) chimney(s) × 12 LF each"
+            ))
+            
+            // L-flashing/apron for chimney front
+            // Typically 4"x4" L-flashing, 10' pieces - need chimney width per chimney
+            let apronLFNeeded = Double(chimneyCount) * chimneyWidthFeet
+            let apronPiecesNeeded = ceil(apronLFNeeded / 10.0)
+            
+            materials.append(RoofMaterialLineItem(
+                name: "GALV L FLASHING 4X4X10",
+                description: "Chimney apron/front flashing",
+                calculatedQuantity: max(1, apronPiecesNeeded),
+                unit: "pieces",
+                category: "Flashing",
+                notes: "\(chimneyCount) chimney(s) × \(String(format: "%.0f", chimneyWidthFeet))' width"
+            ))
+            
+            // Counter flashing for brick chimneys
+            if chimneyAgainstBrick {
+                // Counter flashing covers perimeter: 2 sides + front + back
+                // Estimate perimeter as: 2*(chimneyWidth + 2') per chimney (assume 2' depth)
+                let perimeterPerChimney = 2 * (chimneyWidthFeet + 2.0)
+                let totalCounterLF = Double(chimneyCount) * perimeterPerChimney
+                let counterPiecesNeeded = ceil(totalCounterLF / 10.0)
+                
+                materials.append(RoofMaterialLineItem(
+                    name: "GALV COUNTER FLASHING 4X4X10",
+                    description: "For brick chimney masonry reglet",
+                    calculatedQuantity: counterPiecesNeeded,
+                    unit: "pieces",
+                    category: "Flashing",
+                    notes: "\(chimneyCount) brick chimney(s) - perimeter counter flash"
+                ))
+            }
+        }
+        
+        // 16. PAINT/TOUCH-UP - PAINT ABC ROOF ACCES [COLOR]
         // 1 can per job for color matching accessories
         let paintName = colorUpper.isEmpty ? "PAINT ABC ROOF ACCES" : "PAINT ABC ROOF ACCES \(colorUpper)"
         materials.append(RoofMaterialLineItem(
@@ -284,7 +388,7 @@ class RoofMaterialCalculator {
             notes: "1 can per job"
         ))
         
-        // 15. ZIPPER BOOT - 1 per job
+        // 17. ZIPPER BOOT - 1 per job
         materials.append(RoofMaterialLineItem(
             name: "Zipper Boot",
             description: "Roof penetration boot",
@@ -417,7 +521,11 @@ class RoofMaterialCalculator {
             preset: preset,
             shingleType: order.shingleType,
             shingleColor: order.shingleColor,
-            hasSprayFoamInsulation: order.hasSprayFoamInsulation
+            hasSprayFoamInsulation: order.hasSprayFoamInsulation,
+            chimneyCount: order.chimneyCount,
+            chimneyAgainstBrick: order.chimneyAgainstBrick,
+            chimneyWidthFeet: order.chimneyWidthFeet,
+            wallFlashingAgainstBrick: order.wallFlashingAgainstBrick
         )
 
         // Preserve manual overrides from existing materials

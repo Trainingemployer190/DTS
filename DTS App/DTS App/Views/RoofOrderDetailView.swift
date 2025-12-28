@@ -308,6 +308,9 @@ struct RoofOrderDetailView: View {
                     MeasurementDisplayRow(label: "Rake", value: order.measurements.rakeFeet, unit: "LF", format: "%.1f")
                     MeasurementDisplayRow(label: "Eave", value: order.measurements.eaveFeet, unit: "LF", format: "%.1f")
                     MeasurementDisplayRow(label: "Hip", value: order.measurements.hipFeet, unit: "LF", format: "%.1f")
+                    if order.measurements.stepFlashingFeet > 0 {
+                        MeasurementDisplayRow(label: "Step Flashing", value: order.measurements.stepFlashingFeet, unit: "LF", format: "%.1f")
+                    }
                 }
             } header: {
                 HStack {
@@ -359,6 +362,78 @@ struct RoofOrderDetailView: View {
                 if order.hasSprayFoamInsulation {
                     Text("Ridge vent excluded - spray foam creates a conditioned attic that doesn't require ventilation.")
                         .foregroundColor(.orange)
+                }
+            }
+            
+            // Chimney Flashing Section
+            Section {
+                Stepper(value: $order.chimneyCount, in: 0...10) {
+                    HStack {
+                        Text("Number of Chimneys")
+                        Spacer()
+                        Text("\(order.chimneyCount)")
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .onChange(of: order.chimneyCount) { _, _ in
+                    recalculateMaterials()
+                }
+                
+                if order.chimneyCount > 0 {
+                    Toggle(isOn: $order.chimneyAgainstBrick) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Brick/Masonry Chimney")
+                            Text("Adds counter flashing for masonry")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .onChange(of: order.chimneyAgainstBrick) { _, _ in
+                        recalculateMaterials()
+                    }
+                    
+                    HStack {
+                        Text("Avg Chimney Width")
+                        Spacer()
+                        TextField("Width", value: $order.chimneyWidthFeet, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .keyboardType(.decimalPad)
+                            .frame(width: 60)
+                        Text("ft")
+                            .foregroundColor(.secondary)
+                    }
+                    .onChange(of: order.chimneyWidthFeet) { _, _ in
+                        recalculateMaterials()
+                    }
+                }
+            } header: {
+                Text("Chimney Flashing")
+            } footer: {
+                if order.chimneyCount > 0 {
+                    Text("Each chimney needs step flashing on sides, apron at front, and cricket/saddle at back.")
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            // Wall/Dormer Flashing Section (only show if step flashing detected)
+            if order.measurements.stepFlashingFeet > 0 {
+                Section {
+                    Toggle(isOn: $order.wallFlashingAgainstBrick) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Wall/Dormer Against Brick")
+                            Text("Adds counter flashing for masonry walls")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .onChange(of: order.wallFlashingAgainstBrick) { _, _ in
+                        recalculateMaterials()
+                    }
+                } header: {
+                    Text("Wall/Dormer Flashing")
+                } footer: {
+                    Text("\(String(format: "%.0f", order.measurements.stepFlashingFeet)) LF of step flashing detected. If against brick/masonry, counter flashing will be added.")
+                        .foregroundColor(.secondary)
                 }
             }
 

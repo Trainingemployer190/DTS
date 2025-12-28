@@ -681,6 +681,14 @@ final class RoofMaterialOrder {
     // Attic insulation type (affects ridge vent)
     var hasSprayFoamInsulation: Bool = false  // If true, skip ridge vent (conditioned attic)
     
+    // Chimney flashing options
+    var chimneyCount: Int = 0  // Number of chimneys on roof
+    var chimneyAgainstBrick: Bool = false  // If true, chimneys are brick/masonry (need counter flashing)
+    var chimneyWidthFeet: Double = 3.0  // Average chimney width for apron flashing calculation
+    
+    // Wall/Dormer flashing options (for step flashing areas)
+    var wallFlashingAgainstBrick: Bool = false  // If true, walls are brick/masonry (need counter flashing)
+    
     // Status
     var statusRaw: String = RoofOrderStatus.draft.rawValue
     var orderedAt: Date?
