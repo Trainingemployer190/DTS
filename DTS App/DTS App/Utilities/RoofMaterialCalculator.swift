@@ -32,6 +32,7 @@ class RoofMaterialCalculator {
         chimneyCount: Int = 0,
         chimneyAgainstBrick: Bool = false,
         chimneyWidthFeet: Double = 3.0,
+        chimneyNeedsCricket: Bool = false,
         wallFlashingAgainstBrick: Bool = false
     ) -> [RoofMaterialLineItem] {
 
@@ -188,30 +189,42 @@ class RoofMaterialCalculator {
             ))
         }
 
-        // 7. ICE & WATER SHIELD - GAF WeatherWatch 36"x66.7' 2SQ/RL (200 sqft/roll)
-        // iceWaterSqFt was already calculated above for underlayment deduction
+        // 7. ICE & WATER SHIELD - GAF WeatherWatch 36"x66.7' 2SQ/RL
+        // Roll dimensions: 36" wide (3') x 66.7' long = 200 sqft (2 SQ)
+        // - Valleys/Transitions: Calculate by LINEAR FEET (roll is 66.7' long)
+        // - Low-pitch areas: Calculate by SQUARE FEET (covering whole sections)
+        let rollLengthFeet = 66.7  // 66.7' per roll
+        var iceWaterRolls: Double = 0
         var iceWaterNotes: [String] = []
 
-        // Build notes for what ice & water covers
+        // Valleys - calculate by linear feet
         if factors.requiresIceWaterForValleys && measurements.valleyFeet > 0 {
-            let valleySqFt = measurements.valleyFeet * factors.iceWaterWidthFeet * 2
-            iceWaterNotes.append("\(String(format: "%.0f", valleySqFt)) sqft for valleys")
+            let valleyRolls = measurements.valleyFeet / rollLengthFeet
+            iceWaterRolls += valleyRolls
+            iceWaterNotes.append("\(String(format: "%.0f", measurements.valleyFeet)) LF valleys")
         }
-        if factors.requiresIceWaterForLowPitch && measurements.lowPitchSqFt > 0 {
-            iceWaterNotes.append("\(String(format: "%.0f", measurements.lowPitchSqFt)) sqft for low-pitch areas")
-        }
+        
+        // Transitions - calculate by linear feet
         if factors.requiresIceWaterForTransitions && measurements.transitionFeet > 0 {
-            let transitionSqFt = measurements.transitionFeet * factors.iceWaterWidthFeet * 2
-            iceWaterNotes.append("\(String(format: "%.0f", transitionSqFt)) sqft for transitions")
+            let transitionRolls = measurements.transitionFeet / rollLengthFeet
+            iceWaterRolls += transitionRolls
+            iceWaterNotes.append("\(String(format: "%.0f", measurements.transitionFeet)) LF transitions")
+        }
+        
+        // Low-pitch areas (under 4/12) - calculate by square feet
+        if factors.requiresIceWaterForLowPitch && measurements.lowPitchSqFt > 0 {
+            let lowPitchRolls = measurements.lowPitchSqFt / factors.iceWaterSqFtPerRoll
+            iceWaterRolls += lowPitchRolls
+            iceWaterNotes.append("\(String(format: "%.0f", measurements.lowPitchSqFt)) sqft low-pitch")
         }
 
-        if iceWaterSqFt > 0 {
+        if iceWaterRolls > 0 {
             let wasteFactor = 1.10  // 10% waste
-            let rollsNeeded = ceil(iceWaterSqFt * wasteFactor / factors.iceWaterSqFtPerRoll)
+            let rollsNeeded = ceil(iceWaterRolls * wasteFactor)
 
             materials.append(RoofMaterialLineItem(
                 name: "GAF WEATHERWATCH 36\"X66.7' 2SQ/RL",
-                description: "2 SQ per roll (200 sqft)",
+                description: "66.7 LF per roll (36\" wide)",
                 calculatedQuantity: rollsNeeded,
                 unit: "rolls",
                 category: "Ice & Water",
@@ -321,12 +334,12 @@ class RoofMaterialCalculator {
             ))
         }
         
-        // 15. CHIMNEY FLASHING - Step flashing, apron, and counter flashing
+        // 15. CHIMNEY FLASHING - Step flashing, apron, and optional cricket
         if chimneyCount > 0 {
             // Each chimney needs:
             // - Step flashing on both sides (approximately 6' per side = 12' per chimney)
             // - L-flashing/apron at front (width of chimney)
-            // - Cricket/saddle flashing at back (width of chimney)
+            // - Cricket/saddle flashing at back (optional, for larger chimneys)
             // - Counter flashing if brick (perimeter of chimney)
             
             let stepFlashingPerChimney = 12.0  // ~6' per side
@@ -356,6 +369,30 @@ class RoofMaterialCalculator {
                 category: "Flashing",
                 notes: "\(chimneyCount) chimney(s) × \(String(format: "%.0f", chimneyWidthFeet))' width"
             ))
+            
+            // Cricket framing and decking for back of chimney (optional)
+            if chimneyNeedsCricket {
+                // Cricket needs 2x4 framing and decking sheet
+                // 2 2x4s per chimney for cricket frame
+                materials.append(RoofMaterialLineItem(
+                    name: "2X4X8 LUMBER",
+                    description: "Cricket framing",
+                    calculatedQuantity: Double(chimneyCount) * 2,
+                    unit: "pieces",
+                    category: "Flashing",
+                    notes: "\(chimneyCount) chimney(s) × 2 boards each"
+                ))
+                
+                // 1 sheet of decking per chimney
+                materials.append(RoofMaterialLineItem(
+                    name: "OSB BOARD 7/16\" 4'X8'",
+                    description: "Cricket decking",
+                    calculatedQuantity: Double(chimneyCount),
+                    unit: "sheets",
+                    category: "Flashing",
+                    notes: "\(chimneyCount) chimney(s) - cricket deck"
+                ))
+            }
             
             // Counter flashing for brick chimneys
             if chimneyAgainstBrick {
@@ -470,24 +507,8 @@ class RoofMaterialCalculator {
             }
         }
 
-        // Measurements summary
-        body += """
-        ────────────────────────
-        MEASUREMENTS
-        ────────────────────────
-        
-        Ridge: \(String(format: "%.0f", measurements.ridgeFeet))'
-        Valley: \(String(format: "%.0f", measurements.valleyFeet))'
-        Rake: \(String(format: "%.0f", measurements.rakeFeet))'
-        Eave: \(String(format: "%.0f", measurements.eaveFeet))'
-        """
-
-        if measurements.hipFeet > 0 {
-            body += "\nHip: \(String(format: "%.0f", measurements.hipFeet))'"
-        }
-
         if !order.notes.isEmpty && includeNotes {
-            body += "\n\n────────────────────────\nNOTES\n────────────────────────\n\n\(order.notes)"
+            body += "────────────────────────\nNOTES\n────────────────────────\n\n\(order.notes)\n\n"
         }
 
         // Add legend if any manual adjustments
@@ -525,6 +546,7 @@ class RoofMaterialCalculator {
             chimneyCount: order.chimneyCount,
             chimneyAgainstBrick: order.chimneyAgainstBrick,
             chimneyWidthFeet: order.chimneyWidthFeet,
+            chimneyNeedsCricket: order.chimneyNeedsCricket,
             wallFlashingAgainstBrick: order.wallFlashingAgainstBrick
         )
 

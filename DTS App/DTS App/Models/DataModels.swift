@@ -685,6 +685,7 @@ final class RoofMaterialOrder {
     var chimneyCount: Int = 0  // Number of chimneys on roof
     var chimneyAgainstBrick: Bool = false  // If true, chimneys are brick/masonry (need counter flashing)
     var chimneyWidthFeet: Double = 3.0  // Average chimney width for apron flashing calculation
+    var chimneyNeedsCricket: Bool = false  // If true, add cricket framing and decking at back of chimney
     
     // Wall/Dormer flashing options (for step flashing areas)
     var wallFlashingAgainstBrick: Bool = false  // If true, walls are brick/masonry (need counter flashing)

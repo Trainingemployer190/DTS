@@ -392,6 +392,18 @@ struct RoofOrderDetailView: View {
                         recalculateMaterials()
                     }
                     
+                    Toggle(isOn: $order.chimneyNeedsCricket) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Needs Cricket")
+                            Text("Adds framing and decking to divert water")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .onChange(of: order.chimneyNeedsCricket) { _, _ in
+                        recalculateMaterials()
+                    }
+                    
                     HStack {
                         Text("Avg Chimney Width")
                         Spacer()
@@ -410,7 +422,7 @@ struct RoofOrderDetailView: View {
                 Text("Chimney Flashing")
             } footer: {
                 if order.chimneyCount > 0 {
-                    Text("Each chimney needs step flashing on sides, apron at front, and cricket/saddle at back.")
+                    Text("Each chimney needs step flashing on sides and apron at front.\(order.chimneyNeedsCricket ? " Cricket framing and decking will be added." : "")")
                         .foregroundColor(.secondary)
                 }
             }
