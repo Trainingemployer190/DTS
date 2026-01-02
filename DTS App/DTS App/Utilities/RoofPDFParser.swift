@@ -90,9 +90,17 @@ class RoofPDFParser {
             }
         }
         
-        // Structural detection: EagleView uses "Total Roof Area" and "SF" (square feet)
-        if text.localizedCaseInsensitiveContains("Total Roof Area") ||
-           (text.contains(" SF") && text.localizedCaseInsensitiveContains("Facet")) {
+        // Structural detection: EagleView uses "Total Roof Area" and specific patterns
+        // Look for EagleView-specific patterns: "Total Roof Area =", "Total Ridges/Hips =", "Predominant Pitch ="
+        let eagleViewPatterns = [
+            text.localizedCaseInsensitiveContains("Total Roof Area"),
+            text.localizedCaseInsensitiveContains("Total Ridges/Hips"),
+            text.localizedCaseInsensitiveContains("Predominant Pitch"),
+            text.localizedCaseInsensitiveContains("Total Roof Facets"),
+            text.localizedCaseInsensitiveContains("eagleview.com"),
+            text.contains(" SF") && text.localizedCaseInsensitiveContains("Facet")
+        ]
+        if eagleViewPatterns.filter({ $0 }).count >= 2 {
             print("🔍 Detected format: EagleView (structural match)")
             return formats.first { $0.name == "EagleView" }!
         }
@@ -479,9 +487,11 @@ class RoofPDFParser {
         var warnings: [String] = []
         var fieldsFound = 0
 
-        // EagleView uses slightly different terminology
-        // "Total Roof Area" instead of "Total Squares"
+        // EagleView uses "Total Roof Area =X,XXX sq ft" format
+        // Pattern handles both "=" and ":" separators, and commas in numbers
         if let area = extractNumber(from: text, patterns: [
+            "Total\\s*Roof\\s*Area\\s*[=:]\\s*([\\d,]+\\.?\\d*)\\s*sq\\s*ft",
+            "Total\\s*Area\\s*\\(All\\s*Pitches\\)\\s*[=:]?\\s*([\\d,]+\\.?\\d*)\\s*sq\\s*ft",
             "Total\\s*Roof\\s*Area:?\\s*([\\d,]+\\.?\\d*)\\s*(?:sq\\.?\\s*ft|SF)",
             "Roof\\s*Area:?\\s*([\\d,]+\\.?\\d*)"
         ]) {
@@ -492,33 +502,111 @@ class RoofPDFParser {
             warnings.append("Could not find roof area")
         }
 
-        // EagleView labels
-        if let ridge = extractNumber(from: text, patterns: ["Ridge(?:/Hip)?:?\\s*([\\d.]+)\\s*(?:ft|LF)"]) {
-            measurements.ridgeFeet = ridge
+        // EagleView shows "Total Ridges/Hips =116 ft" combined, or separate "Ridges = 114 ft" and "Hips = 2 ft"
+        // Try combined first
+        if let ridgeHip = extractNumber(from: text, patterns: ["Total\\s*Ridges?/Hips?\\s*[=:]\\s*([\\d.]+)\\s*ft"]) {
+            measurements.ridgeFeet = ridgeHip  // Combined ridge + hip
             fieldsFound += 1
+        } else {
+            // Try separate ridge and hip
+            if let ridge = extractNumber(from: text, patterns: [
+                "Ridges?\\s*[=:]\\s*([\\d.]+)\\s*ft",
+                "Ridge(?:/Hip)?:?\\s*([\\d.]+)\\s*(?:ft|LF)"
+            ]) {
+                measurements.ridgeFeet = ridge
+                fieldsFound += 1
+            }
+            if let hip = extractNumber(from: text, patterns: [
+                "Hips?\\s*[=:]\\s*([\\d.]+)\\s*ft"
+            ]) {
+                measurements.hipFeet = hip
+                fieldsFound += 1
+            }
         }
 
-        if let valley = extractNumber(from: text, patterns: ["Valley:?\\s*([\\d.]+)\\s*(?:ft|LF)"]) {
+        // Valleys - "Total Valleys =125 ft" or "Valleys = 125 ft"
+        if let valley = extractNumber(from: text, patterns: [
+            "Total\\s*Valleys?\\s*[=:]\\s*([\\d.]+)\\s*ft",
+            "Valleys?\\s*[=:]\\s*([\\d.]+)\\s*ft",
+            "Valley:?\\s*([\\d.]+)\\s*(?:ft|LF)"
+        ]) {
             measurements.valleyFeet = valley
             fieldsFound += 1
         }
 
-        if let rake = extractNumber(from: text, patterns: ["Rake:?\\s*([\\d.]+)\\s*(?:ft|LF)"]) {
+        // Rakes - "Total Rakes =262 ft" or "Rakes = 262 ft"
+        if let rake = extractNumber(from: text, patterns: [
+            "Total\\s*Rakes?\\s*[=:]\\s*([\\d.]+)\\s*ft",
+            "Rakes?†?\\s*[=:]\\s*([\\d.]+)\\s*ft",
+            "Rake:?\\s*([\\d.]+)\\s*(?:ft|LF)"
+        ]) {
             measurements.rakeFeet = rake
             fieldsFound += 1
         }
 
-        if let eave = extractNumber(from: text, patterns: ["Eave(?:s)?:?\\s*([\\d.]+)\\s*(?:ft|LF)"]) {
+        // Eaves - "Total Eaves =126 ft" or "Eaves/Starter = 126 ft"
+        if let eave = extractNumber(from: text, patterns: [
+            "Total\\s*Eaves?\\s*[=:]\\s*([\\d.]+)\\s*ft",
+            "Eaves?(?:/Starter)?[‡]?\\s*[=:]\\s*([\\d.]+)\\s*ft",
+            "Eave(?:s)?:?\\s*([\\d.]+)\\s*(?:ft|LF)"
+        ]) {
             measurements.eaveFeet = eave
             fieldsFound += 1
         }
 
+        // Step flashing - "Step flashing = 73 ft"
+        if let stepFlashing = extractNumber(from: text, patterns: [
+            "Step\\s*[Ff]lashing\\s*[=:]\\s*([\\d.]+)\\s*ft"
+        ]) {
+            measurements.stepFlashingFeet = stepFlashing
+            fieldsFound += 1
+        }
+
+        // Wall flashing - "Flashing = 41 ft" (general wall flashing, separate from step flashing)
+        if let wallFlashing = extractNumber(from: text, patterns: [
+            "(?<!Step\\s)Flashing\\s*[=:]\\s*([\\d.]+)\\s*ft"
+        ]) {
+            measurements.wallFlashingFeet = wallFlashing
+            fieldsFound += 1
+        }
+
+        // Predominant Pitch - "Predominant Pitch =9/12"
         if let pitch = extractPitch(from: text) {
             measurements.pitch = pitch
             measurements.pitchMultiplier = pitchToMultiplier(pitch)
+            fieldsFound += 1
         }
 
-        let confidence = Double(fieldsFound) / 6.0 * 100
+        // Parse pitch breakdown if available - "Areas per Pitch"
+        // Look for patterns like "4/12 ... 163.5" or pitch/area pairs
+        let pitchAreaPattern = try? NSRegularExpression(
+            pattern: "(\\d+)/12\\s+(?:[\\d.]+\\s+)*(\\d+\\.?\\d*)\\s*(?:sq\\s*ft)?",
+            options: [.caseInsensitive]
+        )
+        if let regex = pitchAreaPattern {
+            let range = NSRange(text.startIndex..., in: text)
+            let matches = regex.matches(in: text, options: [], range: range)
+            for match in matches {
+                if match.numberOfRanges >= 3,
+                   let pitchRange = Range(match.range(at: 1), in: text),
+                   let areaRange = Range(match.range(at: 2), in: text) {
+                    let pitchNum = String(text[pitchRange])
+                    let areaStr = String(text[areaRange])
+                    if let area = Double(areaStr), area > 10 {  // Filter out small noise values
+                        let pitch = "\(pitchNum)/12"
+                        measurements.pitchBreakdown.append(PitchArea(pitch: pitch, sqFt: area))
+                        
+                        // Check for low-pitch areas (under 4/12)
+                        if let pNum = Int(pitchNum), pNum < 4 {
+                            measurements.lowPitchSqFt += area
+                            measurements.lowPitchAreas.append("\(pitch) pitch: \(Int(area)) sqft")
+                        }
+                    }
+                }
+            }
+        }
+
+        let confidence = Double(fieldsFound) / 8.0 * 100  // Now checking 8 possible fields
         return (measurements, min(confidence, 100), warnings)
     }
 

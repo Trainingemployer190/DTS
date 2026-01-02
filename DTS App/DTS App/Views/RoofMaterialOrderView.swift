@@ -181,29 +181,39 @@ struct RoofMaterialOrderView: View {
             return
         }
         
+        // Check both possible directories (RoofPDFs from Share Extension, PendingPDFs from Files app)
         let roofPDFsDir = containerURL.appendingPathComponent("RoofPDFs", isDirectory: true)
+        let pendingPDFsDir = containerURL.appendingPathComponent("PendingPDFs", isDirectory: true)
         
-        // Find the PDF file that starts with the pending ID
-        do {
-            let files = try FileManager.default.contentsOfDirectory(at: roofPDFsDir, includingPropertiesForKeys: nil)
-            if let matchingFile = files.first(where: { $0.lastPathComponent.hasPrefix(pendingId) }) {
-                print("✅ Found matching PDF: \(matchingFile.lastPathComponent)")
-                
-                isImporting = true
-                
-                Task {
-                    await importPDFFromShareExtension(from: matchingFile)
-                    await MainActor.run {
-                        isImporting = false
-                        router.clearPendingImport()
-                    }
+        // Find the PDF file that matches the pending ID
+        var matchingFile: URL?
+        
+        for dir in [pendingPDFsDir, roofPDFsDir] {
+            do {
+                let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+                if let found = files.first(where: { $0.lastPathComponent.hasPrefix(pendingId) || $0.deletingPathExtension().lastPathComponent == pendingId }) {
+                    matchingFile = found
+                    break
                 }
-            } else {
-                print("❌ No matching PDF found for ID: \(pendingId)")
-                router.clearPendingImport()
+            } catch {
+                // Directory might not exist, continue checking
             }
-        } catch {
-            print("❌ Error reading PDF directory: \(error)")
+        }
+        
+        if let matchingFile = matchingFile {
+            print("✅ Found matching PDF: \(matchingFile.lastPathComponent)")
+            
+            isImporting = true
+            
+            Task {
+                await importPDFFromShareExtension(from: matchingFile)
+                await MainActor.run {
+                    isImporting = false
+                    router.clearPendingImport()
+                }
+            }
+        } else {
+            print("❌ No matching PDF found for ID: \(pendingId)")
             router.clearPendingImport()
         }
     }

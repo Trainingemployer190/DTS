@@ -140,6 +140,13 @@ struct DTSApp: App {
 
     private func handleIncomingURL(_ url: URL) {
         print("🔗 Received URL: \(url.absoluteString)")
+        
+        // Handle PDF files opened from Files app
+        if url.isFileURL && url.pathExtension.lowercased() == "pdf" {
+            print("📄 Received PDF file: \(url.lastPathComponent)")
+            handleIncomingPDF(url)
+            return
+        }
 
         // Handle Jobber OAuth callback
         if url.scheme == "dts-app" {
@@ -171,6 +178,46 @@ struct DTSApp: App {
         if url.scheme == "com.googleusercontent.apps.871965263646-e5viush2cefbdtbe7tgmq3t0rr7bbl4g" {
             print("📱 Processing Google OAuth callback")
             // OAuth is handled by ASWebAuthenticationSession
+        }
+    }
+    
+    private func handleIncomingPDF(_ url: URL) {
+        // Need security-scoped access for files from other apps
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        
+        // Copy to shared container
+        guard let pendingDir = SharedContainerHelper.pendingPDFDirectory else {
+            print("❌ Cannot access shared container")
+            return
+        }
+        
+        let uniqueId = UUID().uuidString
+        let destURL = pendingDir.appendingPathComponent("\(uniqueId).pdf")
+        
+        do {
+            // Remove existing file if needed
+            if FileManager.default.fileExists(atPath: destURL.path) {
+                try FileManager.default.removeItem(at: destURL)
+            }
+            
+            // Copy PDF to shared container
+            try FileManager.default.copyItem(at: url, to: destURL)
+            print("✅ PDF copied to shared container: \(destURL.lastPathComponent)")
+            
+            // Save original filename
+            let sharedDefaults = UserDefaults(suiteName: "group.DTS.DTS-App")
+            sharedDefaults?.set(url.deletingPathExtension().lastPathComponent, forKey: "pendingRoofPDFName_\(uniqueId)")
+            sharedDefaults?.set(uniqueId, forKey: "pendingRoofPDFImport")
+            
+            // Navigate to roof orders
+            router.navigateToRoofImport(pdfId: uniqueId)
+        } catch {
+            print("❌ Failed to copy PDF: \(error)")
         }
     }
 }

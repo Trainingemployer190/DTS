@@ -42,6 +42,29 @@ enum SharedContainerHelper {
     static var documentsDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
+    
+    /// Get the pending PDF directory for Share Extension imports
+    static var pendingPDFDirectory: URL? {
+        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) else {
+            print("❌ Failed to access App Group container for pending PDFs")
+            return nil
+        }
+        
+        let pdfDir = containerURL.appendingPathComponent("PendingPDFs", isDirectory: true)
+        
+        // Create directory if it doesn't exist
+        if !FileManager.default.fileExists(atPath: pdfDir.path) {
+            do {
+                try FileManager.default.createDirectory(at: pdfDir, withIntermediateDirectories: true, attributes: nil)
+                print("✅ Created pending PDF directory: \(pdfDir.path)")
+            } catch {
+                print("❌ Failed to create pending PDF directory: \(error)")
+                return nil
+            }
+        }
+        
+        return pdfDir
+    }
 
     /// Get the best available storage directory (shared container preferred, Documents fallback)
     static var photosStorageDirectory: URL {
