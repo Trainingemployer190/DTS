@@ -36,6 +36,11 @@ struct QuoteFormView: View {
     // Calculator state
     @State private var showingCalculator = false
     @State private var calculatorField: CalculatorField?
+    
+    // New Quote confirmation
+    @State private var showingNewQuoteConfirmation = false
+    @State private var showingQuoteSavedAlert = false
+    @State private var quoteSavedMessage = ""
 
     // Added focus state for sales commission field
     @FocusState private var isSalesCommissionFocused: Bool
@@ -83,6 +88,18 @@ struct QuoteFormView: View {
 
     private var settings: AppSettings {
         settingsArray.first ?? AppSettings()
+    }
+    
+    /// Check if form has any entered data that would be lost on reset
+    private var formHasData: Bool {
+        !quoteDraft.clientName.isEmpty ||
+        !quoteDraft.clientAddress.isEmpty ||
+        quoteDraft.gutterFeet > 0 ||
+        quoteDraft.downspoutFeet > 0 ||
+        quoteDraft.aElbows > 0 ||
+        quoteDraft.bElbows > 0 ||
+        !quoteDraft.additionalLaborItems.isEmpty ||
+        !photoCaptureManager.capturedImages.filter { $0.quoteDraftId == quoteDraft.localId }.isEmpty
     }
 
     // Computed properties to simplify complex bindings
@@ -538,13 +555,32 @@ struct QuoteFormView: View {
                 }
             }
             .alert("Quote Submitted Successfully!", isPresented: $showingJobberSuccess) {
-                Button("OK") {
-                    // Navigate to Home after user acknowledges success
-                    router.selectedTab = 0
-                    dismiss()
+                Button("Start New Quote") {
+                    resetForNewQuote()
+                }
+                Button("View History") {
+                    router.selectedTab = 2
                 }
             } message: {
-                Text("Your quote has been added as a note to the Jobber assessment and created as an official quote with proper line items and pricing.")
+                Text("Quote saved to Jobber and history. Ready to create a new quote.")
+            }
+            .alert("Quote Saved!", isPresented: $showingQuoteSavedAlert) {
+                Button("Start New Quote") {
+                    resetForNewQuote()
+                }
+                Button("View History") {
+                    router.selectedTab = 2
+                }
+            } message: {
+                Text(quoteSavedMessage)
+            }
+            .alert("Start New Quote?", isPresented: $showingNewQuoteConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Clear & Start New", role: .destructive) {
+                    resetForNewQuote()
+                }
+            } message: {
+                Text("This will clear the current form. Any unsaved data will be lost.")
             }
             .alert("Submission Failed", isPresented: .constant(jobberSubmissionError != nil)) {
                 // Show retry option if network is available and under max attempts
@@ -1303,13 +1339,24 @@ struct QuoteFormView: View {
             } else if jobberAPI.isAuthenticated && job != nil {
                 EmptyView()
             } else {
-                HStack {
-                    Button("Complete Quote") {
-                        saveQuoteAsCompleted()
+                VStack(spacing: 8) {
+                    HStack {
+                        Button("Complete Quote") {
+                            saveQuoteAsCompleted()
+                        }
+                        .disabled(quoteDraft.gutterFeet == 0)
+                        .buttonStyle(.borderedProminent)
+                        .frame(maxWidth: .infinity)
                     }
-                    .disabled(quoteDraft.gutterFeet == 0)
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity)
+                    
+                    Button(action: {
+                        startNewQuote()
+                    }) {
+                        Label("Clear & Start New Quote", systemImage: "doc.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.secondary)
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
@@ -1322,6 +1369,20 @@ struct QuoteFormView: View {
     private var topActionButtonsBar: some View {
         if existingQuote == nil && jobberAPI.isAuthenticated && job != nil {
             HStack(spacing: 8) {
+                // New Quote button
+                Button(action: {
+                    startNewQuote()
+                }) {
+                    Label("New", systemImage: "doc.badge.plus")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                }
+                .buttonStyle(.bordered)
+                .tint(.secondary)
+                
+                Spacer()
+                
                 Button(action: {
                     saveQuoteToJobber()
                 }) {
@@ -1346,7 +1407,24 @@ struct QuoteFormView: View {
                 .tint(.blue)
                 .disabled(quoteDraft.gutterFeet == 0)
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.horizontal)
+            .padding(.vertical, 4)
+        } else if existingQuote == nil {
+            // Standalone quote (no Jobber) - show New Quote button
+            HStack {
+                Button(action: {
+                    startNewQuote()
+                }) {
+                    Label("New Quote", systemImage: "doc.badge.plus")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                }
+                .buttonStyle(.bordered)
+                .tint(.secondary)
+                
+                Spacer()
+            }
             .padding(.horizontal)
             .padding(.vertical, 4)
         } else {
@@ -1399,10 +1477,11 @@ struct QuoteFormView: View {
 
         // Generate PDF
         generateQuotePDF(breakdown: breakdown)
-        // Navigate to Home after completion
+        
+        // Show success and reset form for new quote
         DispatchQueue.main.async {
-            router.selectedTab = 0
-            dismiss()
+            quoteSavedMessage = "Quote completed and saved to history!"
+            showingQuoteSavedAlert = true
         }
     }
 
@@ -1432,10 +1511,10 @@ struct QuoteFormView: View {
         // Generate PDF
         generateQuotePDF(breakdown: breakdown)
 
-        // Navigate to Home after saving draft
+        // Show success and reset form for new quote
         DispatchQueue.main.async {
-            router.selectedTab = 0
-            dismiss()
+            quoteSavedMessage = "Draft saved to history!"
+            showingQuoteSavedAlert = true
         }
     }
 
@@ -1860,6 +1939,68 @@ struct QuoteFormView: View {
         showingLineItemEditor = false
         newLineItemTitle = ""
         newLineItemAmount = 0
+    }
+    
+    /// Reset the form for a new quote, optionally deleting the current unsaved draft
+    private func resetForNewQuote() {
+        let oldQuoteId = quoteDraft.localId
+        
+        // Delete the current draft from SwiftData if it hasn't been completed/synced
+        if quoteDraft.quoteStatus == .draft && quoteDraft.syncState == .pending {
+            modelContext.delete(quoteDraft)
+            try? modelContext.save()
+            print("🗑️ Deleted unsaved draft: \(oldQuoteId)")
+        }
+        
+        // Clear photos for the old quote from PhotoCaptureManager
+        photoCaptureManager.capturedImages = photoCaptureManager.capturedImages.filter { photo in
+            photo.quoteDraftId != oldQuoteId
+        }
+        print("📸 Cleared photos for old quote from PhotoCaptureManager")
+        
+        // Create a fresh QuoteDraft
+        let newQuote = QuoteDraft()
+        
+        // Apply default settings from AppSettings
+        newQuote.markupPercent = settings.defaultMarkupPercent
+        newQuote.profitMarginPercent = settings.defaultProfitMarginPercent
+        newQuote.salesCommissionPercent = settings.defaultSalesCommissionPercent
+        
+        // If we came from a job, pre-fill the job info
+        if let job = job {
+            newQuote.clientName = job.clientName
+            newQuote.clientAddress = job.address
+            newQuote.clientId = job.clientId
+            newQuote.jobId = job.jobId
+            
+            // Save the new draft to SwiftData
+            modelContext.insert(newQuote)
+            try? modelContext.save()
+        }
+        
+        // Reset the state
+        quoteDraft = newQuote
+        
+        // Clear other form state
+        showingLineItemEditor = false
+        newLineItemTitle = ""
+        newLineItemAmount = 0
+        generatedPDFURL = nil
+        
+        print("✅ Form reset for new quote: \(newQuote.localId)")
+        
+        // Haptic feedback
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+    }
+    
+    /// Trigger new quote with confirmation if form has data
+    private func startNewQuote() {
+        if formHasData {
+            showingNewQuoteConfirmation = true
+        } else {
+            resetForNewQuote()
+        }
     }
 
     // MARK: - Photo Management
