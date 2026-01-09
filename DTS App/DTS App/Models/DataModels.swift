@@ -67,8 +67,8 @@ final class AppSettings {
     var roofStarterStripLFPerBundle: Double = 120.0  // ~120 LF per bundle (GAF Pro-Start)
     var roofStarterStripWasteFactor: Double = 0.05  // 5% waste
 
-    // Ridge Cap - GAF Seal-A-Ridge covers 25 LF per bundle
-    var roofRidgeCapLFPerBundle: Double = 25.0  // 25 LF per bundle (GAF Seal-A-Ridge)
+    // Ridge Cap - GAF Seal-A-Ridge covers 20 LF per bundle
+    var roofRidgeCapLFPerBundle: Double = 20.0  // 20 LF per bundle (GAF Seal-A-Ridge)
     var roofRidgeCapWasteFactor: Double = 0.05  // 5% waste
 
     // Drip Edge
@@ -690,6 +690,10 @@ final class RoofMaterialOrder {
     // Wall/Dormer flashing options (for step flashing areas)
     var wallFlashingAgainstBrick: Bool = false  // If true, walls are brick/masonry (need counter flashing)
     
+    // OSB decking replacement
+    var osbSheetsNeeded: Int = 0  // Number of 4'x8' OSB sheets for deck replacement
+    var osbNotes: String = ""  // Optional notes about OSB (e.g., "rotted section near valley")
+    
     // Status
     var statusRaw: String = RoofOrderStatus.draft.rawValue
     var orderedAt: Date?
@@ -884,7 +888,7 @@ struct RoofPresetFactors: Codable {
         underlaymentWasteFactor: Double = 0.10,
         usesSyntheticUnderlayment: Bool = true,
         starterStripLFPerBundle: Double = 120.0,  // GAF Pro-Start
-        ridgeCapLFPerBundle: Double = 25.0,  // GAF Seal-A-Ridge
+        ridgeCapLFPerBundle: Double = 20.0,  // GAF Seal-A-Ridge (20 LF/bundle)
         dripEdgeLFPerPiece: Double = 10.0,
         dripEdgeWasteFactor: Double = 0.05,
         includesDripEdge: Bool = true,

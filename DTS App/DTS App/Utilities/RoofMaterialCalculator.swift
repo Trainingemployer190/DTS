@@ -33,7 +33,9 @@ class RoofMaterialCalculator {
         chimneyAgainstBrick: Bool = false,
         chimneyWidthFeet: Double = 3.0,
         chimneyNeedsCricket: Bool = false,
-        wallFlashingAgainstBrick: Bool = false
+        wallFlashingAgainstBrick: Bool = false,
+        osbSheetsNeeded: Int = 0,
+        osbNotes: String = ""
     ) -> [RoofMaterialLineItem] {
 
         var materials: [RoofMaterialLineItem] = []
@@ -126,20 +128,21 @@ class RoofMaterialCalculator {
             ))
         }
 
-        // 4. RIDGE CAP - GAF SG S-A-R [COLOR] 25LF (25 LF/bundle)
+        // 4. RIDGE CAP - GAF SG S-A-R [COLOR] 20LF (20 LF/bundle + 1 extra always)
         if factors.includesRidgeCap && (measurements.ridgeFeet + measurements.hipFeet) > 0 {
             let ridgeHipTotal = measurements.ridgeFeet + measurements.hipFeet
             let wasteFactor = 1.05  // 5% waste for ridge cap
-            let bundlesNeeded = ceil(ridgeHipTotal * wasteFactor / factors.ridgeCapLFPerBundle)
-            let ridgeCapName = colorUpper.isEmpty ? "GAF SG S-A-R 25LF" : "GAF SG S-A-R \(colorUpper) 25LF"
+            // Calculate bundles needed + 1 extra bundle per job
+            let bundlesNeeded = ceil(ridgeHipTotal * wasteFactor / factors.ridgeCapLFPerBundle) + 1
+            let ridgeCapName = colorUpper.isEmpty ? "GAF SG S-A-R 20LF" : "GAF SG S-A-R \(colorUpper) 20LF"
 
             materials.append(RoofMaterialLineItem(
                 name: ridgeCapName,
-                description: "25 LF per bundle",
+                description: "20 LF per bundle (+1 extra)",
                 calculatedQuantity: bundlesNeeded,
                 unit: "bundles",
                 category: "Ridge Cap",
-                notes: "\(String(format: "%.0f", ridgeHipTotal)) LF (ridge + hip)"
+                notes: "\(String(format: "%.0f", ridgeHipTotal)) LF (ridge + hip) + 1 extra"
             ))
         }
 
@@ -434,6 +437,19 @@ class RoofMaterialCalculator {
             category: "Flashing",
             notes: "1 per job"
         ))
+        
+        // 18. OSB DECKING - 7/16" 4'x8' sheets (user-specified quantity)
+        if osbSheetsNeeded > 0 {
+            let notes = osbNotes.isEmpty ? "\(osbSheetsNeeded) sheet(s) for deck replacement" : osbNotes
+            materials.append(RoofMaterialLineItem(
+                name: "OSB BOARD 7/16\" 4'X8'",
+                description: "Roof decking replacement",
+                calculatedQuantity: Double(osbSheetsNeeded),
+                unit: "sheets",
+                category: "Decking",
+                notes: notes
+            ))
+        }
 
         return materials
     }
@@ -495,7 +511,7 @@ class RoofMaterialCalculator {
 
         // Materials list - grouped by category, compact format
         let categories = Dictionary(grouping: materials, by: { $0.category })
-        let categoryOrder = ["Shingles", "Underlayment", "Starter", "Ridge Cap", "Ventilation", "Flashing", "Ice & Water", "Nails", "Accessories"]
+        let categoryOrder = ["Shingles", "Underlayment", "Starter", "Ridge Cap", "Ventilation", "Flashing", "Ice & Water", "Nails", "Accessories", "Decking"]
 
         for category in categoryOrder {
             guard let items = categories[category], !items.isEmpty else { continue }
@@ -547,7 +563,9 @@ class RoofMaterialCalculator {
             chimneyAgainstBrick: order.chimneyAgainstBrick,
             chimneyWidthFeet: order.chimneyWidthFeet,
             chimneyNeedsCricket: order.chimneyNeedsCricket,
-            wallFlashingAgainstBrick: order.wallFlashingAgainstBrick
+            wallFlashingAgainstBrick: order.wallFlashingAgainstBrick,
+            osbSheetsNeeded: order.osbSheetsNeeded,
+            osbNotes: order.osbNotes
         )
 
         // Preserve manual overrides from existing materials

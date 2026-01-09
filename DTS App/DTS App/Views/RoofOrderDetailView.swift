@@ -448,6 +448,35 @@ struct RoofOrderDetailView: View {
                         .foregroundColor(.secondary)
                 }
             }
+            
+            // OSB Decking Section
+            Section {
+                Stepper(value: $order.osbSheetsNeeded, in: 0...100) {
+                    HStack {
+                        Text("OSB Sheets (7/16\" 4'x8')")
+                        Spacer()
+                        Text("\(order.osbSheetsNeeded)")
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .onChange(of: order.osbSheetsNeeded) { _, _ in
+                    recalculateMaterials()
+                }
+                
+                if order.osbSheetsNeeded > 0 {
+                    TextField("OSB Notes (optional)", text: $order.osbNotes)
+                        .onChange(of: order.osbNotes) { _, _ in
+                            recalculateMaterials()
+                        }
+                }
+            } header: {
+                Text("Decking Replacement")
+            } footer: {
+                if order.osbSheetsNeeded > 0 {
+                    Text("OSB will be added to materials list for deck replacement/repair.")
+                        .foregroundColor(.secondary)
+                }
+            }
 
             // Materials Section
             Section {
@@ -503,6 +532,8 @@ struct RoofOrderDetailView: View {
 
                 // Share button (always available - works on simulator too)
                 Button {
+                    // Recalculate to ensure materials reflect latest changes
+                    recalculateMaterials()
                     showingShareSheet = true
                 } label: {
                     HStack {
@@ -513,6 +544,8 @@ struct RoofOrderDetailView: View {
 
                 // Copy to clipboard
                 Button {
+                    // Recalculate to ensure materials reflect latest changes
+                    recalculateMaterials()
                     let orderText = RoofMaterialCalculator.generateEmailBody(order: order)
                     UIPasteboard.general.string = orderText
                 } label: {
@@ -628,13 +661,19 @@ struct RoofOrderDetailView: View {
         // Add material order page to the document
         originalDocument.insert(orderPage, at: originalDocument.pageCount)
         
-        // Save to temp file for sharing
+        // Save to temp file for sharing with timestamp to prevent caching
         let tempDir = FileManager.default.temporaryDirectory
-        let filename = "\(order.projectName.isEmpty ? "Roof_Order" : order.projectName.replacingOccurrences(of: " ", with: "_"))_with_materials.pdf"
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let baseName = order.projectName.isEmpty ? "Roof_Order" : order.projectName.replacingOccurrences(of: " ", with: "_")
+        let filename = "\(baseName)_\(timestamp)_materials.pdf"
         let outputURL = tempDir.appendingPathComponent(filename)
         
-        // Remove existing temp file if any
-        try? FileManager.default.removeItem(at: outputURL)
+        // Clean up old temp files for this order
+        if let files = try? FileManager.default.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil) {
+            for file in files where file.lastPathComponent.hasPrefix(baseName) && file.lastPathComponent.hasSuffix("_materials.pdf") {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
         
         if originalDocument.write(to: outputURL) {
             print("✅ Created combined PDF at: \(outputURL.path)")
