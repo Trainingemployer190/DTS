@@ -715,9 +715,6 @@ struct QuoteFormView: View {
                     }
                 }
             }
-            .safeAreaInset(edge: .top) {
-                topActionButtonsBar
-            }
             .safeAreaInset(edge: .bottom) {
                 actionButtonsBar
             }
@@ -828,6 +825,9 @@ struct QuoteFormView: View {
     private var formContent: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
+                // New Quote button at top (scrolls with content)
+                topActionButtonsBar
+                
                 clientInfoSectionContent
                 colorSectionContent
                 measurementsSectionContent
@@ -877,13 +877,13 @@ struct QuoteFormView: View {
 
     @ViewBuilder
     private var clientInfoSectionContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("Client Information")
                 .font(.headline)
                 .padding(.horizontal)
-                .padding(.top)
+                .padding(.top, 8)
 
-            VStack(spacing: 16) {
+            VStack(spacing: 10) {
                 HStack {
                     Text("Client Name")
                     Spacer()
@@ -902,7 +902,7 @@ struct QuoteFormView: View {
                 }
                 .padding(.horizontal)
             }
-            .padding(.bottom)
+            .padding(.bottom, 8)
         }
         .background(Color(.systemBackground))
     }
@@ -1374,9 +1374,7 @@ struct QuoteFormView: View {
                     startNewQuote()
                 }) {
                     Label("New", systemImage: "doc.badge.plus")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 12)
+                        .font(.subheadline.weight(.medium))
                 }
                 .buttonStyle(.bordered)
                 .tint(.secondary)
@@ -1386,10 +1384,8 @@ struct QuoteFormView: View {
                 Button(action: {
                     saveQuoteToJobber()
                 }) {
-                    Text(isSavingToJobber ? "Saving to Jobber…" : "Save to Jobber")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(width: 150)
-                        .padding(.vertical, 8)
+                    Text(isSavingToJobber ? "Saving…" : "Save to Jobber")
+                        .font(.subheadline.weight(.medium))
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.blue)
@@ -1398,17 +1394,15 @@ struct QuoteFormView: View {
                 Button(action: {
                     saveQuoteAsDraft()
                 }) {
-                    Text("Save as Draft")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(width: 150)
-                        .padding(.vertical, 8)
+                    Text("Save Draft")
+                        .font(.subheadline.weight(.medium))
                 }
                 .buttonStyle(.bordered)
                 .tint(.blue)
                 .disabled(quoteDraft.gutterFeet == 0)
             }
             .padding(.horizontal)
-            .padding(.vertical, 4)
+            .padding(.vertical, 6)
         } else if existingQuote == nil {
             // Standalone quote (no Jobber) - show New Quote button
             HStack {
@@ -1416,9 +1410,7 @@ struct QuoteFormView: View {
                     startNewQuote()
                 }) {
                     Label("New Quote", systemImage: "doc.badge.plus")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 12)
+                        .font(.subheadline.weight(.medium))
                 }
                 .buttonStyle(.bordered)
                 .tint(.secondary)
@@ -1426,7 +1418,7 @@ struct QuoteFormView: View {
                 Spacer()
             }
             .padding(.horizontal)
-            .padding(.vertical, 4)
+            .padding(.vertical, 6)
         } else {
             EmptyView()
         }
