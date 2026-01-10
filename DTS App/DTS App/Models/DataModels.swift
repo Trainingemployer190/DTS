@@ -566,6 +566,45 @@ struct RoofMaterialLineItem: Codable, Identifiable {
     var category: String  // "Shingles", "Underlayment", "Flashing", etc.
     var supplierSKU: String?
     var notes: String?
+    private var _isCustom: Bool?  // Stored as optional for backward compatibility
+    
+    /// True if manually added by user (not calculated)
+    var isCustom: Bool {
+        get { _isCustom ?? false }
+        set { _isCustom = newValue }
+    }
+    
+    // Custom coding keys to handle backward compatibility
+    enum CodingKeys: String, CodingKey {
+        case id, name, description, calculatedQuantity, manualQuantity
+        case unit, category, supplierSKU, notes
+        case _isCustom = "isCustom"
+    }
+    
+    // Explicit memberwise initializer (required because of CodingKeys)
+    init(
+        id: UUID = UUID(),
+        name: String,
+        description: String? = nil,
+        calculatedQuantity: Double,
+        manualQuantity: Double? = nil,
+        unit: String,
+        category: String,
+        supplierSKU: String? = nil,
+        notes: String? = nil,
+        isCustom: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.calculatedQuantity = calculatedQuantity
+        self.manualQuantity = manualQuantity
+        self.unit = unit
+        self.category = category
+        self.supplierSKU = supplierSKU
+        self.notes = notes
+        self._isCustom = isCustom
+    }
 
     /// Returns the effective quantity (manual override or calculated)
     var quantity: Double {
@@ -580,6 +619,21 @@ struct RoofMaterialLineItem: Codable, Identifiable {
     /// Reset to calculated quantity
     mutating func resetToCalculated() {
         manualQuantity = nil
+    }
+    
+    /// Create a custom (manually-added) material
+    static func custom(name: String, quantity: Double, unit: String, category: String = "Custom", notes: String? = nil) -> RoofMaterialLineItem {
+        RoofMaterialLineItem(
+            name: name,
+            description: nil,
+            calculatedQuantity: quantity,
+            manualQuantity: nil,
+            unit: unit,
+            category: category,
+            supplierSKU: nil,
+            notes: notes,
+            isCustom: true
+        )
     }
 }
 
@@ -757,6 +811,25 @@ final class RoofMaterialOrder {
             mats[i].manualQuantity = nil
         }
         materials = mats
+    }
+    
+    /// Add a custom material to the order
+    func addCustomMaterial(_ material: RoofMaterialLineItem) {
+        var mats = materials
+        mats.append(material)
+        materials = mats
+    }
+    
+    /// Remove a material by ID (works for custom or calculated materials)
+    func removeMaterial(id: UUID) {
+        var mats = materials
+        mats.removeAll { $0.id == id }
+        materials = mats
+    }
+    
+    /// Get all custom materials (for preservation during recalculate)
+    var customMaterials: [RoofMaterialLineItem] {
+        materials.filter { $0.isCustom }
     }
 
     /// Check if confidence is below threshold

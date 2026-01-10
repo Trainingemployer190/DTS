@@ -511,25 +511,19 @@ class RoofMaterialCalculator {
 
         // Materials list - grouped by category, compact format
         let categories = Dictionary(grouping: materials, by: { $0.category })
-        let categoryOrder = ["Shingles", "Underlayment", "Starter", "Ridge Cap", "Ventilation", "Flashing", "Ice & Water", "Nails", "Accessories", "Decking"]
+        let categoryOrder = ["Shingles", "Underlayment", "Starter", "Ridge Cap", "Ventilation", "Flashing", "Ice & Water", "Nails", "Accessories", "Decking", "Custom"]
 
         for category in categoryOrder {
             guard let items = categories[category], !items.isEmpty else { continue }
 
             for item in items {
                 let qty = Int(ceil(item.quantity))
-                let manualIndicator = item.isManuallyAdjusted ? " *" : ""
-                body += "\(qty) \(item.unit)  -  \(item.name)\(manualIndicator)\n\n"
+                body += "\(qty) \(item.unit)  -  \(item.name)\n\n"
             }
         }
 
         if !order.notes.isEmpty && includeNotes {
             body += "────────────────────────\nNOTES\n────────────────────────\n\n\(order.notes)\n\n"
-        }
-
-        // Add legend if any manual adjustments
-        if materials.contains(where: { $0.isManuallyAdjusted }) {
-            body += "\n\n* = adjusted qty"
         }
 
         return body
@@ -570,7 +564,7 @@ class RoofMaterialCalculator {
 
         // Preserve manual overrides from existing materials
         let existingMaterials = order.materials
-        for existing in existingMaterials where existing.isManuallyAdjusted {
+        for existing in existingMaterials where existing.isManuallyAdjusted && !existing.isCustom {
             // Find matching item by category (name may change with shingle type)
             if let index = newMaterials.firstIndex(where: {
                 $0.category == existing.category
@@ -578,6 +572,10 @@ class RoofMaterialCalculator {
                 newMaterials[index].manualQuantity = existing.manualQuantity
             }
         }
+        
+        // Preserve custom (manually-added) materials
+        let customMaterials = existingMaterials.filter { $0.isCustom }
+        newMaterials.append(contentsOf: customMaterials)
 
         return newMaterials
     }

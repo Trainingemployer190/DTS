@@ -25,6 +25,7 @@ struct RoofOrderDetailView: View {
     @State private var showingPDFViewer = false
     @State private var editingMeasurements = false
     @State private var selectedPresetId: UUID?
+    @State private var showingAddMaterialSheet = false
 
     // Editable measurement copies
     @State private var editTotalSquares: String = ""
@@ -483,13 +484,28 @@ struct RoofOrderDetailView: View {
                 ForEach(order.materials) { material in
                     MaterialRowView(
                         material: material,
+                        isCustom: material.isCustom,
                         onQuantityChange: { newQuantity in
                             updateMaterialQuantity(materialId: material.id, quantity: newQuantity)
                         },
                         onReset: {
                             resetMaterialToCalculated(materialId: material.id)
-                        }
+                        },
+                        onDelete: material.isCustom ? {
+                            deleteCustomMaterial(materialId: material.id)
+                        } : nil
                     )
+                }
+                
+                // Add custom material button
+                Button {
+                    showingAddMaterialSheet = true
+                } label: {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundColor(.green)
+                        Text("Add Custom Material")
+                    }
                 }
 
                 if order.materials.contains(where: { $0.isManuallyAdjusted }) {
@@ -597,9 +613,22 @@ struct RoofOrderDetailView: View {
                 )
             }
         }
+        .sheet(isPresented: $showingAddMaterialSheet) {
+            AddCustomMaterialSheet { material in
+                order.addCustomMaterial(material)
+                try? modelContext.save()
+            }
+        }
         .onAppear {
             selectedPresetId = order.presetId
         }
+    }
+    
+    // MARK: - Custom Material Helpers
+    
+    private func deleteCustomMaterial(materialId: UUID) {
+        order.removeMaterial(id: materialId)
+        try? modelContext.save()
     }
     
     // MARK: - PDF Attachment Helpers
@@ -621,20 +650,23 @@ struct RoofOrderDetailView: View {
         return [(data: pdfData, mimeType: "application/pdf", filename: displayName)]
     }
     
-    /// Get items to share (combined PDF with material order page)
+    /// Get items to share (text + optional PDF)
     private func getShareItems() -> [Any] {
-        // Create combined PDF with original + material order page
+        var items: [Any] = []
+        
+        // Always include the text version (works with Messages, Notes, etc.)
+        let orderText = RoofMaterialCalculator.generateEmailBody(order: order)
+        items.append(orderText)
+        
+        // Also include the combined PDF if available (works with Mail, Files, etc.)
         if let combinedPDF = createCombinedPDF() {
-            return [combinedPDF]
+            items.append(combinedPDF)
+        } else if let pdfURL = getPDFURL() {
+            // Fallback to just the original PDF
+            items.append(pdfURL)
         }
         
-        // Fallback to just the original PDF if combining fails
-        if let pdfURL = getPDFURL() {
-            return [pdfURL]
-        }
-        
-        // Last resort: just text
-        return [RoofMaterialCalculator.generateEmailBody(order: order)]
+        return items
     }
     
     /// Create a combined PDF with original measurements + material order page
@@ -931,8 +963,10 @@ struct MeasurementEditRow: View {
 
 struct MaterialRowView: View {
     let material: RoofMaterialLineItem
+    var isCustom: Bool = false
     let onQuantityChange: (Double?) -> Void
     let onReset: () -> Void
+    var onDelete: (() -> Void)? = nil
 
     @State private var isEditing = false
     @State private var editQuantity: String = ""
@@ -943,7 +977,16 @@ struct MaterialRowView: View {
                 Text(material.name)
                     .font(.headline)
 
-                if material.isManuallyAdjusted {
+                if isCustom {
+                    Text("Custom")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.green.opacity(0.2))
+                        .foregroundColor(.green)
+                        .cornerRadius(4)
+                } else if material.isManuallyAdjusted {
                     Text("Manual")
                         .font(.caption2)
                         .fontWeight(.medium)
@@ -996,8 +1039,8 @@ struct MaterialRowView: View {
                     .italic()
             }
 
-            if material.isManuallyAdjusted {
-                HStack {
+            HStack {
+                if material.isManuallyAdjusted && !isCustom {
                     Text("Calculated: \(Int(ceil(material.calculatedQuantity))) \(material.unit)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
@@ -1008,9 +1051,98 @@ struct MaterialRowView: View {
                     .font(.caption2)
                     .foregroundColor(.orange)
                 }
+                
+                if let onDelete = onDelete {
+                    Spacer()
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.caption)
+                    }
+                }
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Add Custom Material Sheet
+
+struct AddCustomMaterialSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    let onAdd: (RoofMaterialLineItem) -> Void
+    
+    @State private var materialName: String = ""
+    @State private var quantity: String = ""
+    @State private var selectedUnit: String = "pieces"
+    @State private var notes: String = ""
+    
+    private let unitOptions = ["pieces", "bundles", "rolls", "sheets", "boxes", "bags", "lbs", "ft", "sqft"]
+    
+    var isValid: Bool {
+        !materialName.trimmingCharacters(in: .whitespaces).isEmpty &&
+        Double(quantity) != nil &&
+        Double(quantity)! > 0
+    }
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Material Details") {
+                    TextField("Material Name", text: $materialName)
+                        .autocapitalization(.words)
+                    
+                    HStack {
+                        TextField("Quantity", text: $quantity)
+                            .keyboardType(.decimalPad)
+                            .frame(maxWidth: 100)
+                        
+                        Picker("Unit", selection: $selectedUnit) {
+                            ForEach(unitOptions, id: \.self) { unit in
+                                Text(unit).tag(unit)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+                }
+                
+                Section("Notes (Optional)") {
+                    TextField("e.g., for valley repair", text: $notes)
+                }
+            }
+            .navigationTitle("Add Material")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        addMaterial()
+                    }
+                    .disabled(!isValid)
+                }
+            }
+        }
+    }
+    
+    private func addMaterial() {
+        guard let qty = Double(quantity), qty > 0 else { return }
+        
+        let material = RoofMaterialLineItem.custom(
+            name: materialName.trimmingCharacters(in: .whitespaces),
+            quantity: qty,
+            unit: selectedUnit,
+            category: "Custom",
+            notes: notes.isEmpty ? nil : notes
+        )
+        
+        onAdd(material)
+        dismiss()
     }
 }
 
